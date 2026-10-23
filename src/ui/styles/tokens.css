@@ -1,0 +1,80 @@
+/*
+ * Tokeny projektu (Claude Design, PRZEKAZANIE_CLAUDE_CODE.md §4–§5).
+ * Kolory i promienie — dokładnie wg przekazania. Jasny motyw także przy ciemnym motywie systemu.
+ */
+:root {
+  color-scheme: light;
+
+  --font: 'Hanken Grotesk', system-ui, -apple-system, sans-serif;
+  --bg: #FAFBFC; --surface: #FFFFFF; --surface-2: #F0F3F6;
+  --border: #E1E6EB; --border-strong: #B6C1CC;
+  --text: #1B2632; --text-2: #475768; --text-3: #586879;
+  --primary: #3C5C7C; --primary-pressed: #33506C; --on-primary: #FFFFFF;
+  --selection: #E8EDF3; --selection-ink: #3C5C7C; --ring: #CAD5E1;
+  --teal: #2A7B73; --mint: #9BD7D0; --teal-soft: #E1F3F1; --teal-ink: #1F5F59;
+  --ok: #1E6F47; --ok-soft: #E4F2EA;
+  --danger: #A8271F; --danger-soft: #FBEBE9;
+  --warn: #7A4E00; --warn-soft: #FFF1CF;
+  --radius: 8px; --radius-ctl: 6px; --radius-xs: 4px; --radius-sheet: 12px;
+  --shadow-card: 0 1px 2px rgba(27,38,50,.04);
+  --shadow-pop: 0 8px 24px rgba(27,38,50,.14), 0 1px 3px rgba(27,38,50,.08);
+  --scrim: rgba(27,38,50,.32);
+
+  /* Odstępy: 4/8/12/16/20/24/32. */
+  --space-1: 4px; --space-2: 8px; --space-3: 12px; --space-4: 16px;
+  --space-5: 20px; --space-6: 24px; --space-8: 32px;
+
+  /* Margines boczny: 16 px do 340 px szerokości, 20 px powyżej. Kolumna treści maks. 560 px. */
+  --gutter: 20px;
+  --content-max: 560px;
+
+  /* Pola dotyku i ikony. */
+  --touch: 44px;
+  --icon: 20px;
+
+  /*
+   * Typografia (§5) w rem względem 17 px (1rem = 17 px przy domyślnym rozmiarze tekstu iOS),
+   * aby działał Dynamic Type. Minimum 16 px dla KAŻDEGO tekstu (kryterium odbioru G06 „Tekst minimum
+   * 16px” ma pierwszeństwo przed PRZEKAZANIE §5, gdzie metadane miały 15 px, a minimum 14 px —
+   * rozstrzygnięcie w DECYZJE §12). Jedyny wyjątek: 13 px — etykiety osi i daty pod punktami
+   * wykresu (`aria-hidden`, dublują etykiety punktów i listę historii; większe nachodziłyby na siebie).
+   */
+  --fs-app-title: calc(28rem / 17);   /* 28 / 700 / 1,15 */
+  --fs-mode-title: calc(22rem / 17);  /* 22 / 700 */
+  --fs-screen-title: calc(19rem / 17);/* 19 / 700 */
+  --fs-stem: calc(19rem / 17);        /* 19 / 500 / 1,5 */
+  --fs-body: 1rem;                    /* 17 / 400 / 1,45–1,55 */
+  --fs-button: 1rem;                  /* 16–17 / 600 */
+  --fs-button-sm: calc(16rem / 17);
+  --fs-meta: calc(16rem / 17);        /* 16 / 400, --text-2 (Design: 15; G06: min. 16) */
+  --fs-min: calc(16rem / 17);         /* G06: min. 16 (Design: 14) */
+  --fs-axis: calc(13rem / 17);
+  --fs-score: calc(38rem / 17);       /* 38 / 700, cyfry tablicowe */
+  /* Pozostałe stopnie z szablonu Design (px → rem względem 17 px). */
+  --fs-tag: calc(16rem / 17);         /* oznaczenia, metadane wierszy (Design: 14; G06: min. 16) */
+  --fs-label: calc(16rem / 17);       /* 16 px: przyciski pomocnicze, komunikaty, podpisy (G06) */
+  --fs-title-sm: calc(18rem / 17);    /* tytuły kart i paneli */
+  --fs-sheet-title: calc(20rem / 17); /* tytuł arkusza */
+  --fs-pct: calc(24rem / 17);         /* procent obok wyniku */
+  --fs-stepper: calc(34rem / 17);     /* pole liczby pytań */
+
+  /* Stan nieaktywny kontrolek (tylko elementy wyłączone, nie tekst treści). */
+  --text-disabled: #8794A1;
+
+  --lh-tight: 1.15;
+  --lh-stem: 1.5;
+  --lh-body: 1.5;
+  --lh-meta: 1.45;
+
+  /* Safe area (viewport-fit=cover). */
+  --safe-top: env(safe-area-inset-top, 0px);
+  --safe-right: env(safe-area-inset-right, 0px);
+  --safe-bottom: env(safe-area-inset-bottom, 0px);
+  --safe-left: env(safe-area-inset-left, 0px);
+}
+
+@media (max-width: 340px) {
+  :root {
+    --gutter: 16px;
+  }
+}

@@ -1,0 +1,157 @@
+/*
+ * Style bazowe (PRZEKAZANIE §5, §9, §13). Wymaga tokens.css i fonts.css.
+ *
+ * Skalowanie tekstu: na iOS `font: -apple-system-body` ustawia rozmiar bazowy wg Dynamic Type
+ * (17 px przy domyślnym ustawieniu), a wszystkie rozmiary są w rem. Deklaracja jest ograniczona
+ * do Safari na iOS/iPadOS (`-webkit-touch-callout`), bo w Safari na macOS -apple-system-body
+ * oznacza 13 px. Poza iOS rozmiar bazowy = 17 px (106,25% domyślnych 16 px).
+ * Zoom nie jest blokowany (viewport bez maximum-scale/user-scalable=no).
+ */
+
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}
+
+html {
+  font-size: 106.25%;
+  font-family: var(--font);
+  line-height: var(--lh-body);
+  color: var(--text);
+  background: var(--bg);
+  -webkit-text-size-adjust: 100%;
+  text-size-adjust: 100%;
+  -webkit-font-smoothing: antialiased;
+  -webkit-tap-highlight-color: transparent;
+}
+
+@supports (font: -apple-system-body) and (-webkit-touch-callout: none) {
+  html {
+    font: -apple-system-body;
+    font-family: var(--font);
+    line-height: var(--lh-body);
+  }
+}
+
+body {
+  margin: 0;
+  min-height: 100vh;
+  min-height: 100dvh;
+  background: var(--bg);
+  color: var(--text);
+  font-size: var(--fs-body);
+  overflow-x: hidden;
+}
+
+#root {
+  min-height: 100vh;
+  min-height: 100dvh;
+  display: flex;
+  flex-direction: column;
+  /* Boczne safe-area (orientacja pozioma, wcięcia). Górę i dół obsługują ekrany. */
+  padding-left: var(--safe-left);
+  padding-right: var(--safe-right);
+}
+
+h1,
+h2,
+h3,
+h4,
+p,
+figure,
+blockquote,
+dl,
+dd,
+ul,
+ol {
+  margin: 0;
+}
+
+ul,
+ol {
+  padding: 0;
+}
+
+img,
+svg {
+  display: block;
+  max-width: 100%;
+}
+
+button,
+input,
+select,
+textarea {
+  font: inherit;
+  color: inherit;
+  -webkit-tap-highlight-color: transparent;
+}
+
+button {
+  cursor: pointer;
+}
+
+button:disabled {
+  cursor: default;
+}
+
+a {
+  color: var(--primary);
+}
+
+a:active {
+  color: var(--primary-pressed);
+}
+
+:focus-visible {
+  outline: 2px solid var(--primary);
+  outline-offset: 2px;
+}
+
+/* Cyfry postępu i wyników. */
+.tabular-nums {
+  font-variant-numeric: tabular-nums;
+}
+
+/* Tekst tylko dla czytników ekranu. */
+.visually-hidden {
+  position: absolute !important;
+  width: 1px;
+  height: 1px;
+  margin: -1px;
+  padding: 0;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  clip-path: inset(50%);
+  white-space: nowrap;
+  border: 0;
+}
+
+/* Kolumna treści ekranu z marginesem bocznym i safe-area. */
+.screen-column {
+  width: 100%;
+  max-width: var(--content-max);
+  margin: 0 auto;
+  padding-left: var(--gutter);
+  padding-right: var(--gutter);
+}
+
+.screen-top {
+  padding-top: calc(var(--space-2) + var(--safe-top));
+}
+
+.screen-bottom {
+  padding-bottom: calc(28px + var(--safe-bottom));
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+}

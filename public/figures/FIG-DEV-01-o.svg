@@ -1,0 +1,44 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 360 536" width="360" height="536" font-family="Hanken Grotesk, -apple-system, BlinkMacSystemFont, Segoe UI, Helvetica, Arial, sans-serif">
+  <title>Frakcyjny laser ablacyjny i nieablacyjny — schemat objaśniający</title>
+  <desc>Dwa panele przekroju skóry. Frakcyjny ablacyjny: mikrokanały, w których tkanka została usunięta, otwarte na powierzchni i otoczone strefą koagulacji o zakresie zależnym od lasera i trybu. Frakcyjny nieablacyjny: kolumny koagulacji, w których zmieniona tkanka pozostaje na miejscu, bez usunięcia tkanki. W obu panelach wzór jest frakcyjny: kolumny przedzielone obszarami o innym stopniu uszkodzenia. Frakcja opisuje wzór przestrzenny, a ablacja sposób uszkodzenia; to odrębne osie opisu. Model poglądowy, bez skali; nie przedstawia nastaw.</desc>
+  <rect x="0" y="0" width="360" height="536" fill="#FFFFFF"></rect>
+  <text x="16" y="20" font-size="13.5" font-weight="700" fill="#1B2632">Frakcyjny ablacyjny</text>
+  <rect x="16" y="34" width="328" height="118" fill="#F6E8DE"></rect>
+  <line x1="16" y1="34" x2="344" y2="34" stroke="#586879" stroke-width="1.5"></line>
+  <rect x="16" y="34" width="328" height="118" fill="none" stroke="#B6C1CC"></rect>
+  <g fill="#D8BFA0">
+    <rect x="39" y="34" width="20" height="94" rx="9"></rect><rect x="93" y="34" width="20" height="94" rx="9"></rect><rect x="147" y="34" width="20" height="94" rx="9"></rect><rect x="201" y="34" width="20" height="94" rx="9"></rect><rect x="255" y="34" width="20" height="94" rx="9"></rect><rect x="309" y="34" width="20" height="94" rx="9"></rect>
+  </g>
+  <g fill="#FFFFFF" stroke="#586879" stroke-width="1">
+    <rect x="44" y="33" width="10" height="87" rx="5"></rect><rect x="98" y="33" width="10" height="87" rx="5"></rect><rect x="152" y="33" width="10" height="87" rx="5"></rect><rect x="206" y="33" width="10" height="87" rx="5"></rect><rect x="260" y="33" width="10" height="87" rx="5"></rect><rect x="314" y="33" width="10" height="87" rx="5"></rect>
+  </g>
+  <g font-size="12.5" fill="#1B2632">
+    <rect x="16" y="164" width="12" height="12" fill="#FFFFFF" stroke="#586879"></rect>
+    <text x="36" y="174.5">mikrokanał: tkanka usunięta (ablacja)</text>
+    <rect x="16" y="184" width="12" height="12" fill="#D8BFA0"></rect>
+    <text x="36" y="194.5">strefa koagulacji wokół mikrokanału</text>
+    <text x="36" y="210">(jej zakres zależy od lasera i trybu)</text>
+  </g>
+  <text x="16" y="240" font-size="13.5" font-weight="700" fill="#1B2632">Frakcyjny nieablacyjny</text>
+  <rect x="16" y="254" width="328" height="118" fill="#F6E8DE"></rect>
+  <g fill="#D8BFA0">
+    <rect x="42" y="254" width="14" height="86" rx="7"></rect><rect x="96" y="254" width="14" height="86" rx="7"></rect><rect x="150" y="254" width="14" height="86" rx="7"></rect><rect x="204" y="254" width="14" height="86" rx="7"></rect><rect x="258" y="254" width="14" height="86" rx="7"></rect><rect x="312" y="254" width="14" height="86" rx="7"></rect>
+  </g>
+  <line x1="16" y1="254" x2="344" y2="254" stroke="#586879" stroke-width="1.5"></line>
+  <rect x="16" y="254" width="328" height="118" fill="none" stroke="#B6C1CC"></rect>
+  <g font-size="12.5" fill="#1B2632">
+    <rect x="16" y="382" width="12" height="12" fill="#D8BFA0"></rect>
+    <text x="36" y="392.5">kolumna koagulacji: zmieniona tkanka</text>
+    <text x="36" y="408">pozostaje na miejscu, bez usunięcia</text>
+  </g>
+  <g font-size="12.5" fill="#1B2632">
+    <text x="16" y="436">W obu panelach wzór jest frakcyjny: kolumny</text>
+    <text x="16" y="452">przedzielone obszarami o innym stopniu uszkodzenia.</text>
+    <text x="16" y="476" font-weight="600">Frakcja opisuje wzór przestrzenny, ablacja —</text>
+    <text x="16" y="492" font-weight="600">sposób uszkodzenia. To odrębne osie opisu.</text>
+  </g>
+  <g font-size="12" fill="#586879">
+    <text x="16" y="514">Model poglądowy, bez skali; nie przedstawia nastaw.</text>
+    <text x="16" y="530">Rzeczywisty uraz zależy od parametrów i anatomii.</text>
+  </g>
+</svg>

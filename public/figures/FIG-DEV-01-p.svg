@@ -1,0 +1,33 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 360 298" width="360" height="298" font-family="Hanken Grotesk, -apple-system, BlinkMacSystemFont, Segoe UI, Helvetica, Arial, sans-serif">
+  <title>Przestrzenny wzór mikrouszkodzeń — przekrój poglądowy</title>
+  <desc>Schemat jakościowy przekroju skóry z wzorem frakcyjnym: równomiernie rozmieszczone, wąskie kolumny mikrouszkodzenia sięgające od powierzchni w głąb skóry, przedzielone obszarami o innym stopniu uszkodzenia. Zaznaczono odstęp między kolumnami i głębokość kolumny. Model poglądowy, bez skali; nie przedstawia nastaw.</desc>
+  <rect x="0" y="0" width="360" height="298" fill="#FFFFFF"></rect>
+  <text x="44" y="28" font-size="12.5" fill="#475768">powierzchnia skóry</text>
+  <rect x="44" y="40" width="300" height="150" fill="#F6E8DE"></rect>
+  <rect x="44" y="40" width="300" height="150" fill="none" stroke="#B6C1CC"></rect>
+  <g fill="#D5DCE4" stroke="#586879" stroke-width="1">
+    <rect x="66" y="40" width="12" height="100" rx="6"></rect>
+    <rect x="118" y="40" width="12" height="100" rx="6"></rect>
+    <rect x="170" y="40" width="12" height="100" rx="6"></rect>
+    <rect x="222" y="40" width="12" height="100" rx="6"></rect>
+    <rect x="274" y="40" width="12" height="100" rx="6"></rect>
+    <rect x="326" y="40" width="12" height="100" rx="6"></rect>
+  </g>
+  <g stroke="#1B2632" stroke-width="1.2" fill="none">
+    <line x1="176" y1="158" x2="228" y2="158"></line><line x1="176" y1="152" x2="176" y2="164"></line><line x1="228" y1="152" x2="228" y2="164"></line>
+    <line x1="28" y1="40" x2="28" y2="140"></line><line x1="22" y1="40" x2="34" y2="40"></line><line x1="22" y1="140" x2="34" y2="140"></line>
+  </g>
+  <text x="202" y="178" font-size="12.5" fill="#1B2632" text-anchor="middle">odstęp</text>
+  <text x="14" y="90" font-size="12.5" fill="#1B2632" text-anchor="middle" transform="rotate(-90 14 90)">głębokość</text>
+  <g font-size="12.5" fill="#1B2632">
+    <rect x="44" y="204" width="12" height="12" fill="#D5DCE4" stroke="#586879"></rect>
+    <text x="64" y="214.5">kolumna mikrouszkodzenia</text>
+    <rect x="44" y="224" width="12" height="12" fill="#F6E8DE" stroke="#B6C1CC"></rect>
+    <text x="64" y="234.5">obszar między kolumnami</text>
+    <text x="64" y="250">(inny stopień uszkodzenia)</text>
+  </g>
+  <g font-size="12" fill="#586879">
+    <text x="16" y="274">Model poglądowy, bez skali; nie przedstawia nastaw.</text>
+    <text x="16" y="290">Rzeczywisty uraz zależy od parametrów i anatomii.</text>
+  </g>
+</svg>

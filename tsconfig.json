@@ -1,0 +1,11 @@
+// Plik dla edytora (solution-style). Kontrola typów: `npm run typecheck`
+// — osobne konfiguracje: domain (bez DOM i Node), app, test, node.
+{
+  "files": [],
+  "references": [
+    { "path": "./tsconfig.domain.json" },
+    { "path": "./tsconfig.app.json" },
+    { "path": "./tsconfig.test.json" },
+    { "path": "./tsconfig.node.json" }
+  ]
+}

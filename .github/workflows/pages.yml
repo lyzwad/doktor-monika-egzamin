@@ -1,0 +1,99 @@
+# Publikacja „Doktor Monika Egzamin” na GitHub Pages — oficjalne akcje Pages
+# (configure-pages, upload-pages-artifact, deploy-pages). Opis krok po kroku: docs/WDROZENIE.md.
+#
+# Wymaga jednorazowo: Settings → Pages → Build and deployment → Source: „GitHub Actions”.
+# Publikowany jest WYŁĄCZNIE katalog dist (wynik `vite build`); kod źródłowy repozytorium nie trafia na Pages.
+# Ścieżka bazowa (BASE_PATH) z nazwy repozytorium: „/<nazwa-repozytorium>/” (repozytorium <właściciel>.github.io → „/”),
+# sprawdzana z wyjściem `base_path` akcji configure-pages; przy rozbieżności (np. własna domena) obowiązuje adres Pages.
+# Wersje akcji przypięte do commitów (tag w komentarzu), sprawdzone 22.10.2026 (`git ls-remote --tags`; najnowsze wydania).
+name: Publikacja na GitHub Pages
+
+on:
+  push:
+    branches: ['main']
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+# Jedno wdrożenie naraz; trwające wdrożenie nie jest przerywane (jak w szablonie GitHub).
+concurrency:
+  group: pages
+  cancel-in-progress: false
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - name: Pobranie kodu
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Node.js (wersja z .nvmrc)
+        uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version-file: .nvmrc
+          cache: npm
+
+      - name: Instalacja zależności z package-lock.json
+        run: npm ci
+
+      - name: Konfiguracja Pages
+        id: pages
+        uses: actions/configure-pages@45bfe0192ca1faeb007ade9deae92b16b8254a0d # v6.0.0
+
+      - name: Ścieżka bazowa z nazwy repozytorium
+        env:
+          REPO_NAME: ${{ github.event.repository.name }}
+          PAGES_BASE_PATH: ${{ steps.pages.outputs.base_path }}
+        run: |
+          set -eu
+          # Strona projektu https://<właściciel>.github.io/<repozytorium>/ → „/<repozytorium>/”;
+          # repozytorium strony użytkownika (<właściciel>.github.io) → „/”.
+          repo_lower="$(printf '%s' "$REPO_NAME" | tr '[:upper:]' '[:lower:]')"
+          case "$repo_lower" in
+            *.github.io) from_repo="/" ;;
+            *) from_repo="/${REPO_NAME}/" ;;
+          esac
+          # configure-pages: „/my-repo” albo „” (strona użytkownika, własna domena).
+          from_pages="${PAGES_BASE_PATH%/}/"
+          if [ "$from_repo" = "$from_pages" ]; then
+            base="$from_repo"
+          else
+            echo "::warning::BASE_PATH z nazwy repozytorium (${from_repo}) różni się od ścieżki Pages (${from_pages}) — użyto ścieżki Pages (np. własna domena)."
+            base="$from_pages"
+          fi
+          echo "BASE_PATH=${base}" >> "$GITHUB_ENV"
+          # Wersja aplikacji w Ustawieniach i w kopii danych: <version z package.json>+<skrót commita>.
+          echo "APP_BUILD_ID=${GITHUB_SHA::7}" >> "$GITHUB_ENV"
+          echo "Repozytorium: ${REPO_NAME}; BASE_PATH=${base}; APP_BUILD_ID=${GITHUB_SHA::7}"
+
+      - name: Testy (Vitest — domain, persistence, app, pwa, ui)
+        run: npm test
+
+      - name: Build produkcyjny (typecheck + vite build → dist)
+        run: npm run build
+
+      - name: Kontrola dist (ścieżki pod base, precache, brak zewnętrznych hostów i sekretów)
+        run: node scripts/check-dist.mjs --dist dist --base "$BASE_PATH"
+
+      - name: Artefakt Pages (tylko dist)
+        uses: actions/upload-pages-artifact@fc324d3547104276b827a68afc52ff2a11cc49c9 # v5.0.0
+        with:
+          path: ./dist
+
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - name: Publikacja na GitHub Pages
+        id: deployment
+        uses: actions/deploy-pages@368f82528645a54fb793d4d04e342629a3f51346 # v5.0.1

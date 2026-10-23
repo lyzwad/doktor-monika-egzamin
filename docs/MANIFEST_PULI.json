@@ -1,0 +1,173 @@
+{
+ "app": "Doktor Monika Egzamin",
+ "bank_version": "release-2026-10-23c",
+ "built_on": "2026-10-23",
+ "runtime_file": "public/data/bank.json",
+ "runtime_sha256": "ae49224b3ad5049489e44f45f8c231cda472266ee84c77bb376280ec49e16fc1",
+ "release_bank_sha256": "23c847b7d5830c3bde10e8c9b18c8ae2611651f44ef2e4f01c81b9fecfcc62b7",
+ "questions": 1097,
+ "families_bank": 810,
+ "families_runtime": 806,
+ "seed_questions": 248,
+ "new_questions": 852,
+ "target_min": 2000,
+ "target_met": false,
+ "gap_to_target_min": 903,
+ "by_domain": {
+  "ANAT": 124,
+  "DEV": 317,
+  "INJ": 141,
+  "SAFE": 178,
+  "SKIN": 182,
+  "THER": 155
+ },
+ "by_difficulty": {
+  "advanced": 195,
+  "basic": 306,
+  "intermediate": 596
+ },
+ "by_domain_difficulty": {
+  "ANAT": {
+   "basic": 37,
+   "intermediate": 65,
+   "advanced": 22
+  },
+  "INJ": {
+   "basic": 43,
+   "intermediate": 76,
+   "advanced": 22
+  },
+  "SKIN": {
+   "basic": 48,
+   "intermediate": 111,
+   "advanced": 23
+  },
+  "THER": {
+   "intermediate": 75,
+   "basic": 47,
+   "advanced": 33
+  },
+  "DEV": {
+   "intermediate": 178,
+   "basic": 86,
+   "advanced": 53
+  },
+  "SAFE": {
+   "intermediate": 91,
+   "advanced": 42,
+   "basic": 45
+  }
+ },
+ "schematic_questions": [
+  "ANAT-Q001",
+  "DEV-Q041"
+ ],
+ "figures": [
+  "FIG-ANAT-01-O",
+  "FIG-ANAT-01-P",
+  "FIG-DEV-01-O",
+  "FIG-DEV-01-P"
+ ],
+ "clinical_signoff": false,
+ "approved_for_question_key_true": 0,
+ "official_exam_question_bank": false,
+ "reconciliation": {
+  "seed_delivered": 248,
+  "seed_quarantined_after_blind_review": [
+   "ANAT-Q022",
+   "DEV-Q030",
+   "SAFE-Q022"
+  ],
+  "pass1_accepted": 729,
+  "pass2_accepted": 164,
+  "dedup_removed_unique": 41,
+  "dedup_removed_ids": [
+   "ANAT-G03-005",
+   "ANAT-G03-008",
+   "DEV-G28-001",
+   "DEV-G28-005",
+   "DEV-P20-011",
+   "DEV-P21-004",
+   "DEV-P21-005",
+   "DEV-P21-010",
+   "DEV-P22-004",
+   "DEV-P22-009",
+   "DEV-P23-002",
+   "DEV-P25-012",
+   "DEV-P25-014",
+   "DEV-P28-003",
+   "DEV-P28-012",
+   "DEV-P28-017",
+   "DEV-P29-022",
+   "DEV-P31-016",
+   "DEV-P31-018",
+   "DEV-P31-026",
+   "INJ-P05-024",
+   "INJ-P05-028",
+   "INJ-P06-026",
+   "SAFE-G17-008",
+   "SAFE-G17-009",
+   "SAFE-G27-006",
+   "SAFE-P12-037",
+   "SAFE-P15-023",
+   "SAFE-P16-010",
+   "SAFE-P16-014",
+   "SAFE-P17-020",
+   "SAFE-P18-002",
+   "SAFE-P18-016",
+   "SAFE-P31-003",
+   "SAFE-P31-006",
+   "SKIN-G13-002",
+   "SKIN-G13-004",
+   "SKIN-P13-001",
+   "SKIN-P24-026",
+   "THER-G09-010",
+   "THER-G10-005"
+  ],
+  "formula": "248 − 3 + 729 + 164 − 41 = 1097",
+  "bank_questions": 1097,
+  "runtime_questions": 1097,
+  "consistent": true,
+  "revisions_changed_not_removed": [
+   "ANAT-Q001",
+   "DEV-Q041"
+  ],
+  "family_changes": {
+   "dedup_family_groups": 227,
+   "review_splits": 72,
+   "questions_reassigned_by_split": 198,
+   "seed_runtime_merges_active": 4
+  },
+  "note_pl": "Wcześniej raportowane „168” przyjętych w drugim przebiegu było błędem rachunkowym w komunikacie; po identyfikatorach jest 164. Deduplikacja potwierdziła 44 decyzje dla 42 identyfikatorów (2 ID potwierdzone dwukrotnie); po korekcie par wzajemnych usuniętych jest 41 (DEV-P28-002 przywrócone)."
+ },
+ "seed_blind_review": {
+  "counts": {
+   "verified": 173,
+   "verified_with_note": 72,
+   "quarantine": 3
+  },
+  "quarantined": [
+   "ANAT-Q022",
+   "DEV-Q030",
+   "SAFE-Q022"
+  ],
+  "note_pl": "Ślepy przegląd AI 248 pytań seed (6 partii; S03 powtórzone w izolacji po unieważnieniu). verified/verified_with_note = klucz i wsparcie potwierdzone przez AI, nie recenzja lekarska."
+ },
+ "content_check": {
+  "new_questions_independently_checked_draft": 852,
+  "reviewer_role": "independent_ai_review",
+  "qualified_human_review": 0
+ },
+ "validator": {
+  "release_mode": "FAIL",
+  "release_errors": [
+   "RELEASE_COUNT"
+  ],
+  "release_warnings": {
+   "MANUFACTURER_SCOPE": 12
+  },
+  "seed_mode": "PASS",
+  "self_test": "PASS"
+ },
+ "stage_status_pl": "Etap rozbudowy puli NIE jest zakończony: rzeczywista pula < 2000 (cel z paczki)."
+}
