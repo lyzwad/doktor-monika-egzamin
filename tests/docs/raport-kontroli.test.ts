@@ -185,7 +185,8 @@ describe('G07 — raport kontroli: wdrożenie i odesłania', () => {
   /** Konkretne adresy GitHub Pages (bez szablonów w rodzaju `<użytkownik>.github.io`). */
   const pagesUrl = /https?:\/\/[a-z0-9-]+\.github\.io[^\s)`'"\]>]*/gi;
   const docs = ['README.md', ...readdirSync(resolve(root, 'docs')).filter((f) => f.endsWith('.md')).map((f) => `docs/${f}`)];
-  const urls = docs.flatMap((f) => [...read(f).matchAll(pagesUrl)].map((m) => `${f}: ${m[0]}`));
+  // Końcowa interpunkcja zdania (np. „…/doktor-monika-egzamin/.”) nie jest częścią adresu.
+  const urls = docs.flatMap((f) => [...read(f).matchAll(pagesUrl)].map((m) => `${f}: ${m[0].replace(/[.,;:]+$/, '')}`));
 
   it('adres wdrożenia tylko wtedy, gdy wdrożenie istnieje', () => {
     if (/Adres wdrożenia: \*\*brak\*\*/.test(deploy)) {

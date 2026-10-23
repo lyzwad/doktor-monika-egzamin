@@ -1,6 +1,6 @@
 # Doktor Monika Egzamin — wdrożenie, PWA i praca offline
 
-Stan: 22.10.2026. **Publikacji nie wykonano** — nie ma jeszcze repozytorium publicznego ani adresu aplikacji. Ten dokument opisuje gotową do przeglądu konfigurację i kroki, które trzeba wykonać ręcznie. Instalacja na telefonie: `docs/INSTALACJA_IPHONE.md`.
+Stan: 23.10.2026. **Opublikowano**: https://lyzwad.github.io/doktor-monika-egzamin/ (repozytorium https://github.com/lyzwad/doktor-monika-egzamin, run 39954751951). Wynik kontroli po wdrożeniu: `docs/RAPORT_KONTROLI.md` §7.
 
 ## 1. Co sprawdzono w dokumentacji i kiedy
 
@@ -163,6 +163,6 @@ Build do katalogu tymczasowego (nie do `dist`), z rejestracją SW wywoływaną p
 | Pełny zestaw e2e (`npx playwright test`, WebKit „iPhone 15” + Chromium mobile) na tym buildzie (kopia robocza z buildem jako `dist`, `E2E_SKIP_BUILD=1`) | 39 PASS, 1 SKIP (WebKit + `context.setOffline` — ograniczenie Playwright, zastąpione testem „serwer niedostępny”); w tym PWA: offline po pierwszym pobraniu, odpowiedzi i zapis bez sieci, brak żądań zewnętrznych, aktualizacja bez przeładowania pytania, baner poza pytaniem, sesja zachowana |
 | Bank 9,4 MB / 17,4 MB (syntetyczne wypełnienie w kopii roboczej) | 9,4 MB w precache (58,8% limitu), `check-dist` OK; 17,4 MB → build przerwany komunikatem `[PWA] Brak w precache: data/bank.json …` |
 | Workflow `pages.yml` | YAML poprawny (parser), logika `BASE_PATH` sprawdzona lokalnie dla: strona projektu, `<właściciel>.github.io`, własna domena (ostrzeżenie + ścieżka Pages), wielkie litery w nazwie. **Nie uruchomiono na GitHubie** (brak repozytorium) |
-| Publikacja na GitHub Pages | **nie wykonano** |
+| Publikacja na GitHub Pages | **wykonano 23.10.2026** — https://lyzwad.github.io/doktor-monika-egzamin/ (run 39954751951; kontrola po wdrożeniu w `docs/RAPORT_KONTROLI.md` §7) |
 | Później, etap integracji: `npm run test:e2e` (build pod `/doktor-monika-egzamin/` + 26 scenariuszy × WebKit „iPhone 15” i Chromium mobile, w tym G03 na dwóch rzeczywistych buildach i błąd zapisu w IndexedDB) | 51 PASS, 1 SKIP (WebKit + `context.setOffline`); pełny zestaw ×3 (`--repeat-each=3`): 153 PASS, 3 SKIP; `check-offline.mjs`: 54 kontrole, 0 FAIL, 2 WARN (jak wyżej). Opis pokrycia: `docs/ARCHITEKTURA_APP.md` §7.1 |
 | Test na fizycznym iPhonie 15 (G05) | **NOT RUN** |

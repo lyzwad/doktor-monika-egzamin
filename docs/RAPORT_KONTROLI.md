@@ -100,7 +100,7 @@ Najmniejszy koszyk domena × poziom to SKIN/zaawansowany z 19 rodzinami (test e2
 | Pozycja | Status | Powód | Co sprawdzono zamiast tego |
 |---|---|---|---|
 | G05: fizyczny iPhone 15 w Safari i po „Do ekranu głównego” (pierwszy start, safe-area, klawiatura własnego N, tap, przewijanie komentarza, powiększenie schematu, podgląd tylko do odczytu, wznowienie, zapis kopii w Plikach, wybór pliku do importu, tryb samolotowy, aktualizacja, Dynamic Type, VoiceOver) | **NOT RUN** | brak urządzenia w środowisku wykonawczym, więc nie ma też numeru wersji iOS | emulacja WebKit „iPhone 15” w e2e (to nie jest urządzenie). Protokół do wypełnienia: `docs/INSTALACJA_IPHONE.md` §6 (18 kroków, wszystkie NOT RUN) |
-| Publikacja na GitHub Pages i test pod adresem HTTPS | **NOT RUN** | nie ma repozytorium publicznego; publikacja czeka na decyzję użytkowniczki | build pod podścieżką i serwer `scripts/serve-dist.mjs` naśladujący Pages (§2–§3); gotowy workflow `.github/workflows/pages.yml`, który nie był uruchamiany |
+| Publikacja na GitHub Pages i test pod adresem HTTPS | wykonano: **PASS** (23.10.2026) | — | §7: workflow `pages.yml` (run 39954751951) zakończony sukcesem; wszystkie 25 plików `dist` pod https://lyzwad.github.io/doktor-monika-egzamin/ — HTTP 200 i treść identyczna z buildem czystego klonu; e2e Playwright na żywym adresie: 31 PASS, 1 SKIP (ten sam WebKit `setOffline`) |
 | `pwa.spec.ts`: „G02 + A04: offline (context.setOffline)” w projekcie WebKit | **SKIP** | Playwright WebKit (rev. 2359) przy `context.setOffline(true)` blokuje każdą nawigację, także obsługiwaną przez Service Workera („WebKit encountered an internal error”). To ograniczenie narzędzia, nie aplikacji | w Chromium ten sam test: PASS. W WebKit: `pwa.spec.ts` „G02 (serwer niedostępny)”: PASS, `schematy.spec.ts` (figury offline): PASS, `check-offline.mjs`: 27/27 PASS |
 | `dostepnosc.spec.ts`: E03 (brak zastępstwa dla wcześniejszej pozycji) | wykonany: **PASS** w obu przeglądarkach | test pomija się warunkowo, gdy w banku nie ma koszyka domena × poziom z co najwyżej 40 rodzinami. W banku `release-2026-10-23c` najmniejszy koszyk to SKIN/zaawansowany z 19 rodzinami, więc test nie był pominięty | — |
 | Recenzja lekarska kluczy | **NOT RUN** | poza zakresem kontroli aplikacji; wymaga lekarza recenzenta | status w §5 |
@@ -110,11 +110,17 @@ Najmniejszy koszyk domena × poziom to SKIN/zaawansowany z 19 rodzinami (test e2
 
 ## 7. Wdrożenie
 
-Adres wdrożenia: **brak**. Publikacji nie wykonano, więc nie ma publicznego adresu HTTPS aplikacji. Dokumentacja nie podaje żadnego linku do wdrożenia.
+Adres wdrożenia: https://lyzwad.github.io/doktor-monika-egzamin/ (GitHub Pages, repozytorium https://github.com/lyzwad/doktor-monika-egzamin; wdrożenie 23.10.2026 z commita `930ab22`, workflow „Publikacja na GitHub Pages”, run 39954751951 — build z `npm test`, `npm run build`, `check-dist` oraz deploy: sukces).
+
+Kontrola po wdrożeniu (23.10.2026, 14:38–14:41, macOS, Playwright 1.63.0, WebKit 26.6 „iPhone 15” i Chromium 153 mobile, `--workers=1`, load 3–6):
+- https://lyzwad.github.io/doktor-monika-egzamin/ → 200 `text/html`; adres bez końcowego ukośnika → 301 na adres z ukośnikiem;
+- wszystkie 25 plików `dist` (index, JS/CSS, fonty woff2, ikony, `manifest.webmanifest`, `sw.js`, Workbox, `data/bank.json`, 4 figury SVG) pod `/doktor-monika-egzamin/`: HTTP 200, SHA-256 zgodne z buildem czystego klonu repozytorium; brak błędów ścieżek;
+- manifest: `name`/`short_name` „Doktor Monika Egzamin”, `id` `/doktor-monika-egzamin/`, `start_url` i `scope` `.`, `display` standalone; bank `release-2026-10-23c`: 1097 pytań, 806 rodzin, 2 schematy;
+- e2e na żywym adresie (smoke, flow A, flows B–F, pwa G02/G03, schematy ANAT-Q001 i DEV-Q041 z offline): **31 PASS, 1 SKIP** (WebKit `setOffline`, §6), w tym brak żądań do hostów zewnętrznych.
 
 - Konfiguracja jest gotowa do przeglądu: `.github/workflows/pages.yml` (oficjalne akcje Pages przypięte do commitów; `BASE_PATH` liczony z nazwy repozytorium; przed publikacją `npm test`, build i `check-dist`). Kroki ręczne opisuje `docs/WDROZENIE.md`.
-- Aplikacji nie zainstalowano na żadnym telefonie. Paczka projektowa (`_zrodla/pakiet`) to specyfikacja i materiały, a nie zainstalowana aplikacja. Katalog `dist/` to lokalny wynik builda, który nie został opublikowany.
-- Po publikacji trzeba: dopisać tu adres i datę, wykonać protokół G05 na iPhonie 15 i zaktualizować §6 i §8.
+- Aplikacji nie zainstalowano jeszcze na fizycznym telefonie: G05 pozostaje **NOT RUN** do czasu wyników testu użytkowniczki (protokół `docs/INSTALACJA_IPHONE.md` §6).
+- Wdrożenie nie zmienia statusu treści: A03 PARTIAL (pula 1097 < 2000, walidator `--release`: RELEASE_COUNT), przegląd AI to nie recenzja lekarska.
 
 ## 8. Macierz kryteriów A01–G07
 

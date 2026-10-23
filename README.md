@@ -9,7 +9,7 @@ Materiał pytań jest **autorskim materiałem treningowym w wersji roboczej**: k
 - Aplikacja zintegrowana (silnik domeny, IndexedDB, ekrany S01–S24 wg Claude Design, Service Worker, rzeczywisty kontroler), przetestowana jednostkowo i e2e (WebKit „iPhone 15” i Chromium mobile) na buildzie pod podścieżką `/doktor-monika-egzamin/`.
 - Ostatnia kontrola (23.10.2026, 14:11–14:15, bank `release-2026-10-23c`; macOS 26.5.2, Node 24.18.1, Playwright 1.63.0, load average ok. 4–6 na 8 rdzeniach): typecheck PASS, Vitest 607/607, e2e 83 PASS i 1 SKIP (WebKit `setOffline` — ograniczenie Playwright), `check-dist` 53/53, `check-offline` 54/54. Wersje, środowisko, macierz kryteriów A01–G07 i lista testów niewykonanych: **`docs/RAPORT_KONTROLI.md`**.
 - **Gotowość techniczna aplikacji ≠ kryterium treści**: aplikacja przechodzi kontrole techniczne (w emulacji), ale kryterium treści — pula co najmniej 2000 pytań — **nie jest spełnione** (walidator paczki `--release`: FAIL tylko `RELEASE_COUNT`; próg 2000 bez zmian).
-- **Nie wdrożono**: aplikacja nie jest opublikowana (brak adresu HTTPS). Kroki publikacji: `docs/WDROZENIE.md`.
+- **Wdrożono (23.10.2026)**: https://lyzwad.github.io/doktor-monika-egzamin/ — GitHub Pages z repozytorium https://github.com/lyzwad/doktor-monika-egzamin. Szczegóły i kontrola po wdrożeniu: `docs/RAPORT_KONTROLI.md` §7. Test na fizycznym iPhonie (G05): NOT RUN.
 - **Nie wykonano** testu na fizycznym iPhonie 15 (kryterium G05 — NOT RUN): Dynamic Type, VoiceOver, tryb samolotowy, zapis kopii w Plikach.
 
 ## Stan puli pytań
@@ -61,8 +61,8 @@ Dane nauki istnieją tylko na tym urządzeniu. Usunięcie danych witryny w Safar
 ## Dokumentacja
 
 - `docs/INSTALACJA_IPHONE.md` — dodanie do ekranu głównego, pierwsze uruchomienie, praca offline, kopia danych.
-- `docs/WDROZENIE.md` — GitHub Pages, PWA i Service Worker, kroki publikacji (niewykonanej).
-- `docs/RAPORT_KONTROLI.md` — raport końcowy kontroli: build, wyniki testów ze środowiskiem, pula, status recenzji treści, testy niewykonane (G05), wdrożenie (brak), macierz A01–G07.
+- `docs/WDROZENIE.md` — GitHub Pages, PWA i Service Worker, kroki publikacji (wykonanej 23.10.2026).
+- `docs/RAPORT_KONTROLI.md` — raport końcowy kontroli: build, wyniki testów ze środowiskiem, pula, status recenzji treści, testy niewykonane (G05), wdrożenie (adres i kontrola po wdrożeniu), macierz A01–G07.
 - `docs/RAPORT_PULI.md` — stan i rozkład puli, proces, ograniczenia.
 - `docs/MANIFEST_PULI.json` — manifest puli (liczby, sumy kontrolne).
 - `docs/DECYZJE_ARCHITEKTURY.md` — wiążące decyzje i polityki doboru (wersjonowane).
