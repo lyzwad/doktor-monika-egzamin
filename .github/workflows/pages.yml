@@ -3,8 +3,8 @@
 #
 # Wymaga jednorazowo: Settings → Pages → Build and deployment → Source: „GitHub Actions”.
 # Publikowany jest WYŁĄCZNIE katalog dist (wynik `vite build`); kod źródłowy repozytorium nie trafia na Pages.
-# Ścieżka bazowa (BASE_PATH) z nazwy repozytorium: „/<nazwa-repozytorium>/” (repozytorium <właściciel>.github.io → „/”),
-# sprawdzana z wyjściem `base_path` akcji configure-pages; przy rozbieżności (np. własna domena) obowiązuje adres Pages.
+# Ścieżka bazowa (BASE_PATH) = „/”: aplikacja działa w katalogu głównym własnej domeny EXPECTED_HOST; build zatrzymuje się,
+# gdy configure-pages nie potwierdza tej domeny (host) i pustego `base_path`.
 # Wersje akcji przypięte do commitów (tag w komentarzu), sprawdzone 22.10.2026 (`git ls-remote --tags`; najnowsze wydania).
 name: Publikacja na GitHub Pages
 
@@ -12,6 +12,10 @@ on:
   push:
     branches: ['main']
   workflow_dispatch:
+
+env:
+  # Adres produkcyjny: https://wiedza.doktormonika.pl/ (Custom domain w ustawieniach Pages, rekord CNAME wiedza → lyzwad.github.io).
+  EXPECTED_HOST: wiedza.doktormonika.pl
 
 permissions:
   contents: read
@@ -46,31 +50,23 @@ jobs:
         id: pages
         uses: actions/configure-pages@45bfe0192ca1faeb007ade9deae92b16b8254a0d # v6.0.0
 
-      - name: Ścieżka bazowa z nazwy repozytorium
+      - name: Własna domena i ścieżka bazowa „/”
         env:
-          REPO_NAME: ${{ github.event.repository.name }}
+          PAGES_HOST: ${{ steps.pages.outputs.host }}
           PAGES_BASE_PATH: ${{ steps.pages.outputs.base_path }}
         run: |
           set -eu
-          # Strona projektu https://<właściciel>.github.io/<repozytorium>/ → „/<repozytorium>/”;
-          # repozytorium strony użytkownika (<właściciel>.github.io) → „/”.
-          repo_lower="$(printf '%s' "$REPO_NAME" | tr '[:upper:]' '[:lower:]')"
-          case "$repo_lower" in
-            *.github.io) from_repo="/" ;;
-            *) from_repo="/${REPO_NAME}/" ;;
-          esac
-          # configure-pages: „/my-repo” albo „” (strona użytkownika, własna domena).
-          from_pages="${PAGES_BASE_PATH%/}/"
-          if [ "$from_repo" = "$from_pages" ]; then
-            base="$from_repo"
-          else
-            echo "::warning::BASE_PATH z nazwy repozytorium (${from_repo}) różni się od ścieżki Pages (${from_pages}) — użyto ścieżki Pages (np. własna domena)."
-            base="$from_pages"
+          # Aplikacja działa w katalogu głównym własnej domeny (DECYZJE: wiedza.doktormonika.pl, 24.10.2026).
+          # Build pod „/” pod adresem z prefiksem (https://<właściciel>.github.io/<repozytorium>/) nie działałby,
+          # więc bez ustawionej w Pages domeny EXPECTED_HOST wdrożenie zatrzymuje się tutaj.
+          if [ "$PAGES_HOST" != "$EXPECTED_HOST" ] || [ -n "$PAGES_BASE_PATH" ]; then
+            echo "::error::Pages: host „${PAGES_HOST}”, base_path „${PAGES_BASE_PATH}”. Oczekiwano własnej domeny ${EXPECTED_HOST} (Settings → Pages → Custom domain) i ścieżki „/”."
+            exit 1
           fi
-          echo "BASE_PATH=${base}" >> "$GITHUB_ENV"
+          echo "BASE_PATH=/" >> "$GITHUB_ENV"
           # Wersja aplikacji w Ustawieniach i w kopii danych: <version z package.json>+<skrót commita>.
           echo "APP_BUILD_ID=${GITHUB_SHA::7}" >> "$GITHUB_ENV"
-          echo "Repozytorium: ${REPO_NAME}; BASE_PATH=${base}; APP_BUILD_ID=${GITHUB_SHA::7}"
+          echo "Host: ${PAGES_HOST}; BASE_PATH=/; APP_BUILD_ID=${GITHUB_SHA::7}"
 
       - name: Testy (Vitest — domain, persistence, app, pwa, ui)
         run: npm test

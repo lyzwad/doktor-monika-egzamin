@@ -2,7 +2,7 @@
 /**
  * Kontrola zbudowanego `dist` przed publikacją (G01, G04, A04).
  *
- *   node scripts/check-dist.mjs [--dist dist] [--base /doktor-monika-egzamin/] [--allow-missing-registration]
+ *   node scripts/check-dist.mjs [--dist dist] [--base /] [--allow-missing-registration]
  *
  * `--base` domyślnie z BASE_PATH (albo `/`). Kod wyjścia 1, gdy którykolwiek warunek ma status FAIL.
  * Sprawdza:
@@ -430,6 +430,9 @@ scan('mock kontrolera w buildzie (__dmeMock, createMockController)', /__dmeMock|
 scan('mapy źródeł (sourceMappingURL)', /sourceMappingURL=/, codeFiles);
 // Wyjątek: skrypt przejęcia SW zawiera tę ścieżkę wyłącznie po to, by odpowiadać na nią 404.
 scan(`dawna ścieżka banku (${RELEASE.legacyBankFile}) w kodzie`, new RegExp(RELEASE.legacyBankFile.replace(/[.*+?^${}()|[\]\\/]/g, '\\$&')), codeFiles.filter((f) => f.rel !== TAKEOVER));
+
+// Dawny prefiks GitHub Pages (do 24.10.2026: https://lyzwad.github.io/doktor-monika-egzamin/) — build pod inny base go nie zawiera.
+if (base !== '/doktor-monika-egzamin/') scan('dawny prefiks /doktor-monika-egzamin/ i adres lyzwad.github.io', /\/doktor-monika-egzamin\/|lyzwad\.github\.io/, codeFiles);
 
 // Figury i inne SVG: bez skryptów, zdarzeń, foreignObject i zasobów zewnętrznych (G04).
 const svgs = textFiles.filter((f) => f.rel.endsWith('.svg'));

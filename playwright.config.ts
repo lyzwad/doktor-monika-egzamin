@@ -9,10 +9,10 @@ import { defineConfig, devices } from '@playwright/test';
  * - `chromium-mobile` — Chromium z tymi samymi wymiarami i dotykiem (UA Androida).
  * UWAGA: to nie zastępuje testu na fizycznym iPhonie (kryterium G05).
  *
- * Zmienne: BASE_PATH (domyślnie /doktor-monika-egzamin/), E2E_PORT (4173),
+ * Zmienne: BASE_PATH (domyślnie /, jak na wiedza.doktormonika.pl), E2E_PORT (4173),
  * E2E_SKIP_BUILD=1 — użyj istniejącego `dist` (szybsze iteracje; build musi mieć ten sam BASE_PATH).
  */
-const basePath = process.env.BASE_PATH ?? '/doktor-monika-egzamin/';
+const basePath = process.env.BASE_PATH ?? '/';
 const port = Number(process.env.E2E_PORT ?? 4173);
 const serve = `node scripts/serve-dist.mjs --dist dist --base ${basePath} --port ${port}`;
 

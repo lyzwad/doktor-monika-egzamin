@@ -34,7 +34,7 @@ export interface Bank {
 export const BANK = JSON.parse(readFileSync(resolve(process.cwd(), 'public', CONTENT_RELEASE.bankFile), 'utf-8')) as Bank;
 const BY_STEM = new Map(BANK.questions.map((q) => [q.stem_pl.trim(), q]));
 
-export const BASE_PATH = process.env.BASE_PATH ?? '/doktor-monika-egzamin/';
+export const BASE_PATH = process.env.BASE_PATH ?? '/';
 export const SCREENSHOT_DIR = resolve(process.cwd(), 'docs/zrzuty');
 
 /** Otwiera aplikację (opcjonalnie z hashem) i czeka na gotowy ekran. */
