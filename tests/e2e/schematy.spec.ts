@@ -263,8 +263,9 @@ test('figury z banku działają offline z precache (serwer niedostępny): P prze
   try {
     await page.goto(server.url);
     await waitOfflineReady(page);
-    // Wszystkie pliki figur z banku są w precache Service Workera.
-    const cached = await page.evaluate(async (files) => {
+    // Wszystkie pliki figur z banku są w precache Service Workera. Odpytywanie: WebKit bywa, że kończy pierwszą
+    // instalację z niepełnym cache — aplikacja ją odrzuca i instaluje ponownie (swController, discardIncompleteInstall).
+    const precached = (files: string[]) => page.evaluate(async (files) => {
       const out: Record<string, boolean> = {};
       // Szukamy w cache precache Workboxa tej aplikacji (CacheStorage.match przegląda wszystkie cache po kolei —
       // od V15 jest też cache znacznika wersji treści; sprawdzamy dokładnie precache).
@@ -272,8 +273,11 @@ test('figury z banku działają offline z precache (serwer niedostępny): P prze
       const precache = precacheName ? await caches.open(precacheName) : null;
       for (const f of files) out[f] = precache !== null && (await precache.match(new URL(f, location.href).href, { ignoreSearch: true })) !== undefined;
       return out;
-    }, Object.values(RAW.figures).map((f) => f.file));
-    expect(Object.values(cached).every(Boolean), JSON.stringify(cached)).toBe(true);
+    }, files);
+    const figureFiles = Object.values(RAW.figures).map((f) => f.file);
+    await expect
+      .poll(async () => JSON.stringify(await precached(figureFiles)), { timeout: 30_000 })
+      .toBe(JSON.stringify(Object.fromEntries(figureFiles.map((f) => [f, true]))));
     await reloadUntilControlled(page);
 
     server.hooks.offline = true;
