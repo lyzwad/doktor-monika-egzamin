@@ -229,6 +229,7 @@ export function startTest(state: UserState, catalog: Catalog, input: StartTestIn
     seen,
     fillerOrigin: 'planned',
     capacityAtStart: capacity,
+    profile: catalog.profile ?? null,
   });
   if (!plan.ok) {
     return fail('INSUFFICIENT_CAPACITY', `Za mało różnych zadań (rodzin pytań), aby ułożyć test z ${n} pytań. Dostępnych: ${plan.available}.`, {
@@ -263,6 +264,11 @@ interface RetryPlanContext {
 function retryContext(state: UserState, catalog: Catalog, sourceSessionId: SessionId): CommandResult<RetryPlanContext> {
   const parent = state.sessions[sourceSessionId];
   if (!parent) return fail('SESSION_NOT_FOUND', MSG.sessionNotFound);
+  // Test z poprzedniej wersji banku: treść pytań usunięta w migracji — runda błędów niedostępna
+  // (nie podstawiamy nowej treści pod stare ID, docs/MIGRACJA_V15.md).
+  if (parent.legacy) {
+    return fail('LEGACY_SESSION', 'Ten test pochodzi z poprzedniej wersji banku pytań — runda błędów nie jest dostępna. Rozpocznij nowy test.');
+  }
   if (parent.kind !== 'test' || parent.status !== 'completed' || parent.config.targetN === null) {
     return fail('NOT_RETRYABLE', 'Nową rundę można rozpocząć tylko po ukończonym teście.');
   }
@@ -270,12 +276,17 @@ function retryContext(state: UserState, catalog: Catalog, sourceSessionId: Sessi
   const n = parent.config.targetN;
   const pool = poolQuestions(catalog, state.blocks, config.scope, config.difficulty);
   const blocks = blockIndex(state.blocks);
+  const retired = new Set(catalog.retiredQuestionIds ?? []);
   const { reported } = reportInfo(state, parent.id);
   const repeated: MandatoryItem[] = [];
   const families = new Set<FamilyId>();
   for (const slotId of parent.plan) {
     const slot = parent.slots[slotId];
     if (!slot || slot.excluded || !slot.attempt || slot.attempt.correct || reported.has(slot.id)) continue;
+    // Pytania wyłączone (retired) nie wracają w żadnym trybie — także jako błąd rodzica.
+    if (retired.has(slot.questionId)) continue;
+    // Snapshot z innej wersji banku nie jest podstawiany (tylko bieżący katalog albo snapshot tej wersji).
+    if (!catalog.questionsById[slot.questionId] && slot.snapshot.bankVersion !== catalog.bankVersion) continue;
     const q = catalog.questionsById[slot.questionId];
     if (q) {
       if (isBlockedBy(blocks, q) || families.has(q.familyId)) continue;
@@ -354,6 +365,7 @@ export function previewRetryRound(state: UserState, catalog: Catalog, sourceSess
     seen: c.value.seen,
     fillerOrigin: 'filler',
     capacityAtStart: c.value.capacity,
+    profile: catalog.profile ?? null,
   });
   const repeatedWrong = c.value.repeated.length;
   return ok({
@@ -390,6 +402,7 @@ export function startRetryRound(state: UserState, catalog: Catalog, input: Start
     seen: c.value.seen,
     fillerOrigin: 'filler',
     capacityAtStart: c.value.capacity,
+    profile: catalog.profile ?? null,
   });
   if (!plan.ok) {
     return fail(
@@ -423,6 +436,26 @@ function ffDomainActual(plan: readonly SlotId[], slots: Readonly<Record<SlotId, 
     out[s.snapshot.domainId] = (out[s.snapshot.domainId] ?? 0) + 1;
   }
   return out;
+}
+
+/** FREE_FLOW_POLICY_V3: wagi grup po adaptacji i faktyczny udział grup w sesji (`allocation.profile`). */
+function withProfileWeights(
+  allocation: Allocation,
+  pick: FreeFlowPickResult,
+  actual: { plan: readonly SlotId[]; slots: Readonly<Record<SlotId, Slot>>; groupOf: Readonly<Record<QuestionId, string>> | null } | null,
+): Allocation {
+  if (!allocation.profile) return allocation;
+  let groupActual = allocation.profile.groupActual;
+  if (actual && actual.groupOf) {
+    const counted: Partial<Record<string, number>> = {};
+    for (const id of actual.plan) {
+      const s = actual.slots[id];
+      const g = s && !s.excluded ? actual.groupOf[s.questionId] : undefined;
+      if (g !== undefined) counted[g] = (counted[g] ?? 0) + 1;
+    }
+    groupActual = counted;
+  }
+  return { ...allocation, profile: { ...allocation.profile, groupActual, freeFlowWeights: pick.groupWeights ?? allocation.profile.freeFlowWeights } };
 }
 
 export interface FreeFlowApplyOptions {
@@ -460,7 +493,7 @@ export function applyFreeFlowPick(
         ...session,
         events,
         freeFlow: { ...ff, myErrorsExhaustedNotified: notified, empty: true },
-        allocation: { ...session.allocation, freeFlowWeights: pick.weights },
+        allocation: withProfileWeights({ ...session.allocation, freeFlowWeights: pick.groupWeights ? null : pick.weights }, pick, null),
       },
       slotId: null,
       exhaustedNow,
@@ -489,13 +522,17 @@ export function applyFreeFlowPick(
     plan.push(slot.id);
     reached = plan.length - 1;
   }
-  const allocation: Allocation = {
-    ...session.allocation,
-    domainActual: ffDomainActual(plan, slots),
-    fillersUnseen: session.allocation.fillersUnseen + (pick.familySeen ? 0 : 1),
-    fillersSeen: session.allocation.fillersSeen + (pick.familySeen ? 1 : 0),
-    freeFlowWeights: pick.weights,
-  };
+  const allocation: Allocation = withProfileWeights(
+    {
+      ...session.allocation,
+      domainActual: ffDomainActual(plan, slots),
+      fillersUnseen: session.allocation.fillersUnseen + (pick.familySeen ? 0 : 1),
+      fillersSeen: session.allocation.fillersSeen + (pick.familySeen ? 1 : 0),
+      freeFlowWeights: pick.groupWeights ? null : pick.weights,
+    },
+    pick,
+    { plan, slots, groupOf: catalog.profile?.groupOf ?? null },
+  );
   return {
     session: {
       ...session,
@@ -535,6 +572,7 @@ export function pickForSession(
     seed: session.seed,
     pickIndex: session.freeFlow?.picks ?? 0,
     myErrorsPriority: session.config.myErrorsPriority,
+    profile: session.allocation.profile ? catalog.profile : null,
   });
 }
 
@@ -565,7 +603,7 @@ export function startFreeFlow(state: UserState, catalog: Catalog, input: StartFr
     bankVersion: catalog.bankVersion,
     seed,
     allocation: {
-      policy: 'FREE_FLOW_POLICY_V2',
+      policy: catalog.profile ? 'FREE_FLOW_POLICY_V3' : 'FREE_FLOW_POLICY_V2',
       rotationOffset: 0,
       capacityAtStart: familyCount(pool),
       domainTargets: {},
@@ -577,6 +615,20 @@ export function startFreeFlow(state: UserState, catalog: Catalog, input: StartFr
       fillersSeen: 0,
       redistributed: [],
       freeFlowWeights: null,
+      // FREE_FLOW_POLICY_V3: cały zakres — wagi grup profilu treningowego V15 (DECYZJE §7a).
+      ...(catalog.profile && frozen.scope === 'ALL'
+        ? {
+            profile: {
+              bankVersion: catalog.profile.bankVersion,
+              weightsBp: { ...catalog.profile.weightsBp },
+              groupTargets: {},
+              groupActual: {},
+              cells: [],
+              redistributed: [],
+              freeFlowWeights: null,
+            },
+          }
+        : {}),
     },
     retry: null,
     plan: [],
@@ -753,6 +805,8 @@ export function fillAwaitingReplacements(
       seen,
       seed: session.seed,
       salt: `replacement:${Object.keys(slots).length}`,
+      profile: session.allocation.profile ? catalog.profile : null,
+      preferQuestionId: excluded.questionId,
     });
     if (!found) {
       still.push(slotId);

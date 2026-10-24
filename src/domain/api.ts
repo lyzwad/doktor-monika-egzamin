@@ -32,7 +32,6 @@ import type {
   IsoDateTime,
   NValidation,
   OptionId,
-  PackRecord,
   PoolInfo,
   QuestionId,
   ReportPhase,
@@ -91,13 +90,16 @@ export function parseRuntimeBank(input: unknown): CommandResult<RuntimeBank> {
 }
 
 /**
- * Buduje katalog: bank + paczki (najnowsza rewizja danego `id`), mapowanie na camelCase,
- * walidacja rekordów (4 różne opcje, istniejący klucz, źródła z rejestru, URL tylko https,
- * brak HTML/skryptów, figury istnieją). Niepoprawne rekordy → `catalog.issues`, poza pulą.
+ * Buduje katalog WYŁĄCZNIE z wbudowanego banku (od V15 bez paczek): walidacja rekordów (4 różne opcje,
+ * istniejący klucz, źródła z rejestru, URL tylko https, brak HTML/skryptów, figury istnieją), wykluczenie
+ * ID wyłączonych, grupy profilu, asercja wersji banku. Niepoprawne rekordy → `catalog.issues`, poza pulą.
  */
-export function buildCatalog(bank: RuntimeBank, packs: readonly PackRecord[]): CommandResult<Catalog> {
-  return catalogImpl.buildCatalog(bank, packs);
+export function buildCatalog(bank: RuntimeBank, content?: catalogImpl.CatalogContent): CommandResult<Catalog> {
+  return catalogImpl.buildCatalog(bank, content);
 }
+
+export { parseRetiredIds, parseTrainingProfile, type CatalogContent } from './catalog';
+export { CONTENT_RELEASE, CONTENT_RELEASE_LABEL } from './contentRelease';
 
 /* ========================================================================== */
 /* Pula, pojemność, walidacja N (DECYZJE §5)                                  */

@@ -220,7 +220,7 @@ describe('C01 / stan puli — spójne liczby z finalnego banku', () => {
       clinicalSignoff: false,
     });
     expect(about.bank.poolNotePl).toBe((BANK as unknown as { pool_note_pl: string }).pool_note_pl);
-    expect(about.bank.poolNotePl).toMatch(/2000–3000/);
+    expect(about.bank.poolNotePl).toMatch(/Bank zamknięty/);
     expect(Object.fromEntries(about.bank.byDifficulty.map((d) => [d.difficulty, d.count]))).toEqual(BANK.counts.by_difficulty);
     expect(Object.fromEntries(about.byDomain.map((d) => [d.domainId, d.count]))).toEqual(BANK.counts.by_domain);
     const settings = (c.openSettings(), c.getState().screen);

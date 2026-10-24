@@ -1,5 +1,5 @@
 /**
- * Wydajność na finalnym banku (public/data/bank.json, ~1,9 MB; liczba pytań z `bank.counts`): czas wczytania i budowy
+ * Wydajność na banku V15 (public/data/bank-37f3980a1129.json, ~5,8 MB, 2987 pytań; liczba z `bank.counts`): czas wczytania i budowy
  * katalogu, startu testu 60 / mieszany / cały zakres, modelu widoku konfiguracji (8 pul) oraz pierwszego
  * ekranu pytania. Cel z zadania: ≤ ~200 ms na laptopie.
  *
@@ -7,13 +7,12 @@
  * obciążonej maszynie (load ≫ liczba rdzeni, swap) czas ściany obejmuje czekanie na procesor, więc
  * asercja dotyczy czasu CPU (z zapasem), a oba czasy trafiają do logu.
  */
-import { readFileSync } from 'node:fs';
-import { resolve } from 'node:path';
 import { describe, expect, it } from 'vitest';
 import { buildScreen, draftFromConfig, type ViewInput } from '../../src/app/screenModels';
-import { buildCatalog, defaultSettings, emptyUserState, initialFreeFlowConfig, initialTestConfig, parseRuntimeBank, startTest, type Catalog, type CommandContext } from '../../src/domain/api';
+import { buildCatalog, defaultSettings, emptyUserState, initialFreeFlowConfig, initialTestConfig, parseRuntimeBank, startTest, CONTENT_RELEASE, type Catalog, type CommandContext } from '../../src/domain/api';
+import { BANK_TEXT, PROFILE, RETIRED_IDS } from '../content';
 
-const RAW = readFileSync(resolve(process.cwd(), 'public/data/bank.json'), 'utf-8');
+const RAW = BANK_TEXT;
 /** Budżet z zadania (laptop). */
 const TARGET_MS = 200;
 /** Asercja (czas CPU) z zapasem na obciążoną maszynę — regresja rzędu wielkości nadal wyłapana. */
@@ -55,7 +54,7 @@ function ctx(): CommandContext {
 function catalogOrThrow(): Catalog {
   const parsed = parseRuntimeBank(JSON.parse(RAW));
   if (!parsed.ok) throw new Error(parsed.error.messagePl);
-  const built = buildCatalog(parsed.value, []);
+  const built = buildCatalog(parsed.value, { retiredQuestionIds: RETIRED_IDS, profile: PROFILE, requiredBankVersion: CONTENT_RELEASE.bankVersion });
   if (!built.ok) throw new Error(built.error.messagePl);
   return built.value;
 }
@@ -76,7 +75,7 @@ describe('wydajność na finalnym banku', () => {
     expect(ok).toBe(true);
     report.push(`zimny start: katalog ${fmt(cold)}, startTest 60 ${fmt(coldStart)}`);
     expect(cold.cpu).toBeLessThan(HARD_LIMIT_MS);
-    expect(RAW.length).toBeGreaterThan(1_500_000);
+    expect(RAW.length).toBeGreaterThan(5_000_000);
     expect(c.questions).toHaveLength((JSON.parse(RAW) as { counts: { questions: number } }).counts.questions);
     expect(c.issues).toEqual([]);
   });
@@ -108,7 +107,6 @@ describe('wydajność na finalnym banku', () => {
     const base: ViewInput = {
       catalog,
       user,
-      packs: [],
       now: '2026-10-23T08:00:00.000Z',
       route: { name: 'config', mode: 'test' },
       viewPosition: 0,

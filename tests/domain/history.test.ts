@@ -40,7 +40,7 @@ describe('F04 — snapshoty niezależne od późniejszej zmiany katalogu', () =>
     const changed = questions
       .filter((x) => x.id !== slot0.questionId)
       .map((x) => ({ ...x, revision: 2, stem_pl: `ZMIENIONE ${x.stem_pl}`, correct_option_id: 'A' }));
-    const catalog2 = catalogOf(changed, [], 'test-bank-2');
+    const catalog2 = catalogOf(changed, {}, 'test-bank-2');
     // Kolejna sesja na nowym katalogu nie dotyka starej.
     const next = must(startRetryRound(r.state, catalog2, { sourceSessionId: r.sessionId, seed: 2 }, clock.ctx()));
     expect(JSON.stringify(session(next.state, r.sessionId))).toBe(before);

@@ -6,6 +6,7 @@ import { useController } from '../../app/ControllerContext';
 import type { FreeFlowSummaryVM } from '../../app/viewModels';
 import { Screen, ScreenHeader } from '../components/Screen';
 import { configLabel, formatDateTime, pluralPl } from '../format';
+import { LegacyNotice } from './ResultScreen';
 
 export function FreeFlowSummaryScreen({ vm }: { vm: FreeFlowSummaryVM }) {
   const controller = useController();
@@ -14,7 +15,7 @@ export function FreeFlowSummaryScreen({ vm }: { vm: FreeFlowSummaryVM }) {
   return (
     <Screen header={<ScreenHeader title="Free Flow" onBack={() => controller.goBack()} />}>
       <section className="card card--pad-lg result-card" aria-label="Podsumowanie sesji">
-        <div className="card__title">{fresh ? 'Sesja zakończona' : 'Sesja Free Flow'}</div>
+        <div className="card__title">{vm.interrupted ? 'Przerwany aktualizacją banku pytań' : fresh ? 'Sesja zakończona' : 'Sesja Free Flow'}</div>
         {hasAnswers ? (
           <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
             <div className="result-card__score" style={{ gap: '4px 10px' }}>
@@ -43,6 +44,7 @@ export function FreeFlowSummaryScreen({ vm }: { vm: FreeFlowSummaryVM }) {
           </div>
         </div>
       </section>
+      {vm.legacy ? <LegacyNotice /> : null}
       <p className="meta">Free Flow nie ma progu zaliczenia. Sesja jest zapisana w historii Free Flow, osobno od testów.</p>
       <div className="btn-stack">
         <button type="button" className="btn btn--primary btn--lg btn--block" onClick={() => controller.goHome()}>

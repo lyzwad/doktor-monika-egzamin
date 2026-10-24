@@ -3,6 +3,7 @@
  * Scenariusze kryteriów odbioru dopisują kolejni agenci. Nie zastępuje testu na fizycznym iPhonie (G05).
  */
 import { expect, test } from '@playwright/test';
+import { CONTENT_RELEASE } from '../../src/domain/contentRelease';
 import { waitOfflineReady } from './helpers';
 
 test('ładuje ekran startowy z metadanymi PWA i bez zewnętrznych żądań', async ({ page, baseURL }) => {
@@ -30,8 +31,11 @@ test('ładuje ekran startowy z metadanymi PWA i bez zewnętrznych żądań', asy
   const manifest = await (await page.request.get(new URL(manifestHref ?? '', page.url()).toString())).json();
   expect(manifest).toMatchObject({ name: 'Doktor Monika Egzamin', short_name: 'Doktor Monika Egzamin', lang: 'pl', display: 'standalone', start_url: '.', scope: '.' });
 
-  const bank = await page.request.get(new URL('data/bank.json', page.url()).toString());
+  // Wyłącznie bank V15 pod wersjonowaną ścieżką; dawna ścieżka banku nie jest serwowana.
+  const bank = await page.request.get(new URL(CONTENT_RELEASE.bankFile, page.url()).toString());
   expect(bank.ok()).toBe(true);
+  const oldBank = await page.request.get(new URL('data/bank.json', page.url()).toString());
+  expect(oldBank.status()).toBe(404);
 
   // Lokalny font (bez CDN) jest używany przez nagłówek. Nagłówek jest podmieniany w trakcie uruchomienia
   // (ładowanie → przygotowanie offline → start), więc pomiar dopiero na gotowym ekranie startowym.

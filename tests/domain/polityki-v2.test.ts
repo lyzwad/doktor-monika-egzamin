@@ -5,16 +5,12 @@
  * - LOG-04 → FREE_FLOW_POLICY_V2: przy luzowaniu wykluczeń w małej puli odstęp błędnych w sesji
  *   (≥ 8 innych pytań) obowiązuje na każdej ścieżce, dopóki istnieje inny kandydat.
  */
-import { readFileSync } from 'node:fs';
-import { resolve } from 'node:path';
 import { describe, expect, it } from 'vitest';
 import {
   answer,
-  buildCatalog,
   emptyUserState,
   markShown,
   nextFreeFlowSlot,
-  parseRuntimeBank,
   poolFor,
   reportQuestion,
   startFreeFlow,
@@ -23,6 +19,7 @@ import {
   type SessionConfig,
   type UserState,
 } from '../../src/domain/api';
+import { v15Catalog } from '../content';
 import { catalogOf, cell, Clock, grid, must, playTest, q, session, slotAt, wrongOptionOf } from './helpers';
 
 /** Liczba pozycji planu z rodzin wyświetlonych przed startem sesji. */
@@ -39,12 +36,8 @@ function start(state: UserState, catalog: Catalog, config: Partial<SessionConfig
 
 describe('TEST_POLICY_V2 — najpierw niewidziane w całym zakresie (D04)', () => {
   it('rzeczywisty bank: kolejne niezależne testy 20/mixed/ALL nie biorą widzianych rodzin, dopóki niewidzianych jest ≥ N', () => {
-    const raw: unknown = JSON.parse(readFileSync(resolve(process.cwd(), 'public/data/bank.json'), 'utf-8'));
-    const parsed = parseRuntimeBank(raw);
-    if (!parsed.ok) throw new Error(parsed.error.messagePl);
-    const built = buildCatalog(parsed.value, []);
-    if (!built.ok) throw new Error(built.error.messagePl);
-    const catalog = built.value;
+    // Bank V15 z profilem: cały zakres = TEST_POLICY_V3 (grupy profilu), reguła „najpierw niewidziane” bez zmian.
+    const catalog = v15Catalog();
     const clock = new Clock();
     const n = 20;
     let state = emptyUserState();
@@ -55,7 +48,7 @@ describe('TEST_POLICY_V2 — najpierw niewidziane w całym zakresie (D04)', () =
       if (unseenBefore < n) break;
       const r = start(state, catalog, { targetN: n }, 100 + round, clock);
       const s = session(r.state, r.sessionId);
-      expect(s.allocation.policy).toBe('TEST_POLICY_V2');
+      expect(s.allocation.policy).toBe('TEST_POLICY_V3');
       expect(seenFamilyPositions(state, r.state, r.sessionId), `test ${round + 1}: ${unseenBefore} niewidzianych rodzin przed startem`).toEqual([]);
       expect(s.allocation.fillersSeen).toBe(0);
       expect(s.allocation.fillersUnseen).toBe(n);

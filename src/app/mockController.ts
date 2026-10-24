@@ -11,6 +11,7 @@
  * Do testowania stanów UI służy `simulate()` (błąd zapisu, offline, aktualizacja, przygotowanie).
  */
 import { bankSummaryOf } from '../domain/catalog';
+import { CONTENT_RELEASE } from '../domain/contentRelease';
 import { mulberry32, shuffle, type Rng } from '../domain/rng';
 import { formatPercentPl, isPassed, passThreshold, truncatedPercent } from '../domain/scoring';
 import { DEFAULT_FREE_FLOW_CONFIG, DEFAULT_TEST_CONFIG, N_STEP, QUICK_N_VALUES } from '../domain/policies';
@@ -72,8 +73,10 @@ import type {
 } from './viewModels';
 
 export interface MockControllerOptions {
-  /** Prawdziwy bank (np. `public/data/bank.json`) — mock nie ma własnych danych. */
+  /** Prawdziwy bank V15 (`public/data/bank-<sha12>.json`) — mock nie ma własnych danych i nie przyjmuje innej wersji. */
   bank: RuntimeBank;
+  /** ID wyłączone z aktywnej puli (retired_question_ids.json) — pomijane w każdym trybie mocka. */
+  retiredIds?: readonly string[];
   /** Seed PRNG mocka (deterministyczne testy). Domyślnie 1. */
   seed?: number;
   /** Zegar (testy). Domyślnie systemowy. */
@@ -121,8 +124,11 @@ interface UndoState {
 /* Budowa katalogu (uproszczona — bez walidacji)                               */
 /* -------------------------------------------------------------------------- */
 
-function mockCatalog(bank: RuntimeBank): Catalog {
-  const questions: CatalogQuestion[] = bank.questions.map((q) => ({
+function mockCatalog(bank: RuntimeBank, retiredIds: readonly string[]): Catalog {
+  // Mock (dev/testy UI) działa wyłącznie na banku V15 — bez awaryjnego ładowania innego banku.
+  if (bank.bank_version !== CONTENT_RELEASE.bankVersion) throw new Error(`Mock: oczekiwano banku ${CONTENT_RELEASE.bankVersion}, jest ${bank.bank_version}`);
+  const retired = new Set(retiredIds);
+  const questions: CatalogQuestion[] = bank.questions.filter((q) => !retired.has(q.id)).map((q) => ({
     id: q.id,
     revision: q.revision,
     familyId: q.family_id,
@@ -185,6 +191,8 @@ function mockCatalog(bank: RuntimeBank): Catalog {
       ]),
     ),
     issues: [],
+    retiredQuestionIds: [...retired],
+    profile: null,
   };
 }
 
@@ -765,6 +773,7 @@ export function createMockController(options: MockControllerOptions): MockContro
       sessionId: s.id,
       origin,
       status: s.status === 'completed' ? (s.result?.passed ? 'passed' : 'failed') : 'unfinished',
+      legacy: false,
       correct: c.correct,
       targetN: n,
       answeredValid: c.answered,
@@ -1052,7 +1061,7 @@ export function createMockController(options: MockControllerOptions): MockContro
       return () => listeners.delete(listener);
     },
     async start() {
-      catalog = mockCatalog(options.bank);
+      catalog = mockCatalog(options.bank, options.retiredIds ?? []);
       booted = true;
       if (route.name === 'question' && !user.sessions[route.sessionId]) route = HOME_ROUTE;
       publish();
@@ -1621,29 +1630,11 @@ export function createMockController(options: MockControllerOptions): MockContro
       backupFlow = { step: 'idle', lastSavedFileName: null };
       publish();
     },
-    async importPackFile(file, fileName) {
-      poolFlow = { step: 'checking', fileName };
+    async importPackFile(_file, fileName) {
+      // Jak w rzeczywistym kontrolerze: import dodatkowych pul wyłączony (wyłącznie bank V15).
+      poolFlow = { step: 'error', fileName, issues: [], messagePl: 'Aplikacja używa wyłącznie banku pytań V15 — import dodatkowych pul pytań jest wyłączony.' };
       publish();
-      await delay();
-      let parsed: unknown;
-      try {
-        parsed = JSON.parse(await file.text());
-      } catch {
-        poolFlow = { step: 'error', fileName, issues: [{ questionId: null, code: 'INVALID_JSON', messagePl: 'Plik nie jest poprawnym JSON.' }], messagePl: null };
-        publish();
-        return failResult('INVALID_PACK', 'Plik nie jest poprawnym JSON.');
-      }
-      const qs = (parsed as { questions?: unknown }).questions;
-      if (!Array.isArray(qs)) {
-        poolFlow = { step: 'error', fileName, issues: [{ questionId: null, code: 'NO_QUESTIONS', messagePl: 'Brak listy pytań („questions”).' }], messagePl: null };
-        publish();
-        return failResult('INVALID_PACK', 'Brak listy pytań.');
-      }
-      const known = new Set(catalog?.questions.map((q) => q.id));
-      const added = qs.filter((q: { id?: unknown }) => typeof q?.id === 'string' && !known.has(q.id)).length;
-      poolFlow = { step: 'done', fileName, added, updated: 0, skippedSame: qs.length - added, skippedBlocked: 0, rejected: [], activeBlocks: activeBlockList().length };
-      publish();
-      return { ok: true };
+      return failResult('PACKS_DISABLED', 'Import dodatkowych pul pytań jest wyłączony.');
     },
     resetPoolImportFlow() {
       poolFlow = { step: 'idle' };

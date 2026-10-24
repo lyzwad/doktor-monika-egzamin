@@ -1,10 +1,9 @@
 /**
- * Dane testowe trwałości: rekordy użytkownika zbudowane z prawdziwych pytań `public/data/bank.json`
+ * Dane testowe trwałości: rekordy użytkownika zbudowane z prawdziwych pytań banku V15
  * (snapshoty, próby, statystyki, blokada ze zgłoszenia), paczki pytań i fabryka repozytorium
  * na świeżej instancji fake-indexeddb. Wyłącznie do testów.
  */
-import { readFileSync } from 'node:fs';
-import { resolve } from 'node:path';
+import { createHash } from 'node:crypto';
 import { IDBFactory } from 'fake-indexeddb';
 import { fingerprintRuntimeQuestion } from '../../src/domain/fingerprint';
 import type {
@@ -14,7 +13,6 @@ import type {
   DmeEvent,
   QuestionSnapshot,
   QuestionStat,
-  RuntimeBank,
   RuntimeQuestion,
   Session,
   Settings,
@@ -23,9 +21,11 @@ import type {
 import type { BackupData, Repository } from '../../src/persistence/api';
 import { createIndexedDbRepository } from '../../src/persistence/repository';
 import type { InternalRepositoryOptions } from '../../src/persistence/repository';
-import type { PackCatalogView } from '../../src/persistence/packs';
+import { V15_UNCHANGED } from '../../src/persistence/v15Carryover';
 
-export const BANK = JSON.parse(readFileSync(resolve(process.cwd(), 'public/data/bank.json'), 'utf-8')) as RuntimeBank;
+import { BANK } from '../content';
+
+export { BANK };
 
 /** Pytania z banku, których zapisany fingerprint zgadza się z treścią (patrz ARCHITEKTURA_APP §8.1). */
 export async function bankQuestionsWithValidFingerprint(count: number, skip = 0): Promise<RuntimeQuestion[]> {
@@ -446,86 +446,126 @@ export async function seededRepository(options: InternalRepositoryOptions = {}):
 }
 
 /* ========================================================================== */
-/* Paczki pytań                                                               */
+/* Dane sprzed V15 (migracja, docs/MIGRACJA_V15.md)                            */
 /* ========================================================================== */
 
-/** Widok katalogu z banku (bez paczek). */
-export function bankCatalogView(): PackCatalogView {
-  return {
-    questionsById: Object.fromEntries(
-      BANK.questions.map((q) => [
-        q.id,
-        {
-          revision: q.revision,
-          fingerprint: q.fingerprint,
-          familyId: q.family_id,
-          domainId: q.domain_id,
-          difficulty: q.difficulty,
-          stem: q.stem_pl,
-          options: q.options.map((o) => ({ id: o.id, text: o.text_pl })),
-          correctOptionId: q.correct_option_id,
-          explanation: q.correct_explanation_pl,
-        },
-      ]),
-    ),
-    topics: BANK.topics,
-    figures: BANK.figures,
-  };
+/** Wersja banku wdrożonego przed V15 (dane starej aplikacji). */
+export const OLD_BANK_VERSION = 'release-2026-10-23c';
+/** Pytanie niezmienione między starym bankiem a V15 (pierwsze z listy przeniesień). */
+export const UNCHANGED_ID = V15_UNCHANGED[0]![0];
+/** Drugie niezmienione (aktywny błąd do zachowania). */
+export const UNCHANGED_ID_2 = V15_UNCHANGED[1]![0];
+
+/**
+ * Pytanie w wersji „starego banku”: dla ID z listy niezmienionych — treść identyczna z V15 (tak było
+ * naprawdę); dla pozostałych — zmieniona treść i fingerprint (jak 669 pytań zmienionych pod tym samym ID).
+ */
+export function oldVersionQuestion(id: string): RuntimeQuestion {
+  const v15 = bankQuestion(id);
+  if (V15_UNCHANGED.some(([uid]) => uid === id)) return structuredClone(v15);
+  const old = structuredClone(v15);
+  old.stem_pl = `[STARA TREŚĆ ${id}] ${v15.stem_pl}`;
+  old.correct_explanation_pl = `[STARE WYJAŚNIENIE ${id}] ${v15.correct_explanation_pl}`;
+  old.options = v15.options.map((o) => ({ ...o, text_pl: `[STARA OPCJA] ${o.text_pl}` }));
+  old.revision = Math.max(1, v15.revision - 1);
+  old.fingerprint = createHash('sha256').update(`stary:${id}`).digest('hex');
+  return old;
 }
 
-/** Nowe pytanie (nowe ID, rodzina i treść) na bazie pytania z banku, z przeliczonym fingerprintem. */
-export async function derivedQuestion(base: RuntimeQuestion, newId: string, stemSuffix = ' (wariant z paczki)'): Promise<RuntimeQuestion> {
-  const question: RuntimeQuestion = {
-    ...structuredClone(base),
-    id: newId,
-    family_id: `${newId}-F`,
-    stem_pl: `${base.stem_pl}${stemSuffix}`,
-  };
-  question.fingerprint = await fingerprintRuntimeQuestion(question);
-  return question;
+function retag<T extends { bankVersion: string }>(x: T): T {
+  return { ...x, bankVersion: OLD_BANK_VERSION };
 }
 
-/** Plik puli w formacie runtime v1 (rejestry źródeł/tematów z banku dla użytych ID). */
-export function runtimePack(questions: RuntimeQuestion[], patch: Record<string, unknown> = {}): Record<string, unknown> {
-  const sourceIds = new Set(questions.flatMap((q) => q.source_ids));
-  const topicIds = new Set(questions.flatMap((q) => q.topic_ids));
-  return {
-    format: 'dme-runtime-bank',
-    format_version: 1,
-    schema_version: '1.0',
-    bank_version: 'paczka-test-2026-10-22',
-    built_on: '2026-10-22',
-    clinical_signoff: false,
-    official_exam_question_bank: false,
-    status_pl: 'Paczka testowa.',
-    counts: {},
-    domains: BANK.domains,
-    topics: Object.fromEntries([...topicIds].map((id) => [id, BANK.topics[id]])),
-    sources: Object.fromEntries([...sourceIds].map((id) => [id, BANK.sources[id]])),
+/**
+ * Realistyczne dane STAREJ aplikacji (bank sprzed V15) w kształcie zapisów IndexedDB v1: ukończony test
+ * (z ID niezmienionym i zmienionymi), otwarty test (runda powtórki ze zgłoszeniem i zastępstwem),
+ * zakończony Free Flow, otwarty Free Flow nie występuje (najwyżej jedna otwarta sesja), stan powtórek
+ * (w tym aktywny błąd pytania niezmienionego i zmienionego), blokada pytania zmienionego i niezmienionego,
+ * zdarzenia, paczka pytań.
+ */
+export function legacyUserData(): BackupData & { packs: unknown[] } {
+  const ids = {
+    unchanged: UNCHANGED_ID,
+    unchanged2: UNCHANGED_ID_2,
+    changed: BANK.questions.map((q) => q.id).filter((id) => !V15_UNCHANGED.some(([u]) => u === id))[0] as string,
+  };
+  const base = sampleUserData();
+  // Podmiana pytań na „stare” wersje: q1 → niezmienione, q2 → niezmienione2, reszta → zmienione.
+  const all = BANK.questions.map((q) => q.id);
+  const changedIds = all.filter((id) => !V15_UNCHANGED.some(([u]) => u === id));
+  const mapId = new Map<string, string>();
+  const origIds = BANK.questions.slice(0, 7).map((q) => q.id);
+  origIds.forEach((id, i) => mapId.set(id, i === 0 ? ids.unchanged : i === 1 ? ids.unchanged2 : (changedIds[i] as string)));
+  const qOf = (id: string): RuntimeQuestion => oldVersionQuestion(mapId.get(id) ?? id);
+  const sessions = base.sessions.map((s) => {
+    const slots = Object.fromEntries(
+      Object.entries(s.slots).map(([k, slot]) => {
+        const q = qOf(slot.questionId);
+        const snap = { ...snapshotOf(q, slot.optionOrder), bankVersion: OLD_BANK_VERSION };
+        // Poprawność odpowiedzi jak w danych bazowych (opcja = klucz albo błędna opcja „starego” pytania).
+        const optionId = slot.attempt ? (slot.attempt.correct ? q.correct_option_id : wrongOption(q)) : null;
+        return [k, { ...slot, questionId: q.id, snapshot: snap, attempt: slot.attempt && optionId ? { ...slot.attempt, optionId, correct: slot.attempt.correct } : null }];
+      }),
+    );
+    return { ...retag(s), slots, events: s.events.map((e) => ('questionId' in e ? { ...e, questionId: qOf(e.questionId).id } : e)) } as Session;
+  });
+  const attempts = base.attempts.map((a) => {
+    const s = sessions.find((x) => x.id === a.sessionId)!;
+    const slot = s.slots[a.slotId]!;
+    const q = qOf(a.questionId);
+    return { ...a, questionId: q.id, questionRevision: q.revision, optionId: slot.attempt?.optionId ?? a.optionId, correct: slot.attempt?.correct ?? a.correct };
+  });
+  const questionStats = base.questionStats.map((st) => {
+    const q = qOf(st.questionId);
+    return { ...st, questionId: q.id, familyId: q.family_id, domainId: q.domain_id };
+  });
+  const blocks: Block[] = base.blocks.map((b) => {
+    const q = qOf(b.questionId);
+    return { ...b, questionId: q.id, revision: q.revision, fingerprint: q.fingerprint, familyId: q.family_id, domainId: q.domain_id, stemPreview: q.stem_pl };
+  });
+  // Dodatkowa blokada pytania NIEZMIENIONEGO (zgłoszenie po zamknięciu sesji 1) — ma zostać aktywna.
+  const keep = qOf(origIds[0] as string);
+  const keepEvent: DmeEvent = {
+    id: 'ev-report-keep',
+    at: '2026-10-20T09:00:00.000Z',
+    commandId: 'cmd-report-keep',
+    type: 'question_reported',
+    sessionId: 'sess-1',
+    slotId: 's1-a',
+    questionId: keep.id,
+    revision: keep.revision,
+    blockId: 'block-keep',
+    phase: 'after_close',
+    reportedLaterAt: '2026-10-20T09:00:00.000Z',
+  };
+  blocks.push({
+    id: 'block-keep',
+    questionId: keep.id,
+    revision: keep.revision,
+    fingerprint: keep.fingerprint,
+    familyId: keep.family_id,
+    domainId: keep.domain_id,
+    stemPreview: keep.stem_pl,
+    reason: 'reported',
+    createdAt: '2026-10-20T09:00:00.000Z',
+    sessionId: 'sess-1',
+    slotId: 's1-a',
+    eventId: 'ev-report-keep',
+    revokedAt: null,
+  });
+  // Aktywny błąd pytania niezmienionego (q2 → unchanged2) zostaje; q7 (zmienione) — reset.
+  const events = [...base.events.map((e) => ('questionId' in e ? { ...e, questionId: qOf(e.questionId).id } : e)), keepEvent];
+  const pack = {
+    id: 'pack-old-1',
+    importedAt: '2026-10-21T10:00:00.000Z',
+    fileName: 'pula.json',
+    bankVersion: 'pula-stara-1',
+    sourceFormat: 'runtime-v1',
+    questions: [{ ...oldVersionQuestion(ids.changed), id: 'PACK-Q1' }],
+    sources: {},
+    topics: {},
     figures: {},
-    questions,
-    ...patch,
+    summary: { added: 1, updated: 0, skippedSame: 0, skippedBlocked: 0, rejected: 0 },
   };
-}
-
-/** Plik puli w schemacie banku 1.0 (bez fingerprintów, z rejestrem źródeł jako listą). */
-export function bank10Pack(questions: RuntimeQuestion[], patch: Record<string, unknown> = {}): Record<string, unknown> {
-  const sourceIds = new Set(questions.flatMap((q) => q.source_ids));
-  return {
-    schema_version: '1.0',
-    bank_version: 'paczka-bank10-2026-10-22',
-    clinical_signoff: false,
-    official_exam_question_bank: false,
-    sources: [...sourceIds].map((id) => {
-      const s = BANK.sources[id];
-      return { id, title: s?.title, url: s?.url, doi: s?.doi, pmid: s?.pmid, kind: s?.kind, access: s?.access, checked_on: s?.checked_on };
-    }),
-    questions: questions.map((q) => {
-      const copy: Record<string, unknown> = { ...structuredClone(q) };
-      delete copy.fingerprint;
-      delete copy.content_check_status;
-      return copy;
-    }),
-    ...patch,
-  };
+  return { settings: base.settings, sessions, attempts, questionStats, blocks, events: events as DmeEvent[], packs: [pack] };
 }

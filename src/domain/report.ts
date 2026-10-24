@@ -188,6 +188,8 @@ export function reportQuestion(state: UserState, catalog: Catalog, input: Report
       seen: buildSeenIndex(tx.stats()),
       seed: session.seed,
       salt: `replacement:${slotCount}`,
+      profile: session.allocation.profile ? catalog.profile : null,
+      preferQuestionId: slot.questionId,
     });
     if (found) {
       const replacement = createSlot(

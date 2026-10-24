@@ -1,21 +1,21 @@
 /**
  * Uprząż testów integracyjnych rzeczywistego kontrolera: prawdziwy silnik domeny, prawdziwe
- * repozytorium IndexedDB (fake-indexeddb), prawdziwy bank `public/data/bank.json`,
+ * repozytorium IndexedDB (fake-indexeddb), prawdziwy bank V15 (`public/data/bank-<sha12>.json`),
  * sterowalna platforma (zegar, identyfikatory, hash, pliki, sieć) i atrapa portu PWA.
  */
-import { readFileSync } from 'node:fs';
-import { resolve } from 'node:path';
 import { IDBFactory } from 'fake-indexeddb';
 import { createAppController } from '../../src/app/appController';
-import type { AppController, Platform } from '../../src/app/controller';
+import type { AppController, ContentBundle, Platform } from '../../src/app/controller';
 import { nextDayStartInZone } from '../../src/app/platform';
 import type { QuestionVM } from '../../src/app/viewModels';
-import type { RuntimeBank, Session, UserState } from '../../src/domain/types';
+import type { Session, UserState } from '../../src/domain/types';
 import type { ExportedFile, Repository } from '../../src/persistence/api';
 import { createIndexedDbRepository } from '../../src/persistence/repository';
 import type { PreparationProgress, PwaPort } from '../../src/pwa/api';
 
-export const BANK = JSON.parse(readFileSync(resolve(process.cwd(), 'public/data/bank.json'), 'utf-8')) as RuntimeBank;
+import { BANK, contentBundle } from '../content';
+
+export { BANK, contentBundle };
 
 export interface FakePlatform extends Platform {
   hash: string;
@@ -163,7 +163,7 @@ export interface HarnessOptions {
   platform?: FakePlatform;
   repository?: Repository;
   wrapRepository?: (repo: Repository) => Repository;
-  loadBank?: () => Promise<RuntimeBank>;
+  loadBank?: () => Promise<ContentBundle>;
   hash?: string;
   storage?: FakeStorageManager;
 }
@@ -182,7 +182,7 @@ export async function startHarness(options: HarnessOptions = {}): Promise<Harnes
   const repository = options.wrapRepository ? options.wrapRepository(base) : base;
   const controller = createAppController({
     repository,
-    loadBank: options.loadBank ?? (async () => structuredClone(BANK)),
+    loadBank: options.loadBank ?? (async () => contentBundle()),
     platform,
     pwa,
     appVersion: 'test-1',

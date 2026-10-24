@@ -13,6 +13,7 @@ import './ui/styles/fonts.css';
 import './ui/styles/tokens.css';
 import './ui/styles/base.css';
 import { createAppController } from './app/appController';
+import { loadContentBundle } from './app/contentLoader';
 import { APP_VERSION } from './app/appVersion';
 import type { AppController } from './app/controller';
 import { createBrowserPlatform } from './app/platform';
@@ -26,12 +27,8 @@ const container = document.getElementById('root');
 if (!container) throw new Error('Brak elementu #root');
 const root = createRoot(container);
 
-/** `data/bank.json` względem `base` (z precache Service Workera, gdy offline). */
-async function loadBank(): Promise<RuntimeBank> {
-  const response = await fetch(`${import.meta.env.BASE_URL}data/bank.json`, { cache: 'no-cache' });
-  if (!response.ok) throw new Error(`HTTP ${response.status}`);
-  return (await response.json()) as RuntimeBank;
-}
+/** Bank V15 (wersjonowane pliki z `CONTENT_RELEASE`) względem `base` — z precache Service Workera, gdy offline. */
+const loadBank = () => loadContentBundle(import.meta.env.BASE_URL);
 
 function startApp(): void {
   let controller: AppController | null = null;
@@ -60,13 +57,14 @@ if (import.meta.env.DEV && useMock) {
   );
   void (async () => {
     const params = new URLSearchParams(window.location.search);
-    const [{ createMockController }, { bindHashRouting }, bank] = await Promise.all([
+    const [{ createMockController }, { bindHashRouting }, content] = await Promise.all([
       import('./app/mockController'),
       import('./ui/router'),
-      fetch(`${import.meta.env.BASE_URL}data/bank.json`).then((r) => r.json() as Promise<RuntimeBank>),
+      loadContentBundle(import.meta.env.BASE_URL),
     ]);
     const latency = Number(params.get('latency') ?? '0');
-    const mock = createMockController({ bank, latencyMs: Number.isFinite(latency) ? latency : 0 });
+    const retired = (content.retired as { ids?: string[] }).ids ?? [];
+    const mock = createMockController({ bank: content.bank as RuntimeBank, retiredIds: retired, latencyMs: Number.isFinite(latency) ? latency : 0 });
     root.render(
       <StrictMode>
         <AppRoot controller={mock} />

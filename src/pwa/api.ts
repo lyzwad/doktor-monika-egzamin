@@ -32,6 +32,19 @@ export interface PwaPort {
   applyUpdate(): Promise<void>;
   /** Ręczne sprawdzenie aktualizacji / ponowienie przygotowania. */
   checkForUpdate(): Promise<void>;
+  /**
+   * (V15, opcjonalne) Wykryto nowszą wersję TREŚCI (bank pytań) — wiadomość nowego Service Workera
+   * (`DME_CONTENT_UPDATE`) albo plik `dme-release.json` z serwera. Kontroler przeładowuje aplikację przed
+   * pokazaniem pytań (fallback, gdy `WindowClient.navigate` nie zadziała).
+   */
+  onContentUpdate?(listener: (info: { bankVersion: string }) => void): () => void;
+  /** (V15, opcjonalne) Plik wydania z serwera (bez cache): wersja banku albo `null` (offline, brak pliku). */
+  checkRelease?(): Promise<{ bankVersion: string } | null>;
+  /**
+   * (V15, opcjonalne) Przeładowanie na nową wersję treści: sprawdzenie aktualizacji SW, oczekiwanie na
+   * przejęcie (nowy SW sam przeładowuje okna), w razie braku przejęcia — przeładowanie strony.
+   */
+  reloadForContentUpdate?(): Promise<void>;
 }
 
 /** Port bez Service Workera (tryb dev, testy, przeglądarki bez SW). */

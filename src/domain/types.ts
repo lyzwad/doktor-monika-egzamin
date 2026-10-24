@@ -81,9 +81,11 @@ export type SessionKind = (typeof SESSION_KINDS)[number];
  * - `open` — w toku (najwyżej jedna otwarta sesja naraz),
  * - `completed` — Test ukończony jawnym „Pokaż wynik” po N ważnych odpowiedziach,
  * - `unfinished` — Test zamknięty bez wyniku (`passed = null`),
- * - `ended` — Free Flow zakończony ręcznie (bez progu).
+ * - `ended` — Free Flow zakończony ręcznie (bez progu),
+ * - `interrupted_by_update` — sesja otwarta w chwili aktualizacji banku pytań do V15 (migracja danych,
+ *   docs/MIGRACJA_V15.md): bez wyniku, bez treści pytań, niewznawialna i niekończalna, poza wykresem.
  */
-export const SESSION_STATUSES = ['open', 'completed', 'unfinished', 'ended'] as const;
+export const SESSION_STATUSES = ['open', 'completed', 'unfinished', 'ended', 'interrupted_by_update'] as const;
 export type SessionStatus = (typeof SESSION_STATUSES)[number];
 
 /**
@@ -104,11 +106,38 @@ export type ExclusionReason = 'reported';
 /** Przyczyna blokady pytania w przyszłych losowaniach. */
 export type BlockReason = 'reported';
 
+/** Blokada wyłączona migracją, bo treść pytania zmieniła się w banku V15 (docs/MIGRACJA_V15.md). */
+export type BlockInactiveReason = 'bank_version_changed';
+
 /**
  * Nazwy wersjonowanych polityk doboru (zapisywane w sesji dla odtwarzalności). Nowe sesje: V2;
  * V1 pozostaje poprawną wartością sesji zapisanych wcześniej (DECYZJE §6–§7).
  */
-export type SelectionPolicyName = 'TEST_POLICY_V1' | 'TEST_POLICY_V2' | 'FREE_FLOW_POLICY_V1' | 'FREE_FLOW_POLICY_V2';
+export type SelectionPolicyName =
+  | 'TEST_POLICY_V1'
+  | 'TEST_POLICY_V2'
+  | 'TEST_POLICY_V3'
+  | 'FREE_FLOW_POLICY_V1'
+  | 'FREE_FLOW_POLICY_V2'
+  | 'FREE_FLOW_POLICY_V3';
+
+/* ========================================================================== */
+/* Profil treningowy V15 (training_profile.json, DECYZJE §6a)                 */
+/* ========================================================================== */
+
+/**
+ * Profil treningowy banku V15: udziały grup pytań dla CAŁEGO zakresu (Test i Free Flow).
+ * Grupy są zdefiniowane listami ID w pliku (nie wyszukiwaniem słów). Zakres jednej domeny — bez profilu.
+ */
+export interface TrainingProfile {
+  bankVersion: BankVersion;
+  /** Kolejność grup (jak w `weights` pliku) — rozstrzyga remisy metody największych reszt. */
+  groupOrder: string[];
+  /** Udziały w punktach bazowych (suma 10 000), np. skin 3500, facial_anatomy 2500, other 4000. */
+  weightsBp: Readonly<Record<string, number>>;
+  /** Grupa każdego pytania banku (`questionId` → grupa). */
+  groupOf: Readonly<Record<QuestionId, string>>;
+}
 
 /* ========================================================================== */
 /* Runtime bank — public/data/bank.json (DECYZJE §2)                          */
@@ -430,6 +459,10 @@ export interface Catalog {
   issues: CatalogIssue[];
   /** Liczby i stan wbudowanej puli (dodane addytywnie — „O bazie”, ustawienia). */
   bankSummary: CatalogBankSummary;
+  /** Pytania wyłączone z aktywnej puli (retired_question_ids.json) — nigdy nie trafiają do żadnego trybu. */
+  retiredQuestionIds: readonly QuestionId[];
+  /** Profil treningowy (V15) albo `null` (katalog testowy bez profilu — polityki V2). */
+  profile: TrainingProfile | null;
 }
 
 /* ========================================================================== */
@@ -497,6 +530,44 @@ export interface Allocation {
   redistributed: Redistribution[];
   /** Wagi domen Free Flow po adaptacji (suma = 1) albo `null` dla testu. */
   freeFlowWeights: Partial<Record<DomainId, number>> | null;
+  /**
+   * (TEST_POLICY_V3 / FREE_FLOW_POLICY_V3, cały zakres) Przydział wg grup profilu treningowego V15.
+   * Brak pola = sesja bez profilu (zakres jednej domeny albo starsza polityka).
+   */
+  profile?: ProfileAllocation;
+}
+
+/** Komórka przydziału wg profilu: grupa × poziom. */
+export interface ProfileAllocationCell {
+  group: string;
+  difficulty: Difficulty;
+  target: number;
+  actual: number;
+}
+
+/** Jawny zapis redystrybucji między grupami / poziomami profilu (niedobór pojemności grupy). */
+export interface ProfileRedistribution {
+  kind: 'group' | 'difficulty';
+  fromGroup: string;
+  fromDifficulty: Difficulty | null;
+  toGroup: string;
+  toDifficulty: Difficulty | null;
+  count: number;
+  reason: 'supply' | 'unseen';
+}
+
+export interface ProfileAllocation {
+  /** `bank_version` profilu. */
+  bankVersion: BankVersion;
+  /** Udziały w punktach bazowych (suma 10 000). */
+  weightsBp: Partial<Record<string, number>>;
+  /** Test: kwoty metodą największych reszt; Free Flow: `{}`. */
+  groupTargets: Partial<Record<string, number>>;
+  groupActual: Partial<Record<string, number>>;
+  cells: ProfileAllocationCell[];
+  redistributed: ProfileRedistribution[];
+  /** Free Flow: wagi grup po adaptacji (suma = 1); test: `null`. */
+  freeFlowWeights: Partial<Record<string, number>> | null;
 }
 
 /** Powiązanie rundy „Uwzględnij błędy” z rodzicem (DECYZJE §4). */
@@ -660,6 +731,30 @@ export interface Session {
   events: DmeEvent[];
   result: SessionResult | null;
   freeFlow: FreeFlowState | null;
+  /**
+   * Sesja z poprzedniej wersji banku (migracja do V15, docs/MIGRACJA_V15.md): treść pytań usunięta
+   * (`slots = {}`, `plan = []`), zostaje wyłącznie podsumowanie. Brak/`null` = sesja banku V15.
+   */
+  legacy?: LegacySessionInfo | null;
+}
+
+/** Podsumowanie sesji poprzedniej wersji banku (bez treści pytań). */
+export interface LegacySessionInfo {
+  reason: 'bank_v15_update';
+  /** `bankVersion` sesji sprzed migracji. */
+  previousBankVersion: BankVersion;
+  /** Wersja treści aplikacji po migracji (V15). */
+  contentBankVersion: BankVersion;
+  migratedAt: IsoDateTime;
+  /** Status sprzed migracji (dla `interrupted_by_update` — `open`). */
+  previousStatus: SessionStatus;
+  /** Liczby policzone przed usunięciem treści (wykres i historia bez zmian liczb). */
+  answeredValid: number;
+  correct: number;
+  /** Pozycje wykluczone zgłoszeniem. */
+  excluded: number;
+  /** Długość planu (liczba pozycji). */
+  planLength: number;
 }
 
 /**
@@ -740,6 +835,11 @@ export interface Block {
   eventId: EventId;
   /** „Przywróć” w ustawieniach — dotyczy tylko przyszłych losowań. */
   revokedAt: IsoDateTime | null;
+  /**
+   * Blokada nieaktywna po migracji do V15, bo treść pytania się zmieniła (`revokedAt` = data migracji,
+   * `stemPreview` = ''). Brak/`null` = zwykła blokada.
+   */
+  inactiveReason?: BlockInactiveReason | null;
 }
 
 /** Ustawienia (jeden rekord, `id = 'settings'`). */
@@ -907,7 +1007,9 @@ export type DomainErrorCode =
   | 'BLOCK_ALREADY_REVOKED'
   | 'QUESTION_NOT_FOUND'
   | 'INVALID_BANK'
-  | 'INVALID_PACK';
+  | 'INVALID_PACK'
+  /** Sesja poprzedniej wersji banku — treść niedostępna (runda błędów, przegląd). */
+  | 'LEGACY_SESSION';
 
 export interface DomainError {
   code: DomainErrorCode;

@@ -23,6 +23,7 @@ function testMain(t: HistoryTestItemVM): string {
 }
 
 function testStatus(t: HistoryTestItemVM): string {
+  if (t.status === 'interrupted') return 'Przerwany aktualizacją banku pytań';
   if (t.status !== 'completed') return 'Niedokończony';
   return t.passed ? 'Zaliczony' : 'Próg nieosiągnięty';
 }
@@ -126,6 +127,7 @@ export function HistoryScreen({ vm }: { vm: HistoryVM }) {
                             </span>
                             <span className="list-row__subtitle">
                               {formatDate(t.closedAt ?? t.createdAt)} · {configLabel(t.config, { withN: true })}
+                              {t.legacy ? ' · poprzednia wersja banku' : ''}
                             </span>
                           </span>
                           <Icon name="chevron_right" size={22} className="list-row__chevron" />
@@ -167,8 +169,10 @@ export function HistoryScreen({ vm }: { vm: HistoryVM }) {
                             ? `${f.answeredValid} ${pluralPl(f.answeredValid, 'ocenione pytanie', 'ocenione pytania', 'ocenionych pytań')}${f.percentText ? ` · ${f.percentText} poprawnych` : ''}`
                             : 'Brak ocenionych pytań'}
                         </span>
+                        {f.interrupted ? <span className="history-row__status">Przerwany aktualizacją banku pytań</span> : null}
                         <span className="list-row__subtitle">
                           {formatDate(f.closedAt ?? f.createdAt)} · {configLabel(f.config)}
+                          {f.legacy ? ' · poprzednia wersja banku' : ''}
                         </span>
                       </span>
                       <Icon name="chevron_right" size={22} className="list-row__chevron" />

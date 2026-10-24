@@ -9,14 +9,19 @@
  *  1. pliki: obecność index.html / manifestu / sw.js; tylko dozwolone typy; brak map źródeł, plików roboczych;
  *  2. index.html: każde src/href względne albo pod `base`, istniejący plik, brak hostów zewnętrznych;
  *  3. manifest: start_url/scope/id rozwiązane do `base`, ikony 192/512/maskable (+ apple-touch-icon 180) z wymiarami;
- *  4. sw.js: precache obejmuje shell, JS/CSS, woff2, PNG, SVG, JSON (w tym data/bank.json i każdą figurę
- *     z `bank.figures[*].file`); navigateFallback do
- *     index.html; brak clientsClaim i samoczynnego skipWaiting (tylko obsługa SKIP_WAITING); rejestracja SW w JS
- *     z adresem `${base}sw.js`;
- *  5. brak http(s):// do hostów zewnętrznych (poza URL źródeł w data/bank.json i nazwami przestrzeni XML),
+ *  4. sw.js: precache obejmuje shell, JS/CSS, woff2, PNG, SVG, JSON (w tym bank V15 `data/bank-<sha12>.json`,
+ *     listę wyłączonych ID, profil treningowy i każdą figurę z `bank.figures[*].file`); navigateFallback do
+ *     index.html; w sw.js brak clientsClaim i samoczynnego skipWaiting (tylko obsługa SKIP_WAITING); skrypt
+ *     przejęcia przy zmianie wersji treści (importScripts: warunkowy skipWaiting, clients.claim, navigate);
+ *     rejestracja SW w JS z adresem `${base}sw.js`;
+ *  4a. treść V15: SHA-256 pliku banku, `bank_version` trzech plików, liczby 2987 / 1048 / 1366 / 573,
+ *     133 wyłączone ID (żadne nie w banku), w `data/` wyłącznie trzy pliki V15, BRAK `data/bank.json`
+ *     i brak tej ścieżki w kodzie JS; `dme-release.json` poza precache z wersją V15;
+ *  5. brak http(s):// do hostów zewnętrznych (poza URL źródeł w pliku banku i nazwami przestrzeni XML),
  *     brak support.js, fonts.googleapis/gstatic, sekretów (sk-, api_key, Bearer…), słów anthropic/openai/claude.ai
  *     w JS/HTML, mocka kontrolera; SVG bez skryptów i zasobów zewnętrznych.
  */
+import { createHash } from 'node:crypto';
 import { existsSync, readFileSync, readdirSync, statSync } from 'node:fs';
 import { extname, join, relative, resolve, sep } from 'node:path';
 
@@ -62,13 +67,103 @@ const fileSet = new Set(files.map((f) => f.rel));
 const read = (rel) => readFileSync(join(distDir, rel), 'utf8');
 const TEXT_EXT = new Set(['.html', '.js', '.css', '.json', '.webmanifest', '.svg', '.txt']);
 const textFiles = files.filter((f) => TEXT_EXT.has(extname(f.rel)));
-const BANK = 'data/bank.json';
+/** Jedyna wersja treści — z src/domain/contentRelease.ts (ten sam plik czyta aplikacja i vite.config.ts). */
+const releaseSrc = readFileSync(resolve('src/domain/contentRelease.ts'), 'utf8');
+const releaseField = (name) => {
+  const m = releaseSrc.match(new RegExp(`\\b${name}:\\s*'([^']+)'`));
+  if (!m) throw new Error(`contentRelease.ts: brak pola ${name}`);
+  return m[1];
+};
+const releaseCount = (name) => Number(releaseSrc.match(new RegExp(`\\b${name}:\\s*(\\d+)`))?.[1] ?? NaN);
+const RELEASE = {
+  bankVersion: releaseField('bankVersion'),
+  bankSha256: releaseField('bankSha256'),
+  retiredSha256: releaseField('retiredSha256'),
+  profileSha256: releaseField('profileSha256'),
+  bankFile: releaseField('bankFile'),
+  retiredFile: releaseField('retiredFile'),
+  profileFile: releaseField('profileFile'),
+  /** Dawna ścieżka banku (do v0.1.0) — nie może istnieć w buildzie ani w kodzie. */
+  legacyBankFile: 'data/bank.json',
+  counts: { questions: releaseCount('questions'), basic: releaseCount('basic'), intermediate: releaseCount('intermediate'), advanced: releaseCount('advanced'), retired: releaseCount('retired') },
+};
+const BANK = RELEASE.bankFile;
 const PRECACHE_INFO = 'pwa-precache.json';
+const RELEASE_INFO = 'dme-release.json';
+const TAKEOVER = `dme-sw-takeover-${RELEASE.bankSha256.slice(0, 12)}.js`;
 
 console.log(`Kontrola dist: ${distDir}\nbase: ${base}\nplików: ${files.length}\n`);
 
-for (const required of ['index.html', 'manifest.webmanifest', 'sw.js', BANK]) {
+for (const required of ['index.html', 'manifest.webmanifest', 'sw.js', BANK, RELEASE.retiredFile, RELEASE.profileFile, RELEASE_INFO, TAKEOVER]) {
   check(fileSet.has(required), `jest ${required}`, `brak ${required}`);
+}
+
+/* ---------------- treść: wyłącznie bank V15 ---------------- */
+
+const sha256 = (rel) => createHash('sha256').update(readFileSync(join(distDir, rel))).digest('hex');
+check(!fileSet.has(RELEASE.legacyBankFile), `brak dawnej ścieżki ${RELEASE.legacyBankFile}`, `dist zawiera dawną ścieżkę ${RELEASE.legacyBankFile}`);
+const dataFiles = [...fileSet].filter((f) => f.startsWith('data/')).sort();
+const expectedData = [RELEASE.bankFile, RELEASE.retiredFile, RELEASE.profileFile].sort();
+check(
+  JSON.stringify(dataFiles) === JSON.stringify(expectedData),
+  `data/: wyłącznie pliki V15 (${dataFiles.join(', ')})`,
+  `data/: ${dataFiles.join(', ')} — oczekiwano ${expectedData.join(', ')}`,
+);
+if (fileSet.has(BANK)) {
+  const actual = sha256(BANK);
+  check(actual === RELEASE.bankSha256, `${BANK}: SHA-256 ${actual}`, `${BANK}: SHA-256 ${actual}, oczekiwano ${RELEASE.bankSha256}`);
+  try {
+    const bank = JSON.parse(read(BANK));
+    check(bank.bank_version === RELEASE.bankVersion, `${BANK}: bank_version ${bank.bank_version}`, `${BANK}: bank_version ${bank.bank_version}, oczekiwano ${RELEASE.bankVersion}`);
+    const by = { basic: 0, intermediate: 0, advanced: 0 };
+    for (const q of bank.questions ?? []) by[q.difficulty] = (by[q.difficulty] ?? 0) + 1;
+    const c = RELEASE.counts;
+    const okCounts =
+      (bank.questions ?? []).length === c.questions &&
+      by.basic === c.basic &&
+      by.intermediate === c.intermediate &&
+      by.advanced === c.advanced &&
+      bank.counts?.questions === c.questions &&
+      bank.counts?.by_difficulty?.basic === c.basic &&
+      bank.counts?.by_difficulty?.intermediate === c.intermediate &&
+      bank.counts?.by_difficulty?.advanced === c.advanced;
+    check(
+      okCounts,
+      `${BANK}: ${(bank.questions ?? []).length} pytań (${by.basic} basic / ${by.intermediate} intermediate / ${by.advanced} advanced), zgodne z counts`,
+      `${BANK}: liczby ${(bank.questions ?? []).length} / ${by.basic} / ${by.intermediate} / ${by.advanced} ≠ ${c.questions} / ${c.basic} / ${c.intermediate} / ${c.advanced}`,
+    );
+    if (fileSet.has(RELEASE.retiredFile)) {
+      const retired = JSON.parse(read(RELEASE.retiredFile));
+      const ids = Array.isArray(retired.ids) ? retired.ids : [];
+      const inBank = new Set((bank.questions ?? []).map((q) => q.id));
+      const leaked = ids.filter((id) => inBank.has(id));
+      check(
+        retired.bank_version === RELEASE.bankVersion && ids.length === c.retired && new Set(ids).size === ids.length && leaked.length === 0 && sha256(RELEASE.retiredFile) === RELEASE.retiredSha256,
+        `${RELEASE.retiredFile}: ${ids.length} wyłączonych ID, wersja V15, żadne nie występuje w banku`,
+        `${RELEASE.retiredFile}: ${ids.length} ID (oczekiwano ${c.retired}), wersja ${retired.bank_version}, w banku: ${leaked.join(', ') || '—'}`,
+      );
+    }
+    if (fileSet.has(RELEASE.profileFile)) {
+      const profile = JSON.parse(read(RELEASE.profileFile));
+      const grouped = Object.values(profile.groups ?? {}).flat();
+      const bankIds = (bank.questions ?? []).map((q) => q.id);
+      check(
+        profile.bank_version === RELEASE.bankVersion && sha256(RELEASE.profileFile) === RELEASE.profileSha256 && grouped.length === bankIds.length && new Set(grouped).size === grouped.length && bankIds.every((id) => grouped.includes(id)),
+        `${RELEASE.profileFile}: wersja V15, ${grouped.length} ID w grupach (każde pytanie banku dokładnie raz)`,
+        `${RELEASE.profileFile}: niezgodny z bankiem V15`,
+      );
+    }
+  } catch (e) {
+    fail(`${BANK}: niepoprawny JSON (${e.message})`);
+  }
+}
+if (fileSet.has(RELEASE_INFO)) {
+  try {
+    const info = JSON.parse(read(RELEASE_INFO));
+    check(info.format === 'dme-release' && info.bankVersion === RELEASE.bankVersion && info.bankFile === BANK, `${RELEASE_INFO}: ${info.bankVersion}`, `${RELEASE_INFO}: niezgodny (${JSON.stringify(info)})`);
+  } catch (e) {
+    fail(`${RELEASE_INFO}: niepoprawny JSON (${e.message})`);
+  }
 }
 
 const ALLOWED_EXT = new Set(['.html', '.js', '.css', '.woff2', '.svg', '.png', '.json', '.webmanifest']);
@@ -185,13 +280,24 @@ if (fileSet.has('sw.js')) {
   const notInDist = precacheUrls.filter((u) => !fileSet.has(u));
   check(notInDist.length === 0, 'sw.js: każdy wpis precache istnieje w dist', `sw.js: wpisy precache bez pliku: ${notInDist.join(', ')}`);
   const PRECACHE_EXT = new Set(['.html', '.js', '.css', '.woff2', '.svg', '.png', '.json', '.webmanifest']);
-  const runtime = new Set(['sw.js', PRECACHE_INFO]);
+  const runtime = new Set(['sw.js', PRECACHE_INFO, RELEASE_INFO]);
   const shouldBeCached = files
     .map((f) => f.rel)
     .filter((rel) => PRECACHE_EXT.has(extname(rel)) && !runtime.has(rel) && !/^workbox-[\w-]+\.js$/.test(rel));
   const notCached = shouldBeCached.filter((rel) => !precacheSet.has(rel));
   check(notCached.length === 0, `sw.js: precache obejmuje wszystkie ${shouldBeCached.length} pliki aplikacji (shell, JS/CSS, woff2, PNG, SVG, JSON)`, `sw.js: poza precache (nie zadziałają offline): ${notCached.join(', ')}`);
-  for (const must of ['index.html', BANK, 'manifest.webmanifest']) {
+  check(!precacheSet.has(RELEASE_INFO), `${RELEASE_INFO} poza precache (wersja z serwera)`, `${RELEASE_INFO} w precache`);
+  check(!precacheSet.has(RELEASE.legacyBankFile), `precache bez ${RELEASE.legacyBankFile}`, `precache zawiera ${RELEASE.legacyBankFile}`);
+  check(sw.includes(`importScripts("${TAKEOVER}")`), `sw.js: importScripts(${TAKEOVER})`, `sw.js: brak importScripts skryptu przejęcia ${TAKEOVER}`);
+  if (fileSet.has(TAKEOVER)) {
+    const t = read(TAKEOVER);
+    check(
+      t.includes(RELEASE.bankVersion) && /self\.registration\.active && previous !== CONTENT\.bankVersion/.test(t) && /self\.skipWaiting\(\)/.test(t) && /self\.clients\.claim\(\)/.test(t) && /client\.navigate\(client\.url\)/.test(t) && /DME_CONTENT_UPDATE/.test(t),
+      `${TAKEOVER}: przejęcie tylko przy zmianie wersji treści (warunkowy skipWaiting, clients.claim, navigate, wiadomość DME_CONTENT_UPDATE)`,
+      `${TAKEOVER}: niekompletny skrypt przejęcia`,
+    );
+  }
+  for (const must of ['index.html', BANK, RELEASE.retiredFile, RELEASE.profileFile, 'manifest.webmanifest']) {
     check(precacheSet.has(must), `sw.js: precache zawiera ${must}`, `sw.js: brak ${must} w precache`);
   }
   check(precacheUrls.some((u) => u.endsWith('.woff2')), 'sw.js: precache zawiera lokalne fonty woff2', 'sw.js: brak fontów woff2 w precache');
@@ -322,6 +428,7 @@ scan('klucz prywatny / tokeny (AKIA, ghp_, PRIVATE KEY)', /AKIA[0-9A-Z]{16}|\bgh
 scan('anthropic / openai / claude.ai w kodzie', /anthropic|openai|claude\.ai/i, codeFiles);
 scan('mock kontrolera w buildzie (__dmeMock, createMockController)', /__dmeMock|createMockController/, codeFiles);
 scan('mapy źródeł (sourceMappingURL)', /sourceMappingURL=/, codeFiles);
+scan(`dawna ścieżka banku (${RELEASE.legacyBankFile}) w kodzie`, new RegExp(RELEASE.legacyBankFile.replace(/[.*+?^${}()|[\]\\/]/g, '\\$&')), codeFiles);
 
 // Figury i inne SVG: bez skryptów, zdarzeń, foreignObject i zasobów zewnętrznych (G04).
 const svgs = textFiles.filter((f) => f.rel.endsWith('.svg'));

@@ -84,11 +84,11 @@ describe('F02 / LOG-08 — ekran kopii danych', () => {
     });
   }
 
-  it('F02: opis zawartości mówi o treści pytań z sesji i zaimportowanych pulach (bez „Nie zawiera pytań”)', async () => {
+  it('F02: opis zawartości mówi o treści pytań banku V15 z sesji, bez zaimportowanych pul (bez „Nie zawiera pytań”)', async () => {
     await renderBackup({ name: 'backup', flow: { step: 'idle', lastSavedFileName: null }, safetyBackups: [] });
     expect(screen.getByText(BACKUP_CONTENTS_TEXT)).toBeTruthy();
-    expect(BACKUP_CONTENTS_TEXT).toContain('treść pytań z Twoich sesji');
-    expect(BACKUP_CONTENTS_TEXT).toContain('zaimportowane pule pytań');
+    expect(BACKUP_CONTENTS_TEXT).toContain('treść pytań banku V15 z Twoich sesji');
+    expect(BACKUP_CONTENTS_TEXT).toContain('Nie zawiera wbudowanej puli pytań, zaimportowanych pul');
     expect(document.body.textContent).not.toContain('Nie zawiera pytań');
   });
 
@@ -150,7 +150,7 @@ describe('Stan puli — „O bazie” i ustawienia', () => {
     expect(within(checks).getByText('Pytania ze schematem').nextSibling?.textContent).toBe(String(counts.schematic));
     const poolNote = (bank as unknown as { pool_note_pl: string }).pool_note_pl;
     expect(screen.getByText(poolNote)).toBeTruthy();
-    expect(poolNote).toMatch(/2000–3000/);
+    expect(poolNote).toMatch(/Bank zamknięty/);
     expect(screen.getByText(bank.status_pl)).toBeTruthy();
     expect(screen.getByText(RESULT_DISCLAIMER)).toBeTruthy();
     expect(body).toContain('Nie jest oficjalnym bankiem pytań PTMEiAA.');

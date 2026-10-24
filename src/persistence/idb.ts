@@ -27,6 +27,8 @@ export interface OpenDatabaseOptions {
   appVersion: string;
   /** Połączenie zamknięte z zewnątrz (inna karta podnosi wersję, utrata połączenia). */
   onConnectionLost?: (db: IDBDatabase) => void;
+  /** Początek migracji (`onupgradeneeded`) — np. komunikat „Aktualizacja banku pytań…”. */
+  onUpgradeStart?: (info: { from: number; to: number }) => void;
 }
 
 export interface OpenedDatabase {
@@ -50,7 +52,7 @@ function metaRecord(previous: MetaRecord | undefined, version: number, oldVersio
  * Błąd migracji przerywa transakcję (baza zostaje w poprzedniej wersji, dane nietknięte).
  */
 export function openDatabase(options: OpenDatabaseOptions): Promise<PersistenceResult<OpenedDatabase>> {
-  const { factory, name, version, migrations, now, appVersion, onConnectionLost } = options;
+  const { factory, name, version, migrations, now, appVersion, onConnectionLost, onUpgradeStart } = options;
   return new Promise((resolve) => {
     let settled = false;
     const settle = (result: PersistenceResult<OpenedDatabase>): void => {
@@ -89,7 +91,13 @@ export function openDatabase(options: OpenDatabaseOptions): Promise<PersistenceR
         }
       };
       try {
-        for (const step of migrationsBetween(migrations, oldVersion, version)) step.up(db, tx);
+        onUpgradeStart?.({ from: oldVersion, to: version });
+      } catch {
+        /* powiadomienie pomocnicze */
+      }
+      try {
+        const stamp = now();
+        for (const step of migrationsBetween(migrations, oldVersion, version)) step.up(db, tx, { now: stamp, appVersion, oldVersion, abort });
         const metaStore = tx.objectStore('meta');
         const previous = metaStore.get('schema');
         previous.onsuccess = () => {

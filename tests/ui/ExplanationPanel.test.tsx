@@ -5,6 +5,7 @@
  */
 import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
+import { CONTENT_RELEASE } from '../../src/domain/contentRelease';
 import { cleanup, fireEvent, render, screen } from '@testing-library/react';
 import { afterEach, describe, expect, it } from 'vitest';
 import type { ExplanationVM } from '../../src/app/viewModels';
@@ -14,7 +15,7 @@ import { locatorForSource } from '../../src/ui/format';
 
 afterEach(cleanup);
 
-const bank = JSON.parse(readFileSync(resolve(process.cwd(), 'public/data/bank.json'), 'utf-8')) as RuntimeBank;
+const bank = JSON.parse(readFileSync(resolve(process.cwd(), 'public', CONTENT_RELEASE.bankFile), 'utf-8')) as RuntimeBank;
 
 /** Odwołania do liter wariantów („odpowiedź B”, „(C)”, „D)”, „wariant A”). */
 const LETTER_REF = /(?:[Oo]dpowied|[Ww]ariant|[Oo]pcj|[Ll]iter)\S*\s+[A-D](?![\p{L}\p{N}])|\([A-D]\)|(?:^|\s)[A-D]\)/u;

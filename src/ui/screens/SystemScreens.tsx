@@ -63,7 +63,7 @@ export function FatalScreen({ boot }: { boot: Extract<BootState, { phase: 'fatal
       <Banner
         tone="danger"
         role="alert"
-        title="Nie można uruchomić aplikacji"
+        title={boot.code === 'MIGRATION_FAILED' || boot.code === 'MIGRATION_BLOCKED' || boot.code === 'CONTENT_UPDATE_FAILED' ? 'Aktualizacja danych nie powiodła się' : 'Nie można uruchomić aplikacji'}
         actions={
           boot.canRetry ? (
             <button type="button" className="btn btn--primary" onClick={() => void controller.retryBoot()}>
@@ -81,6 +81,8 @@ export function FatalScreen({ boot }: { boot: Extract<BootState, { phase: 'fatal
 
 export const BOOT_STAGE_TEXT: Record<Extract<BootState, { phase: 'loading' }>['stage'], string> = {
   'opening-storage': 'Otwieranie danych na urządzeniu…',
+  migrating: 'Aktualizacja banku pytań…',
+  'content-update': 'Aktualizacja banku pytań…',
   'loading-bank': 'Wczytywanie pytań…',
   'loading-user-data': 'Wczytywanie postępów…',
 };

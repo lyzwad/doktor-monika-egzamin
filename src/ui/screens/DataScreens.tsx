@@ -17,11 +17,11 @@ import { backupErrorDetail, formatBytes, formatDateTime, pluralPl } from '../for
 /**
  * Opis zawartości pliku kopii (F02). Kopia zawiera magazyny `BACKUP_DATA_STORES` (persistence/backup.ts):
  * ustawienia, sesje ZE SNAPSHOTAMI PYTAŃ (treść, warianty, klucz, wyjaśnienie — do przeglądu odpowiedzi),
- * próby, stan powtórek, blokady (z początkiem treści pytania), zdarzenia i zaimportowane pule pytań.
- * Nie zawiera wbudowanej puli (`bank.json`) ani danych pacjentów (aplikacja ich nie przetwarza).
+ * próby, stan powtórek, blokady (z początkiem treści pytania), zdarzenia — wyłącznie treść banku V15.
+ * Nie zawiera wbudowanej puli, zaimportowanych pul ani danych pacjentów (aplikacja ich nie przetwarza).
  */
 export const BACKUP_CONTENTS_TEXT =
-  'Plik zawiera wyniki, przerwane sesje, ustawienia, stan powtórek i wykluczone pytania, a także treść pytań z Twoich sesji (do przeglądu odpowiedzi) i zaimportowane pule pytań. Nie zawiera wbudowanej puli pytań ani danych pacjentów.';
+  'Plik zawiera wyniki, przerwane sesje, ustawienia, stan powtórek i wykluczone pytania, a także treść pytań banku V15 z Twoich sesji (do przeglądu odpowiedzi). Sesje sprzed aktualizacji banku do V15 mają tylko podsumowanie, bez treści pytań. Nie zawiera wbudowanej puli pytań, zaimportowanych pul ani danych pacjentów.';
 
 function FilePicker({ label, accept, onFile, primary = false }: { label: string; accept: string; onFile: (file: File) => void; primary?: boolean }) {
   const inputRef = useRef<HTMLInputElement>(null);
@@ -236,82 +236,21 @@ export function BackupScreen({ vm }: { vm: BackupVM }) {
   );
 }
 
+/**
+ * Import dodatkowych pul pytań — WYŁĄCZONY od banku V15 (docs/MIGRACJA_V15.md): aplikacja udostępnia
+ * wyłącznie wbudowany bank V15. Ekran zostaje pod dotychczasowym adresem z wyjaśnieniem, bez wyboru pliku.
+ */
 export function PoolImportScreen({ vm }: { vm: PoolImportVM }) {
   const controller = useController();
-  const flow = vm.flow;
-  const pick = (file: File) => void controller.importPackFile(file, file.name);
+  void vm;
   return (
-    <Screen header={<ScreenHeader title="Import puli pytań" onBack={() => controller.goBack()} />}>
-      <p className="body-text">
-        Dodaje lub aktualizuje pytania z pliku puli. Historia, wyniki i wykluczenia pozostają bez zmian. Trwająca sesja nie zostanie uruchomiona ponownie — nowe pytania pojawią
-        się w kolejnych sesjach.
-      </p>
-      {flow.step === 'idle' ? <FilePicker label="Wybierz plik puli" accept="application/json,.json" onFile={pick} primary /> : null}
-      {flow.step === 'checking' ? (
-        <div className="banner banner--plain" role="status">
-          <span>
-            <b>Sprawdzanie puli…</b> {flow.fileName}
-          </span>
-          <span className="indeterminate" aria-hidden="true" />
-          <span className="muted">Schemat, cztery warianty, jeden klucz, źródła z rejestru, duplikaty i blokady.</span>
-        </div>
-      ) : null}
-      {flow.step === 'done' ? (
-        <Banner
-          tone="success"
-          role="status"
-          title={`Zaimportowano pulę „${flow.fileName}”.`}
-          actions={
-            <button type="button" className="btn btn--secondary btn--sm" onClick={() => controller.resetPoolImportFlow()}>
-              Gotowe
-            </button>
-          }
-        >
-          <span className="banner__text">
-            {flow.added} {pluralPl(flow.added, 'nowe pytanie', 'nowe pytania', 'nowych pytań')}
-            {flow.updated ? `, ${flow.updated} ${pluralPl(flow.updated, 'zaktualizowane', 'zaktualizowane', 'zaktualizowanych')}` : ''}.
-            {flow.skippedSame ? ` Pominięto ${flow.skippedSame} bez zmian.` : ''}
-            {flow.skippedBlocked
-              ? ` Pominięto ${flow.skippedBlocked} ${pluralPl(flow.skippedBlocked, 'pytanie', 'pytania', 'pytań')} o treści wcześniej wykluczonej.`
-              : ''}{' '}
-            Historia, wyniki i wykluczenia ({flow.activeBlocks}) bez zmian.
-          </span>
-          {flow.rejected.length > 0 ? (
-            <>
-              <span className="banner__text">
-                Odrzucono {flow.rejected.length} {pluralPl(flow.rejected.length, 'pozycję', 'pozycje', 'pozycji')}:
-              </span>
-              <ul className="banner__list">
-                {flow.rejected.map((r, i) => (
-                  <li key={`${r.questionId ?? ''}-${r.code}-${i}`}>{r.messagePl}</li>
-                ))}
-              </ul>
-            </>
-          ) : null}
-        </Banner>
-      ) : null}
-      {flow.step === 'error' ? (
-        <Banner
-          tone="danger"
-          role="alert"
-          title={
-            flow.issues.length > 0
-              ? `Nie zaimportowano pliku „${flow.fileName}”. Znaleziono ${flow.issues.length} ${pluralPl(flow.issues.length, 'niezgodność', 'niezgodności', 'niezgodności')}:`
-              : `Nie zaimportowano pliku „${flow.fileName}”.`
-          }
-          actions={<FilePicker label="Wybierz inny plik" accept="application/json,.json" onFile={pick} />}
-        >
-          {flow.messagePl ? <span className="banner__text">{flow.messagePl}</span> : null}
-          {flow.issues.length > 0 ? (
-            <ul className="banner__list">
-              {flow.issues.map((r, i) => (
-                <li key={`${r.questionId ?? ''}-${r.code}-${i}`}>{r.messagePl}</li>
-              ))}
-            </ul>
-          ) : null}
-          <span className="banner__text">Bieżąca pula pozostała bez zmian. Popraw plik i spróbuj ponownie.</span>
-        </Banner>
-      ) : null}
+    <Screen header={<ScreenHeader title="Pula pytań" onBack={() => controller.goBack()} />}>
+      <Banner tone="info" role="note" title="Aplikacja używa wyłącznie banku pytań V15">
+        <span className="banner__text">
+          Import dodatkowych pul pytań jest wyłączony. Wszystkie tryby (Test, Free Flow, runda błędów, „Moje błędy”) korzystają tylko z wbudowanego banku V15. Liczby
+          pytań i status materiału są w „O bazie pytań”.
+        </span>
+      </Banner>
     </Screen>
   );
 }

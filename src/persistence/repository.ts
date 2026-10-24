@@ -6,20 +6,23 @@
  *   potem `put`/`delete`; sukces dopiero po `oncomplete`; błąd = brak jakiejkolwiek zmiany.
  * - kopia — eksport (./backup.ts), walidacja bez zmiany danych, zamiana wszystkich danych w jednej
  *   transakcji razem z zapisem automatycznej kopii bieżącego stanu do `backups`.
- * - paczki — zapis zwalidowanej paczki (./packs.ts) bez usuwania historii, blokad i otwartej sesji.
+ * - od V15 brak importu paczek pytań; zapis sesji innej wersji treści (nie-`legacy`) jest odrzucany.
  *
  * W transakcjach nie ma `await` na operacjach spoza IndexedDB: Web Crypto (fingerprinty) i odczyt
  * plików wykonują się PRZED transakcją, a JSON kopii bezpieczeństwa powstaje synchronicznie w callbacku.
  */
+import { CONTENT_RELEASE } from '../domain/contentRelease';
 import { defaultSettings, isChangesetEmpty } from '../domain/state';
 import { USER_STORE_NAMES } from '../domain/types';
-import type { Changeset, PackRecord, Session, UserState, UserStoreName } from '../domain/types';
+import type { Changeset, Session, UserState, UserStoreName } from '../domain/types';
 import { DB_NAME, DB_SCHEMA_VERSION } from './api';
 import type {
   BackupData,
   BackupRecord,
   BackupRecordInfo,
   CommitInfo,
+  ContentMetaRecord,
+  MigrationMetaRecord,
   CreateRepository,
   ExportBackupInput,
   ExportedFile,
@@ -62,6 +65,7 @@ import { MIGRATIONS } from './schema';
 import type { Migration } from './schema';
 import { createStorageApi, defaultStorageManager } from './storage';
 import { isIsoDateTime, isNonEmptyString, isObject } from './validation';
+import { transformToV15, V15_MIGRATION_ID } from './v15Migration';
 
 /** Ile automatycznych kopii bezpieczeństwa (sprzed wczytania) przechowywać — najstarsze są usuwane. */
 export const SAFETY_BACKUPS_KEPT = 5;
@@ -77,6 +81,29 @@ const USER_STORES: readonly UserStoreName[] = USER_STORE_NAMES;
 /* ========================================================================== */
 /* Changeset                                                                  */
 /* ========================================================================== */
+
+/** Komunikat odrzuconego zapisu sesji innej wersji treści. */
+export const MSG_STALE_CONTENT_WRITE =
+  'Odrzucono zapis sesji z poprzedniej wersji banku pytań. Aplikacja używa wyłącznie banku V15 — uruchom ją ponownie.';
+
+/**
+ * (d) Ochrona przed opóźnionymi zapisami: sesja innej wersji treści (i nie-`legacy`) albo ze snapshotem
+ * innej wersji nie może zostać zapisana.
+ */
+function staleContentSession(changeset: Changeset, contentBankVersion: string): Session | null {
+  for (const session of changeset.stores.sessions?.put ?? []) {
+    if (!isObject(session)) continue;
+    if (session.legacy) {
+      if (session.status === 'open' || Object.keys(isObject(session.slots) ? session.slots : {}).length > 0) return session;
+      continue;
+    }
+    if (session.bankVersion !== contentBankVersion) return session;
+    for (const slot of Object.values(isObject(session.slots) ? session.slots : {})) {
+      if (!isObject(slot) || !isObject(slot.snapshot) || slot.snapshot.bankVersion !== contentBankVersion) return session;
+    }
+  }
+  return null;
+}
 
 /** Kontrola kształtu changesetu przed otwarciem transakcji (błąd programisty → `WriteFailed`). */
 function checkChangeset(changeset: Changeset, allowDeletes: boolean): PersistenceError | null {
@@ -226,6 +253,8 @@ export function createIndexedDbRepository(options: InternalRepositoryOptions = {
   const migrations = options.migrations ?? MIGRATIONS;
   const now = options.now ?? (() => new Date().toISOString());
   const appVersion = options.appVersion ?? 'nieznana';
+  const contentBankVersion = options.contentBankVersion ?? CONTENT_RELEASE.bankVersion;
+  let upgradeListener: ((info: { from: number; to: number }) => void) | null = null;
   const storage = createStorageApi(options.storageManager === undefined ? defaultStorageManager() : options.storageManager);
 
   let db: IDBDatabase | null = null;
@@ -257,6 +286,7 @@ export function createIndexedDbRepository(options: InternalRepositoryOptions = {
       onConnectionLost: (lost) => {
         if (db === lost) db = null;
       },
+      onUpgradeStart: (info) => upgradeListener?.(info),
     }).then((result) => {
       opening = null;
       if (!result.ok) return result;
@@ -324,6 +354,8 @@ export function createIndexedDbRepository(options: InternalRepositoryOptions = {
     async commit(changeset) {
       const invalid = checkChangeset(changeset, true);
       if (invalid) return fail(invalid);
+      const stale = staleContentSession(changeset, contentBankVersion);
+      if (stale) return fail(writeFailed(new Error(`Sesja ${String(stale.id)}: wersja treści ${String(stale.bankVersion)}`), MSG_STALE_CONTENT_WRITE));
       if (isChangesetEmpty(changeset)) return ok({ written: 0, deleted: 0 });
       return withTransaction(changesetStores(changeset), 'readwrite', (tx, control) => applyChangeset(tx, control, changeset), mapWriteError);
     },
@@ -332,7 +364,13 @@ export function createIndexedDbRepository(options: InternalRepositoryOptions = {
       const data = await readBackupData();
       if (!data.ok) return data;
       try {
-        const file = buildBackupFile(data.value, input);
+        // (e) Eksport nigdy nie zawiera treści innej wersji banku: ta sama transformacja co migracja
+        // (idempotentna — dane po migracji przechodzą bez zmian), bez paczek.
+        const t = transformToV15(data.value, input.now);
+        const file = buildBackupFile(
+          { ...data.value, sessions: t.sessions, attempts: t.attempts, questionStats: t.questionStats, blocks: t.blocks, events: t.events, packs: [] },
+          input,
+        );
         const { text, sizeBytes } = serializeBackupFile(file);
         return ok(toExportedFile(backupFileName('dme-kopia', input.now), text, sizeBytes));
       } catch (error) {
@@ -341,7 +379,7 @@ export function createIndexedDbRepository(options: InternalRepositoryOptions = {
     },
 
     parseAndValidateBackup(input, fileName) {
-      return parseBackup(input, fileName);
+      return parseBackup(input, fileName, now());
     },
 
     async replaceAllFromBackup(validated: ValidatedBackup, input: ReplaceFromBackupInput): Promise<PersistenceResult<ReplaceInfo>> {
@@ -389,10 +427,11 @@ export function createIndexedDbRepository(options: InternalRepositoryOptions = {
             const excess = ordered.length - (SAFETY_BACKUPS_KEPT - 1);
             for (let i = 0; i < excess; i += 1) backups.delete(ordered[i] as IDBValidKey);
           });
-          // 2. Zamiana wszystkich danych użytkownika i paczek.
+          // 2. Zamiana wszystkich danych użytkownika; paczki pytań nie są przywracane (wyłącznie bank V15).
           for (const name of BACKUP_DATA_STORES) {
             const store = tx.objectStore(name);
             store.clear();
+            if (name === 'packs') continue;
             for (const value of incoming[name] as unknown[]) store.put(value);
           }
         });
@@ -428,29 +467,25 @@ export function createIndexedDbRepository(options: InternalRepositoryOptions = {
       return ok(toExportedFile(record.fileName, record.json, record.sizeBytes));
     },
 
-    async importPack(record: PackRecord, extra?: Changeset) {
-      if (!isObject(record) || !isNonEmptyString(record.id) || !Array.isArray(record.questions) || !isIsoDateTime(record.importedAt)) {
-        return fail(writeFailed(new Error('Niepoprawny rekord paczki pytań')));
-      }
-      const changeset: Changeset = extra ?? { commandId: null, guards: [], stores: {} };
-      const invalid = checkChangeset(changeset, false);
-      if (invalid) return fail(invalid);
-      const stores: StoreName[] = ['packs', ...changesetStores(changeset)];
-      const result = await withTransaction(stores, 'readwrite', (tx, control) =>
-        applyChangeset(tx, control, changeset, () => {
-          tx.objectStore('packs').put(record);
-        }), mapWriteError);
-      return result.ok ? ok(undefined) : result;
+    async readContentMeta() {
+      return withTransaction(['meta'], 'readonly', (tx, control) => {
+        let content: ContentMetaRecord | null = null;
+        let migration: MigrationMetaRecord | null = null;
+        const store = tx.objectStore('meta');
+        const a = store.get('content');
+        a.onsuccess = control.guard(() => {
+          content = (a.result as ContentMetaRecord | undefined) ?? null;
+        });
+        const b = store.get(`migration:${V15_MIGRATION_ID}`);
+        b.onsuccess = control.guard(() => {
+          migration = (b.result as MigrationMetaRecord | undefined) ?? null;
+        });
+        return () => ({ content, migration });
+      }, mapReadError);
     },
 
-    async listPacks() {
-      return withTransaction(['packs'], 'readonly', (tx, control) => {
-        const values = readStores(tx, control, ['packs'] as const);
-        return () =>
-          (values.packs as PackRecord[]).sort((a, b) =>
-            a.importedAt === b.importedAt ? (a.id < b.id ? -1 : a.id > b.id ? 1 : 0) : Date.parse(a.importedAt) - Date.parse(b.importedAt),
-          );
-      }, mapReadError);
+    setUpgradeListener(listener) {
+      upgradeListener = listener;
     },
 
     storage,

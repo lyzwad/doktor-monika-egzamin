@@ -21,8 +21,12 @@ import type {
 } from './types';
 import { compareIsoNullFirst, compareStrings } from './util';
 
-/** Ważne (niewykluczone) ocenione sloty planu i poprawne wśród nich. */
+/**
+ * Ważne (niewykluczone) ocenione sloty planu i poprawne wśród nich. Sesja poprzedniej wersji banku
+ * (`legacy`, bez treści) — liczby zapisane w migracji (historia i wykres bez zmian liczb).
+ */
 export function validCounts(session: Session): { answered: number; correct: number } {
+  if (session.legacy) return { answered: session.legacy.answeredValid, correct: session.legacy.correct };
   let answered = 0;
   let correct = 0;
   for (const id of session.plan) {
@@ -150,11 +154,16 @@ function newestFirst(a: Session, b: Session): number {
   );
 }
 
-/** Historia: testy (ukończone i niedokończone) oraz Free Flow osobno, najnowsze pierwsze. */
+/**
+ * Historia: testy (ukończone, niedokończone, przerwane aktualizacją banku) oraz Free Flow (zakończone
+ * i przerwane aktualizacją) osobno, najnowsze pierwsze.
+ */
 export function summarizeHistory(state: UserState): HistorySummary {
   const sessions = Object.values(state.sessions);
-  const tests = sessions.filter((s) => s.kind === 'test' && (s.status === 'completed' || s.status === 'unfinished')).sort(newestFirst);
-  const freeFlow = sessions.filter((s) => s.kind === 'freeflow' && s.status === 'ended').sort(newestFirst);
+  const tests = sessions
+    .filter((s) => s.kind === 'test' && (s.status === 'completed' || s.status === 'unfinished' || s.status === 'interrupted_by_update'))
+    .sort(newestFirst);
+  const freeFlow = sessions.filter((s) => s.kind === 'freeflow' && (s.status === 'ended' || s.status === 'interrupted_by_update')).sort(newestFirst);
   const configs: HistorySummary['configs'] = [];
   const byKey = new Map<string, HistorySummary['configs'][number]>();
   for (const s of tests) {

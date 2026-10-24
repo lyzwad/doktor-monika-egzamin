@@ -17,7 +17,6 @@ import type {
   CommandResult,
   DmeEvent,
   IsoDateTime,
-  PackRecord,
   QuestionStat,
   Session,
   SessionId,
@@ -25,6 +24,7 @@ import type {
   Settings,
   UserState,
 } from '../domain/types';
+import type { V15TransformReport } from './v15Migration';
 
 /* ========================================================================== */
 /* Schemat bazy                                                               */
@@ -32,7 +32,7 @@ import type {
 
 export const DB_NAME = 'doktor-monika-egzamin';
 /** Wersja schematu IndexedDB (migracje wersjonowane, `onupgradeneeded`). */
-export const DB_SCHEMA_VERSION = 1;
+export const DB_SCHEMA_VERSION = 2;
 
 /** Magazyny (DECYZJE §10). */
 export const STORE_NAMES = [
@@ -75,6 +75,25 @@ export interface MetaRecord {
   appVersion: string;
 }
 
+/** Rekord `meta` z wersją treści (klucz `'content'`): bank pytań, do którego dostosowano dane (V15). */
+export interface ContentMetaRecord {
+  key: 'content';
+  bankVersion: string;
+  bankSha256: string;
+  updatedAt: IsoDateTime;
+  appVersion: string;
+}
+
+/** Rekord `meta` wykonanej migracji treści (klucz `migration:<id>`), z raportem liczbowym. */
+export interface MigrationMetaRecord {
+  key: string;
+  migrationId: string;
+  fromSchemaVersion: number;
+  toSchemaVersion: number;
+  appVersion: string;
+  report: V15TransformReport;
+}
+
 /* ========================================================================== */
 /* Kopia danych (DECYZJE §10)                                                 */
 /* ========================================================================== */
@@ -93,7 +112,11 @@ export interface BackupData {
   questionStats: QuestionStat[];
   blocks: Block[];
   events: DmeEvent[];
-  packs: PackRecord[];
+  /**
+   * Zaimportowane pule — od V15 zawsze puste przy eksporcie; przy wczytaniu starszej kopii są odrzucane
+   * (aplikacja używa wyłącznie banku V15).
+   */
+  packs: unknown[];
 }
 
 /** Plik kopii, format 1. Nie zawiera banku pytań, kluczy API, kont ani danych pacjentów. */
@@ -132,6 +155,12 @@ export interface BackupSummary {
   firstActivityAt?: IsoDateTime | null;
   /** Najpóźniejsza data aktywności w kopii albo `null` przy pustej kopii. */
   lastActivityAt?: IsoDateTime | null;
+  /** (V15) Sesje z poprzedniej wersji banku (tylko podsumowania, bez treści) — po transformacji. */
+  legacySessions?: number;
+  /** (V15) Sesje przerwane aktualizacją banku pytań. */
+  interruptedSessions?: number;
+  /** (V15) Zaimportowane pule w pliku — odrzucone przy wczytaniu. */
+  packsDropped?: number;
 }
 
 /** Kopia po pełnej walidacji (JSON, schemat, enumy, daty, referencje, wersja, rozmiar). */
@@ -267,6 +296,11 @@ export interface RepositoryOptions {
    * Domyślnie `new Date().toISOString()`; w aplikacji można przekazać `platform.nowIso`.
    */
   now?: () => IsoDateTime;
+  /**
+   * Wersja treści, której sesje wolno zapisywać (domyślnie bank V15). Zapis sesji innej wersji, która
+   * nie jest sesją `legacy`, jest odrzucany (ochrona przed opóźnionym zapisem starego kodu).
+   */
+  contentBankVersion?: string;
 }
 
 export interface Repository {
@@ -307,14 +341,14 @@ export interface Repository {
   /** Treść automatycznej kopii do pobrania („propozycja pobrania” po imporcie). */
   getBackupFile(id: string): Promise<PersistenceResult<ExportedFile>>;
 
-  /**
-   * Zapisuje zwalidowaną paczkę pytań (i ewentualne zdarzenia z `extra`) w jednej transakcji.
-   * Nie usuwa historii, snapshotów, blokad ani otwartej sesji.
-   */
-  importPack(record: PackRecord, extra?: Changeset): Promise<PersistenceResult<void>>;
+  /** Rekordy `meta`: wersja treści (V15) i rekord migracji (diagnostyka, testy). */
+  readContentMeta(): Promise<PersistenceResult<{ content: ContentMetaRecord | null; migration: MigrationMetaRecord | null }>>;
 
-  /** Zaimportowane paczki (do budowy katalogu), w kolejności importu. */
-  listPacks(): Promise<PersistenceResult<PackRecord[]>>;
+  /**
+   * Powiadomienie o rozpoczęciu migracji schematu przy otwarciu (ekran „Aktualizacja banku pytań…”).
+   * Od V15 import dodatkowych pul pytań jest wyłączony (brak `importPack`/`listPacks`).
+   */
+  setUpgradeListener(listener: ((info: { from: number; to: number }) => void) | null): void;
 
   /** `navigator.storage`: persist/estimate. */
   readonly storage: StorageApi;

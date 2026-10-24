@@ -2,10 +2,11 @@
  * Pomocnicze dla testów e2e na buildzie produkcyjnym (prawdziwy kontroler, silnik, IndexedDB, SW).
  *
  * Klucz odpowiedzi NIE jest czytany z UI (B04: UI go nie zawiera przed odpowiedzią): test rozpoznaje
- * pytanie po treści (`p.stem`) i bierze klucz z `public/data/bank.json` na dysku.
+ * pytanie po treści (`p.stem`) i bierze klucz z banku V15 (`public/data/bank-<sha12>.json`) na dysku.
  */
 import { mkdirSync, readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
+import { CONTENT_RELEASE } from '../../src/domain/contentRelease';
 import { expect, type Page, type TestInfo } from '@playwright/test';
 
 interface BankOption {
@@ -30,7 +31,7 @@ export interface Bank {
   sources: Record<string, { id: string; title: string; url: string | null; doi: string | null }>;
 }
 
-export const BANK = JSON.parse(readFileSync(resolve(process.cwd(), 'public/data/bank.json'), 'utf-8')) as Bank;
+export const BANK = JSON.parse(readFileSync(resolve(process.cwd(), 'public', CONTENT_RELEASE.bankFile), 'utf-8')) as Bank;
 const BY_STEM = new Map(BANK.questions.map((q) => [q.stem_pl.trim(), q]));
 
 export const BASE_PATH = process.env.BASE_PATH ?? '/doktor-monika-egzamin/';

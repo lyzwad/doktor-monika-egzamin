@@ -16,7 +16,6 @@ import type {
   HistoryFilter,
   IsoDateTime,
   OptionId,
-  RuntimeBank,
   SessionId,
   SessionKind,
   SlotId,
@@ -225,10 +224,24 @@ export interface Platform {
   onHashChange(listener: (hash: string) => void): () => void;
 }
 
+/**
+ * Treść banku V15 wczytana przez platformę (src/main.tsx): surowe JSON trzech plików (`CONTENT_RELEASE`)
+ * i SHA-256 pliku banku policzony z bajtów (`null` — nie liczono, np. testy w Node).
+ */
+export interface ContentBundle {
+  bank: unknown;
+  retired: unknown;
+  profile: unknown;
+  bankSha256: string | null;
+}
+
 export interface ControllerDeps {
   repository: Repository;
-  /** Wczytanie `data/bank.json` (względnie do `import.meta.env.BASE_URL`; z precache offline). */
-  loadBank(): Promise<RuntimeBank>;
+  /**
+   * Wczytanie treści V15: `data/bank-<sha12>.json`, lista wyłączonych ID i profil treningowy (względnie
+   * do `import.meta.env.BASE_URL`; z precache offline). Brak awaryjnego ładowania innego banku.
+   */
+  loadBank(): Promise<ContentBundle>;
   platform: Platform;
   pwa: PwaPort;
   appVersion: string;

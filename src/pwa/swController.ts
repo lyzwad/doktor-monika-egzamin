@@ -138,6 +138,29 @@ export interface PwaEnvironment {
   now(): number;
   setTimeout(callback: () => void, ms: number): unknown;
   clearTimeout(handle: unknown): void;
+  /**
+   * (V15) Wersja treści (bank pytań) tego buildu. Z `fetchRelease`/`onServiceWorkerMessage` pozwala wykryć
+   * nowszą wersję treści i przeładować aplikację przed pokazaniem pytań (fallback dla `WindowClient.navigate`).
+   */
+  contentBankVersion?: string;
+  /** (V15) Plik wydania z serwera (`dme-release.json`, poza precache, bez cache) albo `null`. */
+  fetchRelease?(): Promise<unknown>;
+  /** (V15) Wiadomości od Service Workera (np. `DME_CONTENT_UPDATE` po przejęciu przez nową wersję). */
+  onServiceWorkerMessage?(listener: (data: unknown) => void): () => void;
+}
+
+/** Nazwa pliku wydania (vite.config.ts) — wersja treści na serwerze. */
+export const RELEASE_INFO_FILE = 'dme-release.json';
+/** Sprawdzanie pliku wydania przy powrocie do aplikacji — nie częściej niż co minutę. */
+const RELEASE_CHECK_INTERVAL_MS = 60 * 1000;
+/** Ile czekać na przejęcie strony przez nową wersję (SW sam przeładowuje okna) przed przeładowaniem ręcznym. */
+const CONTENT_TAKEOVER_WAIT_MS = 8000;
+
+/** Odczyt `bankVersion` z pliku wydania. */
+export function parseReleaseInfo(value: unknown): { bankVersion: string } | null {
+  if (typeof value !== 'object' || value === null) return null;
+  const v = value as Record<string, unknown>;
+  return v.format === 'dme-release' && typeof v.bankVersion === 'string' && v.bankVersion.length > 0 ? { bankVersion: v.bankVersion } : null;
 }
 
 /* ========================================================================== */
@@ -250,6 +273,9 @@ export function createServiceWorkerPwaWith(env: PwaEnvironment, options: Service
   const offlineReadyListeners = new Set<() => void>();
   const progressListeners = new Set<Listener<PreparationProgress>>();
   const errorListeners = new Set<Listener<PreparationProgress>>();
+  const contentListeners = new Set<Listener<{ bankVersion: string }>>();
+  let lastReleaseCheck = 0;
+  let contentUpdateSeen: string | null = null;
   const cleanups: Array<() => void> = [];
   const trackedWorkers = new WeakSet<ServiceWorker>();
   /** Workery niekompletnej instalacji usuniętej przez `discardIncompleteInstall` — ich zdarzenia są ignorowane. */
@@ -572,7 +598,7 @@ export function createServiceWorkerPwaWith(env: PwaEnvironment, options: Service
 
   function onControllerChange(): void {
     if (disposed) return;
-    if (status.applying) {
+    if (status.applying || contentUpdateSeen !== null) {
       reloadNow();
       return;
     }
@@ -662,7 +688,50 @@ export function createServiceWorkerPwaWith(env: PwaEnvironment, options: Service
     }
   }
 
+  /** Nowsza wersja treści — powiadomienie kontrolera (raz na wersję). */
+  function emitContentUpdate(bankVersion: string): void {
+    if (disposed || !env.contentBankVersion || bankVersion === env.contentBankVersion || contentUpdateSeen === bankVersion) return;
+    contentUpdateSeen = bankVersion;
+    for (const l of [...contentListeners]) safeCall(l, { bankVersion });
+  }
+
+  async function checkRelease(): Promise<{ bankVersion: string } | null> {
+    if (!env.fetchRelease) return null;
+    lastReleaseCheck = env.now();
+    try {
+      return parseReleaseInfo(await env.fetchRelease());
+    } catch {
+      return null;
+    }
+  }
+
+  function maybeReleaseCheck(): void {
+    if (disposed || !env.fetchRelease || !env.isOnline()) return;
+    if (env.now() - lastReleaseCheck < RELEASE_CHECK_INTERVAL_MS) return;
+    void checkRelease().then((r) => {
+      if (r) emitContentUpdate(r.bankVersion);
+    });
+  }
+
+  /** Przejęcie przez nową wersję treści: sprawdzenie SW, oczekiwanie na przejęcie, potem przeładowanie. */
+  async function reloadForContentUpdate(): Promise<void> {
+    try {
+      await registration?.update();
+    } catch {
+      // Brak sieci — przeładowanie i tak pobierze to, co jest dostępne.
+    }
+    await new Promise<void>((resolve) => {
+      const handle = env.setTimeout(resolve, CONTENT_TAKEOVER_WAIT_MS);
+      void handle;
+    });
+    if (!disposed && !reloading) {
+      reloading = true;
+      env.reload();
+    }
+  }
+
   function maybeAutoCheck(): void {
+    maybeReleaseCheck();
     if (disposed || !registration || status.applying || !env.isOnline()) return;
     if (env.now() - lastUpdateCheck < AUTO_CHECK_INTERVAL_MS) return;
     lastUpdateCheck = env.now();
@@ -676,6 +745,16 @@ export function createServiceWorkerPwaWith(env: PwaEnvironment, options: Service
     sw.addEventListener('controllerchange', onCc);
     cleanups.push(() => sw.removeEventListener('controllerchange', onCc));
     cleanups.push(env.onVisible(maybeAutoCheck), env.onOnline(maybeAutoCheck));
+    if (env.onServiceWorkerMessage) {
+      cleanups.push(
+        env.onServiceWorkerMessage((data) => {
+          if (typeof data === 'object' && data !== null && (data as { type?: unknown }).type === 'DME_CONTENT_UPDATE') {
+            const v = (data as { bankVersion?: unknown }).bankVersion;
+            if (typeof v === 'string') emitContentUpdate(v);
+          }
+        }),
+      );
+    }
     const startRegistration = (): void => {
       if (disposed) return;
       try {
@@ -736,6 +815,12 @@ export function createServiceWorkerPwaWith(env: PwaEnvironment, options: Service
     },
     applyUpdate,
     checkForUpdate,
+    onContentUpdate(listener) {
+      contentListeners.add(listener);
+      return () => contentListeners.delete(listener);
+    },
+    checkRelease,
+    reloadForContentUpdate,
     getStatus: () => status,
     subscribe(listener) {
       statusListeners.add(listener);
@@ -760,6 +845,7 @@ export function createServiceWorkerPwaWith(env: PwaEnvironment, options: Service
       offlineReadyListeners.clear();
       progressListeners.clear();
       errorListeners.clear();
+      contentListeners.clear();
     },
   };
 }

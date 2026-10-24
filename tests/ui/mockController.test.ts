@@ -4,13 +4,14 @@
  */
 import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
+import { CONTENT_RELEASE } from '../../src/domain/contentRelease';
 import { describe, expect, it } from 'vitest';
 import { createMockController, type MockController } from '../../src/app/mockController';
 import type { QuestionVM } from '../../src/app/viewModels';
 import type { RuntimeBank, Session } from '../../src/domain/types';
 
 // Środowisko jsdom: import.meta.url nie jest adresem file:, więc ścieżka względem katalogu projektu.
-const bank = JSON.parse(readFileSync(resolve(process.cwd(), 'public/data/bank.json'), 'utf-8')) as RuntimeBank;
+const bank = JSON.parse(readFileSync(resolve(process.cwd(), 'public', CONTENT_RELEASE.bankFile), 'utf-8')) as RuntimeBank;
 
 async function started(): Promise<MockController> {
   let t = Date.parse('2026-10-22T08:00:00.000Z');

@@ -32,7 +32,6 @@ import type {
   HistoryFilter,
   IsoDateTime,
   OptionId,
-  PackRecord,
   QuestionSnapshot,
   Scope,
   Session,
@@ -87,7 +86,6 @@ export interface PendingAnswer {
 export interface ViewInput {
   catalog: Catalog;
   user: UserState;
-  packs: readonly PackRecord[];
   now: IsoDateTime;
   route: Route;
   /** Pozycja pokazywana w otwartej sesji (trasa `question`). */
@@ -403,11 +401,13 @@ function resultVM(input: ViewInput, session: Session, origin: ResultOrigin): Res
   const completed = session.status === 'completed' && session.result !== null;
   const correct = completed && session.result ? session.result.correct : summary.correct;
   const { answered, correct: validCorrect } = counts(session);
+  const legacy = Boolean(session.legacy);
   return {
     name: 'result',
     sessionId: session.id,
     origin,
-    status: completed ? (session.result?.passed ? 'passed' : 'failed') : 'unfinished',
+    status: completed ? (session.result?.passed ? 'passed' : 'failed') : session.status === 'interrupted_by_update' ? 'interrupted' : 'unfinished',
+    legacy,
     correct,
     targetN: n,
     answeredValid: answered,
@@ -424,14 +424,16 @@ function resultVM(input: ViewInput, session: Session, origin: ResultOrigin): Res
     wrongCount: answered - validCorrect,
     createdAt: session.createdAt,
     closedAt: session.closedAt,
-    canStartRetry: completed,
-    retryPreview: retryPreviewVMOf(catalog, user, session),
+    // Runda błędów z sesji poprzedniej wersji banku jest niedostępna (treść usunięta w migracji).
+    canStartRetry: completed && !legacy,
+    retryPreview: legacy ? null : retryPreviewVMOf(catalog, user, session),
   };
 }
 
 function reviewVM(input: ViewInput, session: Session, filter: ReviewFilter): ReviewVM {
   const { catalog, user } = input;
-  const all = reviewItems(user, session.id, 'all');
+  const legacy = Boolean(session.legacy);
+  const all = legacy ? [] : reviewItems(user, session.id, 'all');
   const items = filter === 'wrong' ? all.filter((x) => x.status === 'wrong') : all;
   return {
     name: 'review',
@@ -441,8 +443,9 @@ function reviewVM(input: ViewInput, session: Session, filter: ReviewFilter): Rev
     filter,
     counts: { all: all.length, wrong: all.filter((x) => x.status === 'wrong').length },
     items: items.map((x) => ({ ...x, domainTitle: domainTitleOf(catalog, x.domainId) })),
-    canStartRetry: session.kind === 'test' && session.status === 'completed',
-    retryPreview: retryPreviewVMOf(catalog, user, session),
+    canStartRetry: session.kind === 'test' && session.status === 'completed' && !legacy,
+    retryPreview: legacy ? null : retryPreviewVMOf(catalog, user, session),
+    legacy,
     config: configLabelOf(catalog, session.config),
     createdAt: session.createdAt,
   };
@@ -481,6 +484,8 @@ function freeFlowSummaryVM(input: ViewInput, session: Session, origin: ResultOri
     config: configLabelOf(input.catalog, session.config),
     createdAt: session.createdAt,
     closedAt: session.closedAt,
+    legacy: Boolean(session.legacy),
+    interrupted: session.status === 'interrupted_by_update',
   };
 }
 
@@ -506,7 +511,8 @@ function historyVM(input: ViewInput, tab: HistoryVM['tab']): HistoryVM {
         const completed = t.status === 'completed';
         return {
           sessionId: t.sessionId,
-          status: completed ? ('completed' as const) : ('unfinished' as const),
+          status: completed ? ('completed' as const) : t.status === 'interrupted_by_update' ? ('interrupted' as const) : ('unfinished' as const),
+          legacy: user.sessions[t.sessionId]?.legacy ? true : false,
           correct: t.correct,
           targetN: n,
           answeredValid: t.answeredValid,
@@ -521,6 +527,8 @@ function historyVM(input: ViewInput, tab: HistoryVM['tab']): HistoryVM {
       }),
     freeFlow: summary.freeFlow.map((f) => ({
       sessionId: f.sessionId,
+      interrupted: f.status === 'interrupted_by_update',
+      legacy: user.sessions[f.sessionId]?.legacy ? true : false,
       answeredValid: f.answeredValid,
       correct: f.correct,
       percentText: formatPercentPl(f.correct, f.answeredValid),
@@ -553,6 +561,8 @@ export function bankInfoOf(catalog: Catalog): BankInfoVM {
     catalogFamilyCount: new Set(catalog.questions.map((q) => q.familyId)).size,
     statusPl: catalog.statusPl,
     clinicalSignoff: catalog.clinicalSignoff,
+    retiredCount: (catalog.retiredQuestionIds ?? []).length,
+    profileShares: catalog.profile ? catalog.profile.groupOrder.map((group) => ({ group, percent: (catalog.profile?.weightsBp[group] ?? 0) / 100 })) : null,
   };
 }
 
@@ -571,7 +581,8 @@ function aboutVM(input: ViewInput): AboutVM {
     name: 'about',
     bank: bankInfoOf(catalog),
     byDomain: bankByDomainOf(catalog),
-    packs: input.packs.map((p) => ({ packId: p.id, fileName: p.fileName, importedAt: p.importedAt, questionCount: p.questions.length })),
+    // Od V15 katalog nie łączy żadnych paczek — lista zaimportowanych pul jest zawsze pusta.
+    packs: [],
     appVersion: input.appVersion,
   };
 }

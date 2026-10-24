@@ -55,7 +55,7 @@ export function SettingsScreen({ vm }: { vm: SettingsVM }) {
             <ListRow icon="save" title="Kopia danych" subtitle="Zapisz lub wczytaj plik kopii" onClick={() => controller.openBackup()} />
           </li>
           <li>
-            <ListRow icon="library_add" title="Import puli pytań" subtitle="Dodaj pytania z pliku puli" onClick={() => controller.openPoolImport()} />
+            <ListRow icon="library_add" title="Pula pytań" subtitle="Wyłącznie bank V15 — import pul wyłączony" onClick={() => controller.openPoolImport()} />
           </li>
           <li>
             <ListRow
@@ -114,6 +114,13 @@ export function SettingsScreen({ vm }: { vm: SettingsVM }) {
   );
 }
 
+/** Nazwy grup profilu treningowego V15 (klucze z training_profile.json). */
+const PROFILE_GROUP_LABELS: Readonly<Record<string, string>> = {
+  skin: 'skóra i dermatologia',
+  facial_anatomy: 'anatomia twarzy',
+  other: 'pozostałe',
+};
+
 export function AboutScreen({ vm }: { vm: AboutVM }) {
   const controller = useController();
   const domains = vm.byDomain.length;
@@ -146,6 +153,13 @@ export function AboutScreen({ vm }: { vm: AboutVM }) {
           </li>
         ))}
       </ul>
+      {bank.profileShares ? (
+        <p>
+          Profil treningowy całego zakresu (Test i Free Flow):{' '}
+          {bank.profileShares.map((p) => `${PROFILE_GROUP_LABELS[p.group] ?? p.group} ${String(p.percent).replace('.', ',')}%`).join(', ')}. To redakcyjna proporcja treningu, nie
+          oficjalny rozkład egzaminu. Zakres jednej dziedziny działa bez profilu.
+        </p>
+      ) : null}
       <ul className="about-table" role="list" aria-label="Kontrola treści">
         <li>
           <span>Sprawdzone odrębnym przeglądem AI (nie recenzja lekarska)</span>
@@ -154,6 +168,10 @@ export function AboutScreen({ vm }: { vm: AboutVM }) {
         <li>
           <span>Pytania ze schematem</span>
           <span className="about-table__count">{bank.schematicCount}</span>
+        </li>
+        <li>
+          <span>Wyłączone z aktywnej puli (nie pojawiają się w żadnym trybie)</span>
+          <span className="about-table__count">{bank.retiredCount}</span>
         </li>
       </ul>
       <Banner tone={bank.clinicalSignoff ? 'info' : 'warn'} role="note" icon={bank.clinicalSignoff ? 'info' : 'warning_amber'} title="Status bazy">

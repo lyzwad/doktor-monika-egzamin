@@ -24,13 +24,13 @@ import { FREE_FLOW_ADAPTATION, FREE_FLOW_BASE_WEIGHTS, FREE_FLOW_SPACING } from 
 import { compareByDue, isDue } from './review';
 import { rngFor, shuffle } from './rng';
 import { isFamilySeen, type SeenIndex } from './seen';
-import { DOMAIN_IDS, type Attempt, type CatalogQuestion, type DomainId, type IsoDateTime, type QuestionId, type Scope, type Slot } from './types';
+import { DOMAIN_IDS, type Attempt, type CatalogQuestion, type DomainId, type IsoDateTime, type QuestionId, type Scope, type Slot, type TrainingProfile } from './types';
 import { compareIsoNullFirst, compareStrings, rotate } from './util';
 import { sortAttempts } from './review';
 
 export type DomainWeights = Partial<Record<DomainId, number>>;
 
-function normalize(weights: Map<DomainId, number>): Map<DomainId, number> {
+function normalize<K>(weights: Map<K, number>): Map<K, number> {
   let total = 0;
   for (const w of weights.values()) total += w;
   if (total <= 0) {
@@ -41,11 +41,11 @@ function normalize(weights: Map<DomainId, number>): Map<DomainId, number> {
 }
 
 /** Podłoga ekspozycji: każda dostępna domena ≥ `floor`, reszta proporcjonalnie (iteracyjnie). */
-function applyFloor(weights: Map<DomainId, number>, floor: number): Map<DomainId, number> {
+function applyFloor<K>(weights: Map<K, number>, floor: number): Map<K, number> {
   const n = weights.size;
   if (n === 0) return weights;
   if (floor * n >= 1) return new Map([...weights.keys()].map((d) => [d, 1 / n]));
-  const fixed = new Set<DomainId>();
+  const fixed = new Set<K>();
   let current = normalize(weights);
   for (let iter = 0; iter < n; iter++) {
     const below = [...current].filter(([d, w]) => !fixed.has(d) && w < floor).map(([d]) => d);
@@ -54,7 +54,7 @@ function applyFloor(weights: Map<DomainId, number>, floor: number): Map<DomainId
     const remaining = 1 - floor * fixed.size;
     let freeTotal = 0;
     for (const [d, w] of current) if (!fixed.has(d)) freeTotal += w;
-    const next = new Map<DomainId, number>();
+    const next = new Map<K, number>();
     for (const [d, w] of current) {
       next.set(d, fixed.has(d) ? floor : freeTotal > 0 ? (w / freeTotal) * remaining : remaining / (n - fixed.size));
     }
@@ -105,6 +105,48 @@ export function computeFreeFlowWeights(attempts: readonly Attempt[], scope: Scop
   return out;
 }
 
+/**
+ * FREE_FLOW_POLICY_V3 (DECYZJE §7a): wagi GRUP profilu treningowego V15 dla całego zakresu (zamiast dawnego
+ * DEV 0,40) z tą samą adaptacją co V2 — grupa z ≥ 10 ważnymi próbami, `err_g` z ostatnich 30 prób grupy,
+ * `w_g = base_g × clamp(1 + 0,5 × (err_g − średnia), 0,5, 1,5)`, podłoga 0,05, renormalizacja.
+ * Próby pytań spoza profilu (np. poprzednia wersja banku, pytania wyłączone) nie liczą się do adaptacji.
+ */
+export function computeProfileWeights(attempts: readonly Attempt[], profile: TrainingProfile, available: readonly string[]): Record<string, number> {
+  const groups = profile.groupOrder.filter((g) => available.includes(g));
+  if (groups.length === 0) return {};
+  const byGroup = new Map<string, Attempt[]>();
+  for (const a of sortAttempts(attempts.filter((x) => !x.excluded))) {
+    const g = profile.groupOf[a.questionId];
+    if (g === undefined) continue;
+    const list = byGroup.get(g);
+    if (list) list.push(a);
+    else byGroup.set(g, [a]);
+  }
+  const err = new Map<string, number>();
+  for (const g of groups) {
+    const list = byGroup.get(g) ?? [];
+    if (list.length < FREE_FLOW_ADAPTATION.minAttempts) continue;
+    const recent = list.slice(-FREE_FLOW_ADAPTATION.recentWindow);
+    err.set(g, recent.filter((a) => !a.correct).length / recent.length);
+  }
+  let mean = 0;
+  for (const e of err.values()) mean += e;
+  mean = err.size > 0 ? mean / err.size : 0;
+  const raw = new Map<string, number>();
+  for (const g of groups) {
+    const e = err.get(g);
+    const factor =
+      e === undefined
+        ? 1
+        : Math.min(FREE_FLOW_ADAPTATION.clampMax, Math.max(FREE_FLOW_ADAPTATION.clampMin, 1 + FREE_FLOW_ADAPTATION.gain * (e - mean)));
+    raw.set(g, ((profile.weightsBp[g] ?? 0) / 10000) * factor);
+  }
+  const final = applyFloor(normalize(raw), FREE_FLOW_ADAPTATION.floorWeight);
+  const out: Record<string, number> = {};
+  for (const g of groups) out[g] = final.get(g) ?? 0;
+  return out;
+}
+
 export interface FreeFlowPickInput {
   /** Pula (zakres, trudność, blokady). */
   pool: readonly CatalogQuestion[];
@@ -120,6 +162,8 @@ export interface FreeFlowPickInput {
   /** Licznik doborów sesji (sól seeda, rotacja remisów). */
   pickIndex: number;
   myErrorsPriority: boolean;
+  /** Profil treningowy (V15): zakres `ALL` → FREE_FLOW_POLICY_V3 (wagi grup). */
+  profile?: TrainingProfile | null;
 }
 
 export interface FreeFlowPickResult {
@@ -127,6 +171,8 @@ export interface FreeFlowPickResult {
   origin: 'freeflow' | 'my_errors';
   familySeen: boolean;
   weights: DomainWeights;
+  /** FREE_FLOW_POLICY_V3: wagi grup profilu po adaptacji (suma = 1); bez profilu — `null`. */
+  groupWeights: Record<string, number> | null;
   /** „Moje błędy”: czy w zakresie pozostały aktywne błędy nierozwiązane poprawnie w tej sesji. */
   myErrorsRemaining: boolean;
 }
@@ -138,8 +184,14 @@ const TIERS: readonly Tier[] = [1, 2, 3, 4, 5];
 export function pickFreeFlow(input: FreeFlowPickInput): FreeFlowPickResult {
   const { pool, seen, history, now } = input;
   const stats = seen.stats;
-  const available = DOMAIN_IDS.filter((d) => pool.some((q) => q.domainId === d));
-  const weights = computeFreeFlowWeights(input.attempts, input.scope, available);
+  const profile = input.scope === 'ALL' ? (input.profile ?? null) : null;
+  // Kubełek doboru: grupa profilu (V3, cały zakres) albo domena (V2 / zakres jednej domeny).
+  const bucketOf = (questionId: QuestionId, domainId: DomainId): string => (profile ? (profile.groupOf[questionId] ?? '') : domainId);
+  const bucketOrder: readonly string[] = profile ? profile.groupOrder : DOMAIN_IDS;
+  const available = bucketOrder.filter((b) => pool.some((q) => bucketOf(q.id, q.domainId) === b));
+  const weights: DomainWeights = profile ? {} : computeFreeFlowWeights(input.attempts, input.scope, available as DomainId[]);
+  const groupWeights = profile ? computeProfileWeights(input.attempts, profile, available) : null;
+  const bucketWeights: Readonly<Record<string, number>> = groupWeights ?? (weights as Record<string, number>);
 
   // Kontekst sesji.
   const correctInSession = new Set<QuestionId>();
@@ -180,6 +232,7 @@ export function pickFreeFlow(input: FreeFlowPickInput): FreeFlowPickResult {
     origin,
     familySeen: question ? isFamilySeen(seen, question.familyId) : false,
     weights,
+    groupWeights,
     myErrorsRemaining,
   });
 
@@ -202,28 +255,31 @@ export function pickFreeFlow(input: FreeFlowPickInput): FreeFlowPickResult {
     }
   }
 
-  // Zwykła polityka: domena o największym deficycie, w niej należne błędy → niewidziane → najdawniej widziane.
-  const counts = new Map<DomainId, number>();
+  // Zwykła polityka: kubełek (domena albo grupa profilu) o największym deficycie, w nim należne błędy →
+  // niewidziane → najdawniej widziane.
+  const counts = new Map<string, number>();
   let n = 0;
   for (const s of history) {
     if (s.excluded) continue;
-    counts.set(s.snapshot.domainId, (counts.get(s.snapshot.domainId) ?? 0) + 1);
+    const b = bucketOf(s.questionId, s.snapshot.domainId);
+    counts.set(b, (counts.get(b) ?? 0) + 1);
     n++;
   }
-  const rotation = rotate(DOMAIN_IDS, input.pickIndex);
+  const rotation = rotate(bucketOrder, input.pickIndex);
   const rng = rngFor(input.seed, `ff:${input.pickIndex}`);
   for (const tier of TIERS) {
-    const byDomain = new Map<DomainId, CatalogQuestion[]>();
+    const byDomain = new Map<string, CatalogQuestion[]>();
     for (const q of pool) {
       if (!allowed(q, tier)) continue;
-      const list = byDomain.get(q.domainId);
+      const b = bucketOf(q.id, q.domainId);
+      const list = byDomain.get(b);
       if (list) list.push(q);
-      else byDomain.set(q.domainId, [q]);
+      else byDomain.set(b, [q]);
     }
-    const candidatesDomains = rotation.filter((d) => (byDomain.get(d)?.length ?? 0) > 0 && (weights[d] ?? 0) > 0);
+    const candidatesDomains = rotation.filter((d) => (byDomain.get(d)?.length ?? 0) > 0 && (bucketWeights[d] ?? 0) > 0);
     if (candidatesDomains.length === 0) continue;
-    const deficit = (d: DomainId): number => (weights[d] ?? 0) * (n + 1) - (counts.get(d) ?? 0);
-    let best = candidatesDomains[0] as DomainId;
+    const deficit = (d: string): number => (bucketWeights[d] ?? 0) * (n + 1) - (counts.get(d) ?? 0);
+    let best = candidatesDomains[0] as string;
     for (const d of candidatesDomains) if (deficit(d) > deficit(best) + 1e-12) best = d;
     const cands = byDomain.get(best) ?? [];
 

@@ -1,5 +1,6 @@
 import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
+import { CONTENT_RELEASE } from '../../src/domain/contentRelease';
 import { describe, expect, it } from 'vitest';
 import {
   compareCodePoints,
@@ -11,7 +12,7 @@ import {
 } from '../../src/domain/fingerprint';
 import type { RuntimeBank } from '../../src/domain/types';
 
-const bankPath = fileURLToPath(new URL('../../public/data/bank.json', import.meta.url));
+const bankPath = fileURLToPath(new URL(`../../public/${CONTENT_RELEASE.bankFile}`, import.meta.url));
 const bank = JSON.parse(readFileSync(bankPath, 'utf-8')) as RuntimeBank;
 
 /** Wartości referencyjne policzone funkcją `normal()`/`fingerprint()` z redakcja/narzedzia (Python). */
@@ -76,7 +77,7 @@ describe('fingerprint', () => {
     await expect(sha256Hex('')).resolves.toBe('e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855');
   });
 
-  it(`zgadza się z fingerprintem pytań w public/data/bank.json (${bank.questions.length})`, async () => {
+  it(`zgadza się z fingerprintem pytań banku V15 (${bank.questions.length})`, async () => {
     expect(bank.questions.length).toBeGreaterThan(0);
     const unexplained: string[] = [];
     for (const q of bank.questions) {

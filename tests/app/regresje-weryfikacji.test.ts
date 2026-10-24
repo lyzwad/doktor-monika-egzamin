@@ -9,7 +9,7 @@
 import { describe, expect, it } from 'vitest';
 import { fingerprintRuntimeQuestion } from '../../src/domain/fingerprint';
 import type { RuntimeBank } from '../../src/domain/types';
-import { BANK, failingRepository, keyOf, openSession, question, settle, startHarness, userState, type Harness } from './harness';
+import { BANK, contentBundle, failingRepository, keyOf, openSession, question, settle, startHarness, userState, type Harness } from './harness';
 
 /** Test w najmniejszym koszyku banku z N = pojemność — zgłoszenie nie ma zastępstwa. */
 async function startFullCapacityTest(h: Harness): Promise<number> {
@@ -138,20 +138,19 @@ describe('LOG-01 — niezapisana zmiana blokuje import puli i wczytanie kopii', 
     c.pauseSession();
     c.openSettings();
     c.openPoolImport();
-    expect(await c.importPackFile(await packBlob('ANAT-Q901'), 'pula.json')).toMatchObject({ ok: false, code: 'UNSAVED_PENDING' });
+    expect(await c.importPackFile(await packBlob('ANAT-Q901'), 'pula.json')).toMatchObject({ ok: false, code: 'PACKS_DISABLED' });
     expect(c.getState().screen).toMatchObject({ name: 'poolImport', flow: { step: 'error', fileName: 'pula.json' } });
     expect(c.getState().catalog?.questions.length).toBe(catalogSize);
-    expect((await h.repository.listPacks()).ok && (await h.repository.listPacks())).toMatchObject({ value: [] });
 
     // Ponowienie TEJ SAMEJ komendy nadal możliwe i skuteczne.
     expect(await c.retrySave()).toEqual({ ok: true });
     const attempts = Object.values(userState(c).attempts);
     expect(attempts).toHaveLength(1);
     expect(attempts[0]?.commandId).toBe(failed.status === 'error' ? failed.commandId : '');
-    // Po zapisie import działa.
+    // Po zapisie import nadal wyłączony (wyłącznie bank V15) — katalog bez zmian.
     c.resetPoolImportFlow();
-    expect(await c.importPackFile(await packBlob('ANAT-Q902'), 'pula.json')).toEqual({ ok: true });
-    expect(c.getState().catalog?.questions.length).toBe((catalogSize ?? 0) + 1);
+    expect(await c.importPackFile(await packBlob('ANAT-Q902'), 'pula.json')).toMatchObject({ ok: false, code: 'PACKS_DISABLED' });
+    expect(c.getState().catalog?.questions.length).toBe(catalogSize);
   });
 
   it('wczytanie kopii przy niezapisanej odpowiedzi jest odrzucone bez zmiany danych', async () => {
@@ -189,56 +188,25 @@ describe('LOG-01 — niezapisana zmiana blokuje import puli i wczytanie kopii', 
   });
 });
 
-describe('LOG-02 — nowe pytania z aktualizacji banku uzupełniają oczekujące pozycje', () => {
-  it('restart na tej samej bazie z pełnym bankiem obsadza pozycję czekającą na zastępstwo', async () => {
+describe('LOG-02 / V15 — inna wersja banku nie jest ładowana', () => {
+  it('okrojony bank (inna wersja) → BANK_INVALID, bez startu na innej puli', async () => {
     const anat = BANK.questions.filter((q) => q.domain_id === 'ANAT');
     const keep = new Set([...new Set(anat.map((q) => q.family_id))].slice(0, 3));
     const small: RuntimeBank = { ...structuredClone(BANK), bank_version: 'small', questions: BANK.questions.filter((q) => q.domain_id !== 'ANAT' || keep.has(q.family_id)) };
-    const h = await startHarness({ loadBank: async () => structuredClone(small) });
-    h.controller.openConfig('test');
-    h.controller.updateConfigDraft({ nText: '3', scope: 'ANAT', difficulty: 'mixed', myErrorsPriority: false });
-    expect(await h.controller.startTest()).toEqual({ ok: true });
-    await settle();
-    expect(await h.controller.report()).toEqual({ ok: true });
-    await settle();
-    const before = openSession(h.controller);
-    expect(before.awaitingReplacement).toHaveLength(1);
-    const awaitingSlot = before.awaitingReplacement[0];
-
-    // „Aktualizacja aplikacji”: ta sama baza, pełny bank.
-    const h2 = await startHarness({ factory: h.factory, dbName: h.dbName });
-    await settle();
-    const after = openSession(h2.controller);
-    expect(after.id).toBe(before.id);
-    expect(after.awaitingReplacement).toEqual([]);
-    const replacement = after.slots[after.plan[0] ?? ''];
-    expect(replacement?.origin).toBe('replacement');
-    expect(replacement?.replacesSlotId).toBe(awaitingSlot);
-    expect(keep.has(replacement?.snapshot.familyId ?? '')).toBe(false);
-    expect(h2.controller.getState().save).toEqual({ status: 'idle' });
-    // Zapis trwały.
-    const h3 = await startHarness({ factory: h.factory, dbName: h.dbName });
-    expect(openSession(h3.controller).awaitingReplacement).toEqual([]);
+    const h = await startHarness({ loadBank: async () => ({ ...contentBundle(structuredClone(small)), bankSha256: null }) });
+    expect(h.controller.getState().boot).toMatchObject({ phase: 'fatal', code: 'BANK_INVALID' });
+    expect(h.controller.getState().catalog).toBeNull();
   });
 
-  it('bez nowych pytań start niczego nie zapisuje (stan oczekujący bez zmian)', async () => {
-    const anat = BANK.questions.filter((q) => q.domain_id === 'ANAT');
-    const keep = new Set([...new Set(anat.map((q) => q.family_id))].slice(0, 3));
-    const small: RuntimeBank = { ...structuredClone(BANK), bank_version: 'small', questions: BANK.questions.filter((q) => q.domain_id !== 'ANAT' || keep.has(q.family_id)) };
-    const h = await startHarness({ loadBank: async () => structuredClone(small) });
-    h.controller.openConfig('test');
-    h.controller.updateConfigDraft({ nText: '3', scope: 'ANAT', difficulty: 'mixed', myErrorsPriority: false });
-    expect(await h.controller.startTest()).toEqual({ ok: true });
-    await settle();
-    expect(await h.controller.report()).toEqual({ ok: true });
-    await settle();
-    const revision = openSession(h.controller).revision;
-    const h2 = await startHarness({ factory: h.factory, dbName: h.dbName, loadBank: async () => structuredClone(small) });
-    h2.controller.resume();
-    await settle();
-    expect(openSession(h2.controller).awaitingReplacement).toHaveLength(1);
-    expect(openSession(h2.controller).revision).toBe(revision);
-    expect(h2.controller.getState().save).toEqual({ status: 'idle' });
+  it('bank V15 z inną sumą kontrolną → BANK_INVALID', async () => {
+    const h = await startHarness({ loadBank: async () => ({ ...contentBundle(), bankSha256: '0'.repeat(64) }) });
+    expect(h.controller.getState().boot).toMatchObject({ phase: 'fatal', code: 'BANK_INVALID' });
+  });
+
+  it('okrojony bank z wersją V15 (bez sprawdzonej sumy) → BANK_INVALID (liczby ≠ 2987/1048/1366/573)', async () => {
+    const small: RuntimeBank = { ...structuredClone(BANK), questions: BANK.questions.slice(0, 100) };
+    const h = await startHarness({ loadBank: async () => ({ ...contentBundle(small), bankSha256: null }) });
+    expect(h.controller.getState().boot).toMatchObject({ phase: 'fatal', code: 'BANK_INVALID' });
   });
 });
 

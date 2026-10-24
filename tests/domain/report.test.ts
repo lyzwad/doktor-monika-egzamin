@@ -24,11 +24,9 @@ import {
   summarizeSession,
   undoReport,
   type Catalog,
-  type PackRecord,
   type RuntimeQuestion,
   type UserState,
 } from '../../src/domain/api';
-import { validatePackFile } from '../../src/persistence/packs';
 import { answerCurrent, bank, catalogOf, Clock, grid, must, mustFail, playTest, q, session, slotAt, wrongOptionOf } from './helpers';
 
 const catalog = catalogOf(grid(3)); // 54 rodziny
@@ -303,7 +301,7 @@ describe('E05 — „Cofnij” i „Przywróć”', () => {
 });
 
 describe('E06 — ta sama treść pod nowym ID nadal zablokowana', () => {
-  it('fingerprint blokuje kopię w paczce i w katalogu; rodzina blokuje warianty', async () => {
+  it('fingerprint blokuje kopię w katalogu; rodzina blokuje warianty', () => {
     const { state, sessionId, clock } = startN(3);
     const original = slotAt(state, sessionId, 0);
     const out = report(state, sessionId, 0, clock);
@@ -315,20 +313,11 @@ describe('E06 — ta sama treść pod nowym ID nadal zablokowana', () => {
       fingerprint: source.fingerprint,
     };
     const variant = q({ id: 'WARIANT', family: source.familyId, domain: source.domainId, stem: 'Bliski wariant?' });
-    // Jedyny walidator paczek (LOG-07): src/persistence/packs.ts.
-    const plan = await validatePackFile(
-      { ...bank([copy, variant], 'paczka-1'), questions: [copy, variant] },
-      { fileName: 'p.json', packId: 'p1', now: clock.now },
-      catalog,
-      out.state,
-    );
-    expect(plan.fatal).toEqual([]);
-    expect(plan.skippedBlockedIds.sort()).toEqual(['KOPIA-NOWE-ID', 'WARIANT']);
-    // Gdyby kopia trafiła do katalogu (np. starszy import), pula i tak ją pomija.
-    const pack: PackRecord = { ...plan.record, questions: [copy, variant] };
-    const cat2 = buildCatalog({ ...bank(grid(3)) }, [pack]);
+    // Od V15 katalog nie łączy paczek: kopia (ten sam fingerprint) i wariant (ta sama rodzina) w samym banku.
+    const cat2 = buildCatalog({ ...bank([...grid(3), copy, variant]) });
     expect(cat2.ok).toBe(true);
     if (!cat2.ok) return;
+    expect(cat2.value.issues.map((i) => i.code)).toContain('DUPLICATE_FINGERPRINT');
     const ids = poolFor(cat2.value, out.state, 'ALL', 'mixed', clock.now).questionIds;
     expect(ids).not.toContain('KOPIA-NOWE-ID');
     expect(ids).not.toContain('WARIANT');

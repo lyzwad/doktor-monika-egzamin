@@ -324,7 +324,9 @@ export interface ResultVM {
   name: 'result';
   sessionId: SessionId;
   origin: ResultOrigin;
-  status: 'passed' | 'failed' | 'unfinished';
+  status: 'passed' | 'failed' | 'unfinished' | 'interrupted';
+  /** Sesja z poprzedniej wersji banku: tylko podsumowanie, treść pytań niedostępna. */
+  legacy: boolean;
   correct: number;
   targetN: number;
   answeredValid: number;
@@ -363,6 +365,8 @@ export interface ReviewVM {
   items: ReviewItemVM[];
   canStartRetry: boolean;
   retryPreview: RetryPreviewVM | null;
+  /** Sesja z poprzedniej wersji banku: lista pytań pusta, komunikat o niedostępnej treści. */
+  legacy?: boolean;
   /** (Addytywne, opcjonalne — UI) Podtytuł „Test z 22.10.2026 · Cały zakres · Mieszany”. */
   config?: ConfigLabelVM;
   createdAt?: IsoDateTime;
@@ -383,6 +387,9 @@ export interface FreeFlowSummaryVM {
   config: ConfigLabelVM;
   createdAt: IsoDateTime;
   closedAt: IsoDateTime | null;
+  /** Sesja z poprzedniej wersji banku (bez treści) i czy przerwana aktualizacją. */
+  legacy?: boolean;
+  interrupted?: boolean;
 }
 
 /* ========================================================================== */
@@ -391,7 +398,9 @@ export interface FreeFlowSummaryVM {
 
 export interface HistoryTestItemVM {
   sessionId: SessionId;
-  status: 'completed' | 'unfinished';
+  status: 'completed' | 'unfinished' | 'interrupted';
+  /** Sesja z poprzedniej wersji banku (tylko podsumowanie). */
+  legacy?: boolean;
   correct: number;
   targetN: number;
   answeredValid: number;
@@ -406,6 +415,9 @@ export interface HistoryTestItemVM {
 
 export interface HistoryFreeFlowItemVM {
   sessionId: SessionId;
+  /** „Przerwany aktualizacją banku pytań”. */
+  interrupted?: boolean;
+  legacy?: boolean;
   answeredValid: number;
   correct: number;
   percentText: string | null;
@@ -460,6 +472,10 @@ export interface BankInfoVM {
   catalogFamilyCount: number;
   statusPl: string;
   clinicalSignoff: boolean;
+  /** Pytania wyłączone z aktywnej puli (retired_question_ids.json) — nie występują w żadnym trybie. */
+  retiredCount: number;
+  /** Profil treningowy całego zakresu (udziały grup w %) albo `null`. */
+  profileShares: { group: string; percent: number }[] | null;
 }
 
 export interface SettingsVM {
@@ -669,11 +685,15 @@ export interface StorageStatusVM {
 
 /** Faza uruchomienia aplikacji. */
 export type BootState =
-  | { phase: 'loading'; stage: 'opening-storage' | 'loading-bank' | 'loading-user-data' }
+  /**
+   * `migrating` — migracja danych lokalnych do banku V15 (transakcja `versionchange`, „Aktualizacja banku
+   * pytań…”); `content-update` — wykryto nowszą wersję banku, aplikacja przeładowuje się przed pytaniami.
+   */
+  | { phase: 'loading'; stage: 'opening-storage' | 'migrating' | 'loading-bank' | 'loading-user-data' | 'content-update' }
   | { phase: 'ready' }
   | {
       phase: 'fatal';
-      code: 'STORAGE_UNAVAILABLE' | 'BANK_UNAVAILABLE' | 'BANK_INVALID' | 'MIGRATION_FAILED' | 'UNKNOWN';
+      code: 'STORAGE_UNAVAILABLE' | 'BANK_UNAVAILABLE' | 'BANK_INVALID' | 'MIGRATION_FAILED' | 'MIGRATION_BLOCKED' | 'CONTENT_UPDATE_FAILED' | 'UNKNOWN';
       messagePl: string;
       canRetry: boolean;
     };

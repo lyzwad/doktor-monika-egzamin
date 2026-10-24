@@ -19,7 +19,7 @@ describe('schemat magazynów (DECYZJE §10)', () => {
   });
 
   it('wersje i limity', () => {
-    expect(DB_SCHEMA_VERSION).toBe(1);
+    expect(DB_SCHEMA_VERSION).toBe(2);
     expect(BACKUP_FORMAT_VERSION).toBe(1);
     expect(BACKUP_MAX_BYTES).toBe(25 * 1024 * 1024);
   });

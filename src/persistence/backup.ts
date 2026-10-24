@@ -12,7 +12,7 @@ import {
   SESSION_STATUSES,
   SLOT_ORIGINS,
 } from '../domain/types';
-import type { DmeEvent, IsoDateTime, PackRecord, Session } from '../domain/types';
+import type { DmeEvent, IsoDateTime, Session } from '../domain/types';
 import { APP_ID, BACKUP_FORMAT, BACKUP_FORMAT_VERSION, BACKUP_MAX_BYTES } from './api';
 import type {
   BackupData,
@@ -24,7 +24,7 @@ import type {
   ValidatedBackup,
 } from './api';
 import { backupTooLarge, fail, invalidBackup, ok, unsupportedBackupVersion } from './errors';
-import { checkStoredPackRecord, storedPackFingerprintMismatches } from './packs';
+import { transformToV15, type V15TransformReport } from './v15Migration';
 import {
   ReasonList,
   compareKeys,
@@ -157,6 +157,8 @@ export function summarizeBackup(file: BackupFileV1): BackupSummary {
     questionStats: questionStats.length,
     packs: packs.length,
     totalSessions: sessions.length,
+    legacySessions: sessions.filter((s) => s.legacy).length,
+    interruptedSessions: sessions.filter((s) => s.status === 'interrupted_by_update').length,
     firstActivityAt: first,
     lastActivityAt: last,
   };
@@ -206,7 +208,7 @@ const C = {
 } satisfies Record<string, FieldCheck>;
 
 const SCOPES = ['ALL', ...DOMAIN_IDS] as const;
-const POLICIES = ['TEST_POLICY_V1', 'TEST_POLICY_V2', 'FREE_FLOW_POLICY_V1', 'FREE_FLOW_POLICY_V2'] as const;
+const POLICIES = ['TEST_POLICY_V1', 'TEST_POLICY_V2', 'TEST_POLICY_V3', 'FREE_FLOW_POLICY_V1', 'FREE_FLOW_POLICY_V2', 'FREE_FLOW_POLICY_V3'] as const;
 const REPORT_PHASES = ['before_answer', 'after_answer', 'after_close', 'outside_session'] as const;
 
 type Spec = Record<string, FieldCheck>;
@@ -284,6 +286,18 @@ const ALLOCATION_SPEC: Spec = {
   fillersSeen: C.int0,
   redistributed: C.array,
   freeFlowWeights: nullOr(C.object),
+};
+
+const LEGACY_SPEC: Spec = {
+  reason: oneOf(['bank_v15_update']),
+  previousBankVersion: C.text,
+  contentBankVersion: C.text,
+  migratedAt: C.iso,
+  previousStatus: oneOf(SESSION_STATUSES),
+  answeredValid: C.int0,
+  correct: C.int0,
+  excluded: C.int0,
+  planLength: C.int0,
 };
 
 const RETRY_SPEC: Spec = { sourceSessionId: C.id, retryChainId: C.id, roundIndex: C.int1, repeatedCount: C.int0 };
@@ -484,6 +498,18 @@ function checkSession(value: unknown, where: string, reasons: ReasonList): value
   if (isObject(value.retry) && !checkFields(value.retry, RETRY_SPEC, `${where}, powtórka`, reasons)) valid = false;
   if (isObject(value.result) && !checkFields(value.result, RESULT_SPEC, `${where}, wynik`, reasons)) valid = false;
   if (isObject(value.freeFlow) && !checkFields(value.freeFlow, FREE_FLOW_SPEC, `${where}, Free Flow`, reasons)) valid = false;
+  const legacy = value.legacy;
+  if (legacy !== undefined && legacy !== null) {
+    if (!checkObject(legacy, LEGACY_SPEC, `${where}, poprzednia wersja banku`, reasons)) valid = false;
+    if (value.status === 'open') {
+      reasons.add(`${where}: sesja z poprzedniej wersji banku nie może być otwarta.`);
+      valid = false;
+    }
+    if (isObject(value.slots) && Object.keys(value.slots).length > 0) {
+      reasons.add(`${where}: sesja z poprzedniej wersji banku nie może zawierać treści pytań.`);
+      valid = false;
+    }
+  }
 
   const kind = value.kind as Session['kind'];
   const status = value.status as Session['status'];
@@ -493,6 +519,10 @@ function checkSession(value: unknown, where: string, reasons: ReasonList): value
   }
   if (kind === 'freeflow' && (status === 'completed' || status === 'unfinished')) {
     reasons.add(`${where}: status „${status}” dotyczy wyłącznie Testu.`);
+    valid = false;
+  }
+  if (status === 'interrupted_by_update' && !(legacy !== undefined && legacy !== null)) {
+    reasons.add(`${where}: status „interrupted_by_update” dotyczy wyłącznie sesji z poprzedniej wersji banku.`);
     valid = false;
   }
   if ((status === 'completed') !== (value.result !== null)) {
@@ -668,16 +698,10 @@ function checkBackupStructure(json: JsonObject, reasons: ReasonList): boolean {
   d.events.forEach((rec, i) => {
     if (!checkEvent(rec, label('events', rec, i), reasons)) recordsOk = false;
   });
-  d.packs.forEach((rec, i) => {
-    const problems = checkStoredPackRecord(rec, label('packs', rec, i));
-    if (problems.length > 0) {
-      recordsOk = false;
-      for (const problem of problems) reasons.add(problem);
-    }
-  });
+  // Zaimportowane pule (starsze kopie) nie są sprawdzane ani przywracane — od V15 są odrzucane w całości.
 
   /* ---- unikalność kluczy ---- */
-  for (const store of BACKUP_DATA_STORES) {
+  for (const store of BACKUP_DATA_STORES.filter((x) => x !== 'packs')) {
     const seen = new Set<string>();
     for (const rec of d[store]) {
       const key = recordKey(store, rec);
@@ -712,6 +736,7 @@ function checkBackupStructure(json: JsonObject, reasons: ReasonList): boolean {
       if (!parent) refFail(`${where}: powtórka wskazuje nieistniejącą sesję „${s.retry.sourceSessionId}”.`);
       else if (parent.kind !== 'test') refFail(`${where}: powtórka wskazuje sesję, która nie jest testem.`);
     }
+    if (s.legacy) continue;
     for (const slot of Object.values(s.slots)) {
       if (slot.excluded !== null && !eventIds.has(slot.excluded.eventId)) {
         refFail(`${where}, slot „${slot.id}”: wykluczenie wskazuje nieistniejące zdarzenie „${slot.excluded.eventId}”.`);
@@ -725,7 +750,7 @@ function checkBackupStructure(json: JsonObject, reasons: ReasonList): boolean {
       refFail(`${where}: wskazuje nieistniejącą sesję „${e.sessionId}”.`);
       return;
     }
-    if (e.type === 'question_reported' && e.slotId !== null && !Object.hasOwn(session.slots, e.slotId)) {
+    if (e.type === 'question_reported' && e.slotId !== null && !session.legacy && !Object.hasOwn(session.slots, e.slotId)) {
       refFail(`${where}: wskazuje nieistniejący slot „${e.slotId}”.`);
     }
   };
@@ -740,6 +765,8 @@ function checkBackupStructure(json: JsonObject, reasons: ReasonList): boolean {
       continue;
     }
     if (session.kind !== a.sessionKind) refFail(`${where}: rodzaj sesji nie zgadza się z sesją „${a.sessionId}”.`);
+    // Sesja z poprzedniej wersji banku nie ma już slotów (treść usunięta w migracji).
+    if (session.legacy) continue;
     const slot = Object.hasOwn(session.slots, a.slotId) ? session.slots[a.slotId] : undefined;
     if (!slot) {
       refFail(`${where}: wskazuje nieistniejący slot „${a.slotId}” w sesji „${a.sessionId}”.`);
@@ -754,7 +781,7 @@ function checkBackupStructure(json: JsonObject, reasons: ReasonList): boolean {
     if (b.sessionId !== null) {
       const session = sessions.get(b.sessionId);
       if (!session) refFail(`${where}: wskazuje nieistniejącą sesję „${b.sessionId}”.`);
-      else if (b.slotId !== null && !Object.hasOwn(session.slots, b.slotId)) refFail(`${where}: wskazuje nieistniejący slot „${b.slotId}”.`);
+      else if (b.slotId !== null && !session.legacy && !Object.hasOwn(session.slots, b.slotId)) refFail(`${where}: wskazuje nieistniejący slot „${b.slotId}”.`);
     }
     if (!eventIds.has(b.eventId)) refFail(`${where}: wskazuje nieistniejące zdarzenie zgłoszenia „${b.eventId}”.`);
   }
@@ -779,7 +806,7 @@ export function isRegisteredValidatedBackup(value: ValidatedBackup): boolean {
  * Walidacja sparsowanego JSON jako kopii `BackupFileV1` (format, wersja, schemat, referencje,
  * fingerprinty paczek). Nie zmienia danych.
  */
-export async function validateBackupJson(json: unknown, fileName: string): Promise<PersistenceResult<BackupFileV1>> {
+export async function validateBackupJson(json: unknown, fileName: string, now: IsoDateTime = new Date().toISOString()): Promise<PersistenceResult<BackupFileV1>> {
   if (!isObject(json)) return fail(invalidBackup(fileName, ['Plik nie zawiera obiektu kopii danych.']));
   if (json.format !== BACKUP_FORMAT || json.appId !== APP_ID) {
     const reasons = ['Brak oznaczenia kopii aplikacji Doktor Monika Egzamin (format „dme-backup”).'];
@@ -793,18 +820,32 @@ export async function validateBackupJson(json: unknown, fileName: string): Promi
 
   const reasons = new ReasonList();
   if (!checkBackupStructure(json, reasons) || !reasons.empty) return fail(invalidBackup(fileName, reasons.toArray()));
-  const backup = json as unknown as BackupFileV1;
+  const original = json as unknown as BackupFileV1;
+  return ok(toV15Backup(original, now).backup);
+}
 
-  try {
-    for (const pack of backup.data.packs as PackRecord[]) {
-      const mismatched = await storedPackFingerprintMismatches(pack);
-      for (const id of mismatched) reasons.add(`Paczka pytań „${pack.id}”: fingerprint pytania ${id} nie zgadza się z treścią.`);
-    }
-  } catch {
-    reasons.add('Nie można sprawdzić paczek pytań: brak Web Crypto (aplikacja wymaga https albo localhost).');
-  }
-  if (!reasons.empty) return fail(invalidBackup(fileName, reasons.toArray()));
-  return ok(backup);
+/**
+ * (c) Kopia sprzed migracji albo ze starej aplikacji przechodzi TĘ SAMĄ transformację co baza (./v15Migration.ts):
+ * zostają ustawienia i podsumowania sesji (bez treści), sesje otwarte → przerwane, paczki odrzucone.
+ * Nigdy nie przywraca treści innej wersji banku. Idempotentna dla kopii zapisanej po migracji.
+ */
+export function toV15Backup(file: BackupFileV1, now: IsoDateTime): { backup: BackupFileV1; report: V15TransformReport } {
+  const t = transformToV15(file.data, now);
+  return {
+    backup: {
+      ...file,
+      data: {
+        settings: file.data.settings,
+        sessions: t.sessions,
+        attempts: t.attempts,
+        questionStats: t.questionStats,
+        blocks: t.blocks,
+        events: t.events,
+        packs: [],
+      },
+    },
+    report: t.report,
+  };
 }
 
 /** Nazwa pliku z `File` (jeśli jest) albo domyślna. */
@@ -821,7 +862,7 @@ function inputFileName(input: Blob | string, fileName: string | undefined): stri
  * Odczyt i pełna walidacja pliku kopii BEZ zmiany danych (S22c–S22g, S24e):
  * limit 25 MB → JSON → format/appId → `formatVersion` → schemat/enumy/daty → referencje.
  */
-export async function parseBackup(input: Blob | string, fileName?: string): Promise<PersistenceResult<ValidatedBackup>> {
+export async function parseBackup(input: Blob | string, fileName?: string, now?: IsoDateTime): Promise<PersistenceResult<ValidatedBackup>> {
   const name = inputFileName(input, fileName);
   const read = await readJsonInput(input, BACKUP_MAX_BYTES);
   if (!read.ok) {
@@ -829,14 +870,15 @@ export async function parseBackup(input: Blob | string, fileName?: string): Prom
     if (read.reason === 'unreadable') return fail(invalidBackup(name, ['Nie udało się odczytać wybranego pliku.']));
     return fail(invalidBackup(name, ['Plik nie jest poprawnym plikiem JSON (niepoprawna struktura).']));
   }
-  const checked = await validateBackupJson(read.json, name);
+  const checked = await validateBackupJson(read.json, name, now);
   if (!checked.ok) return checked;
+  const packsInFile = isObject(read.json) && isObject(read.json.data) && Array.isArray(read.json.data.packs) ? read.json.data.packs.length : 0;
   const validated: ValidatedBackup = {
     kind: 'validated-backup',
     fileName: name,
     sizeBytes: read.sizeBytes,
     backup: checked.value,
-    summary: summarizeBackup(checked.value),
+    summary: { ...summarizeBackup(checked.value), packsDropped: packsInFile },
   };
   validatedRegistry.add(validated);
   return ok(validated);

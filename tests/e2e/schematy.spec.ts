@@ -14,9 +14,10 @@
  */
 import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
+import { CONTENT_RELEASE } from '../../src/domain/contentRelease';
 import { expect, test, type Locator, type Page } from '@playwright/test';
 import { startDistServer } from '../../scripts/serve-dist.mjs';
-import { buildCatalog, emptyUserState, parseRuntimeBank, startTest as domainStartTest, type DifficultyChoice, type Scope } from '../../src/domain/api';
+import { buildCatalog, emptyUserState, parseRuntimeBank, parseTrainingProfile, startTest as domainStartTest, type DifficultyChoice, type Scope } from '../../src/domain/api';
 import { BASE_PATH, openFresh, readStore, reloadUntilControlled, waitOfflineReady } from './helpers';
 
 interface RawFigure {
@@ -40,7 +41,7 @@ interface RawBank {
   figures: Record<string, RawFigure>;
 }
 
-const RAW_TEXT = readFileSync(resolve(process.cwd(), 'public/data/bank.json'), 'utf-8');
+const RAW_TEXT = readFileSync(resolve(process.cwd(), 'public', CONTENT_RELEASE.bankFile), 'utf-8');
 const RAW = JSON.parse(RAW_TEXT) as RawBank;
 
 interface Case {
@@ -78,7 +79,10 @@ function figureOf(id: string | null): RawFigure {
 function seedFor(c: Case): number {
   const parsed = parseRuntimeBank(JSON.parse(RAW_TEXT));
   if (!parsed.ok) throw new Error(parsed.error.messagePl);
-  const built = buildCatalog(parsed.value, []);
+  const retired = (JSON.parse(readFileSync(resolve(process.cwd(), 'public', CONTENT_RELEASE.retiredFile), 'utf-8')) as { ids: string[] }).ids;
+  const profileParsed = parseTrainingProfile(JSON.parse(readFileSync(resolve(process.cwd(), 'public', CONTENT_RELEASE.profileFile), 'utf-8')), CONTENT_RELEASE.bankVersion);
+  if (!profileParsed.ok) throw new Error(profileParsed.error.messagePl);
+  const built = buildCatalog(parsed.value, { retiredQuestionIds: retired, profile: profileParsed.value, requiredBankVersion: CONTENT_RELEASE.bankVersion });
   if (!built.ok) throw new Error(built.error.messagePl);
   let n = 0;
   const ctx = { now: '2026-10-23T08:00:00.000Z', nextDayStart: '2026-10-23T22:00:00.000Z', commandId: 'seed-search', newId: () => `id-${++n}` };

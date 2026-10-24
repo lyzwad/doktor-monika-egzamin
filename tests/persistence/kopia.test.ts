@@ -112,10 +112,13 @@ describe('podsumowanie kopii (ekran decyzji)', () => {
       totalSessions: 3,
       firstActivityAt: '2026-10-19T07:00:00.000Z',
       lastActivityAt: '2026-10-21T18:03:00.000Z',
+      legacySessions: 0,
+      interruptedSessions: 0,
+      packsDropped: 0,
     });
     expect(v.fileName).toBe('dme-kopia-2026-10-22.json');
     expect(v.kind).toBe('validated-backup');
-    expect(summarizeBackup(v.backup)).toEqual(v.summary);
+    expect({ ...summarizeBackup(v.backup), packsDropped: 0 }).toEqual(v.summary);
     repo.close();
   });
 
@@ -345,7 +348,7 @@ describe('F03 — błędny plik nie zmienia danych', () => {
     repo.close();
   });
 
-  it('paczka pytań w kopii z HTML/skryptem albo niezgodnym fingerprintem → odrzucenie', async () => {
+  it('paczka pytań w kopii (także z HTML/skryptem) → odrzucona przy wczytaniu, dane bez paczek', async () => {
     const { repo } = await seededRepository();
     const text = await exportText(repo);
     const base = sampleUserData().sessions[0]?.slots['s1-a']?.snapshot;
@@ -390,10 +393,13 @@ describe('F03 — błędny plik nie zmienia danych', () => {
       figures: {},
       summary: { added: 1, updated: 0, skippedSame: 0, skippedBlocked: 0, rejected: 0 },
     };
-    await expectRejected(repo, mutate(text, (f) => { f.data.packs = [pack] as never; }), 'InvalidBackup', /znaczniki HTML/);
-    const clean = structuredClone(pack);
-    (clean.questions[0] as { stem_pl: string }).stem_pl = 'Pytanie bez znaczników';
-    await expectRejected(repo, mutate(text, (f) => { f.data.packs = [clean] as never; }), 'InvalidBackup', /fingerprint pytania P-Q1/);
+    // Od V15 zaimportowane pule w kopii są ODRZUCANE w całości (nie sprawdzane i nie przywracane) — także złośliwe.
+    const parsed = await repo.parseAndValidateBackup(mutate(text, (f) => { f.data.packs = [pack] as never; }), 'plik.json');
+    expect(parsed.ok).toBe(true);
+    if (!parsed.ok) return;
+    expect(parsed.value.backup.data.packs).toEqual([]);
+    expect(parsed.value.summary.packsDropped).toBe(1);
+    expect(JSON.stringify(parsed.value.backup)).not.toContain('P-Q1');
     repo.close();
   });
 

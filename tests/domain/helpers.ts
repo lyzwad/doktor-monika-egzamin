@@ -20,7 +20,7 @@ import {
   type DomainOutcome,
   type IdKind,
   type OptionId,
-  type PackRecord,
+  type CatalogContent,
   type RuntimeBank,
   type RuntimeQuestion,
   type Session,
@@ -138,8 +138,8 @@ export function bank(questions: RuntimeQuestion[], version = 'test-bank-1'): Run
   };
 }
 
-export function catalogOf(questions: RuntimeQuestion[], packs: PackRecord[] = [], version?: string): Catalog {
-  const r = buildCatalog(bank(questions, version), packs);
+export function catalogOf(questions: RuntimeQuestion[], content: CatalogContent = {}, version?: string): Catalog {
+  const r = buildCatalog(bank(questions, version), content);
   if (!r.ok) throw new Error(r.error.messagePl);
   return r.value;
 }

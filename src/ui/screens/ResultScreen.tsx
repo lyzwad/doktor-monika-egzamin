@@ -16,8 +16,15 @@ import { RetrySheet, retryParts } from './RetrySheet';
 export function ResultScreen({ vm }: { vm: ResultVM }) {
   const controller = useController();
   const [retryOpen, setRetryOpen] = useState(false);
-  const completed = vm.status !== 'unfinished';
-  const statusText = vm.status === 'passed' ? 'Test zaliczony' : vm.status === 'failed' ? 'Próg nieosiągnięty' : 'Test niedokończony';
+  const completed = vm.status === 'passed' || vm.status === 'failed';
+  const statusText =
+    vm.status === 'passed'
+      ? 'Test zaliczony'
+      : vm.status === 'failed'
+        ? 'Próg nieosiągnięty'
+        : vm.status === 'interrupted'
+          ? 'Przerwany aktualizacją banku pytań'
+          : 'Test niedokończony';
   const statusIcon = vm.status === 'passed' ? 'check_circle' : vm.status === 'failed' ? 'info' : 'pause';
   const isRetryRound = vm.retry !== null && vm.retry.repeatedCount > 0;
   const preview = vm.retryPreview;
@@ -93,10 +100,13 @@ export function ResultScreen({ vm }: { vm: ResultVM }) {
             </div>
           </div>
         </section>
+        {vm.legacy ? <LegacyNotice /> : null}
         <p className="meta">
           {completed
             ? 'Wynik dotyczy tego treningu. Nie jest oceną komisji ani prognozą wyniku egzaminu.'
-            : 'Niedokończony test nie otrzymuje wyniku zaliczenia i nie trafia na wykres.'}
+            : vm.status === 'interrupted'
+              ? 'Test przerwany aktualizacją banku pytań nie otrzymuje wyniku, nie trafia na wykres i nie można go wznowić.'
+              : 'Niedokończony test nie otrzymuje wyniku zaliczenia i nie trafia na wykres.'}
         </p>
         <div className="btn-stack" style={{ marginTop: 4 }}>
           {vm.canStartRetry && preview ? (
@@ -107,10 +117,12 @@ export function ResultScreen({ vm }: { vm: ResultVM }) {
               </span>
             </button>
           ) : null}
-          <button type="button" className="btn btn--secondary btn--lg btn--block" onClick={() => controller.openReview(vm.sessionId, 'all')}>
-            Przejrzyj odpowiedzi
-          </button>
-          {vm.wrongCount > 0 ? (
+          {vm.legacy ? null : (
+            <button type="button" className="btn btn--secondary btn--lg btn--block" onClick={() => controller.openReview(vm.sessionId, 'all')}>
+              Przejrzyj odpowiedzi
+            </button>
+          )}
+          {vm.wrongCount > 0 && !vm.legacy ? (
             <button type="button" className="btn btn--secondary btn--lg btn--block" onClick={() => controller.openReview(vm.sessionId, 'wrong')}>
               Przejrzyj błędy ({vm.wrongCount})
             </button>
@@ -122,5 +134,20 @@ export function ResultScreen({ vm }: { vm: ResultVM }) {
       </Screen>
       {retryOpen && preview ? <RetrySheet sessionId={vm.sessionId} preview={preview} onClose={() => setRetryOpen(false)} /> : null}
     </>
+  );
+}
+
+/** Sesja z poprzedniej wersji banku: tylko podsumowanie (docs/MIGRACJA_V15.md). */
+export function LegacyNotice() {
+  return (
+    <div className="banner banner--info" role="note">
+      <div className="banner__row">
+        <Icon name="info" className="banner__icon" />
+        <span className="banner__lead">Treść pytań poprzedniej wersji banku nie jest dostępna</span>
+      </div>
+      <span className="banner__text">
+        Ta sesja pochodzi sprzed aktualizacji banku pytań do wersji V15. Zachowano podsumowanie wyniku; przegląd odpowiedzi i runda błędów nie są dostępne.
+      </span>
+    </div>
   );
 }

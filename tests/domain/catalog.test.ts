@@ -3,23 +3,8 @@
  * najnowsza rewizja, rejestr źródeł, bezpieczne URL i treść bez HTML.
  */
 import { describe, expect, it } from 'vitest';
-import { buildCatalog, parseRuntimeBank, type PackRecord, type RuntimeQuestion } from '../../src/domain/api';
+import { buildCatalog, parseRetiredIds, parseRuntimeBank, parseTrainingProfile, type RuntimeQuestion } from '../../src/domain/api';
 import { bank, catalogOf, q } from './helpers';
-
-function pack(id: string, questions: RuntimeQuestion[], importedAt = '2026-10-23T10:00:00.000Z'): PackRecord {
-  return {
-    id,
-    importedAt,
-    fileName: `${id}.json`,
-    bankVersion: `pack-${id}`,
-    sourceFormat: 'runtime-v1',
-    questions,
-    sources: {},
-    topics: {},
-    figures: {},
-    summary: { added: questions.length, updated: 0, skippedSame: 0, skippedBlocked: 0, rejected: 0 },
-  };
-}
 
 describe('parseRuntimeBank', () => {
   it('przyjmuje poprawny plik bez zakładania liczby pytań', () => {
@@ -75,7 +60,7 @@ describe('buildCatalog — walidacja rekordów (B01)', () => {
   ];
 
   it.each(bad)('%s → issue %s, poza pulą', (_label, record, code) => {
-    const r = buildCatalog(bank([good, record]), []);
+    const r = buildCatalog(bank([good, record]));
     expect(r.ok).toBe(true);
     if (!r.ok) return;
     expect(r.value.questions.map((x) => x.id)).toEqual(['OK-1']);
@@ -103,7 +88,7 @@ describe('buildCatalog — walidacja rekordów (B01)', () => {
     const b = bank([good]);
     b.sources.S1 = { ...b.sources.S1!, url: 'javascript:alert(1)' };
     b.sources.S2 = { ...b.sources.S1!, id: 'S2', url: 'http://example.org' };
-    const r = buildCatalog(b, []);
+    const r = buildCatalog(b);
     expect(r.ok).toBe(true);
     if (!r.ok) return;
     expect(r.value.sources.S1?.url).toBeNull();
@@ -111,23 +96,40 @@ describe('buildCatalog — walidacja rekordów (B01)', () => {
     expect(r.value.issues.filter((i) => i.code === 'UNSAFE_URL')).toHaveLength(2);
   });
 
-  it('paczka z wyższą rewizją zastępuje pytanie, z tą samą rewizją i inną treścią — odrzucona', () => {
-    const rev2 = q({ id: 'OK-1', revision: 2, stem: 'Poprawiona treść OK-1?' });
-    const conflict = q({ id: 'OK-1', revision: 1, stem: 'Inna treść bez wyższej wersji?' });
-    const c = catalogOf([good], [pack('p1', [rev2])]);
-    expect(c.questionsById['OK-1']?.revision).toBe(2);
-    expect(c.questionsById['OK-1']?.origin).toEqual({ kind: 'pack', packId: 'p1', bankVersion: 'pack-p1' });
-    expect(c.bankVersions).toEqual(['test-bank-1', 'pack-p1']);
-    const c2 = catalogOf([good], [pack('p2', [conflict])]);
-    expect(c2.questionsById['OK-1']?.stem).toBe(good.stem_pl);
-    expect(c2.issues.map((i) => i.code)).toContain('REVISION_CONFLICT');
+  it('V15: katalog nie łączy paczek — tylko bank; ID wyłączone (retired) poza katalogiem; asercja wersji', () => {
+    const other = q({ id: 'OK-2', stem: 'Drugie pytanie?', family: 'F2' });
+    const c = catalogOf([good, other], { retiredQuestionIds: ['OK-2'] });
+    expect(c.questions.map((x) => x.id)).toEqual(['OK-1']);
+    expect(c.retiredQuestionIds).toEqual(['OK-2']);
+    expect(c.issues.map((i) => i.code)).toContain('RETIRED');
+    expect(c.bankVersions).toEqual(['test-bank-1']);
+    const wrong = buildCatalog(bank([good]), { requiredBankVersion: 'inna-wersja' });
+    expect(wrong.ok).toBe(false);
+    if (!wrong.ok) expect(wrong.error.code).toBe('INVALID_BANK');
   });
 
   it('ta sama treść pod nowym ID → DUPLICATE_FINGERPRINT (zostaje pierwsze wystąpienie)', () => {
     const copy = q({ id: 'NOWE-ID', stem: good.stem_pl, options: good.options.map((o) => o.text_pl) as [string, string, string, string], family: 'INNA-RODZINA' });
-    const c = catalogOf([good], [pack('p1', [copy])]);
+    const c = catalogOf([good, copy]);
     expect(c.questions.map((x) => x.id)).toEqual(['OK-1']);
     expect(c.issues.map((i) => i.code)).toContain('DUPLICATE_FINGERPRINT');
+  });
+
+  it('profil treningowy: punkty bazowe, grupy rozłączne, inna wersja odrzucona; pytanie bez grupy poza katalogiem', () => {
+    const raw = { bank_version: 'test-bank-1', weights: { skin: 0.35, facial_anatomy: 0.25, other: 0.4 }, groups: { skin: ['OK-1'], facial_anatomy: [], other: [] } };
+    const p = parseTrainingProfile(raw, 'test-bank-1');
+    expect(p.ok).toBe(true);
+    if (!p.ok) return;
+    expect(p.value.weightsBp).toEqual({ skin: 3500, facial_anatomy: 2500, other: 4000 });
+    expect(p.value.groupOrder).toEqual(['skin', 'facial_anatomy', 'other']);
+    expect(parseTrainingProfile(raw, 'inna').ok).toBe(false);
+    expect(parseTrainingProfile({ ...raw, groups: { skin: ['OK-1'], facial_anatomy: ['OK-1'], other: [] } }, 'test-bank-1').ok).toBe(false);
+    expect(parseTrainingProfile({ ...raw, weights: { skin: 0.5, facial_anatomy: 0.25, other: 0.4 } }, 'test-bank-1').ok).toBe(false);
+    const c = catalogOf([good, q({ id: 'OK-3', stem: 'Bez grupy?', family: 'F3' })], { profile: p.value });
+    expect(c.questions.map((x) => x.id)).toEqual(['OK-1']);
+    expect(c.issues.map((i) => i.code)).toContain('PROFILE_GROUP_MISSING');
+    expect(parseRetiredIds({ bank_version: 'test-bank-1', ids: ['A', 'A'] }, 'test-bank-1').ok).toBe(false);
+    expect(parseRetiredIds({ bank_version: 'x', ids: [] }, 'test-bank-1').ok).toBe(false);
   });
 
   it('powtórzone ID w tym samym pliku → DUPLICATE_ID', () => {

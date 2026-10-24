@@ -8,7 +8,8 @@
  * Test pilnuje, żeby raport nie rozjechał się z repozytorium:
  * - wymagane sekcje i pełna macierz A01–G07 z dozwolonymi wynikami;
  * - G05 = NOT RUN, dopóki protokół z fizycznego iPhone'a (docs/INSTALACJA_IPHONE.md §6) ma status NOT RUN;
- * - liczby puli i statusy treści zgodne z `public/data/bank.json` (wersja, SHA-256, `counts`, statusy pytań);
+ * - liczby puli i statusy treści zgodne z bankiem V15 `public/data/bank-<sha12>.json` (wersja, SHA-256, `counts`,
+ *   statusy pytań, 133 wyłączone ID); poziom poniżej 1000 pytań nazwany wprost (A03 nie PASS);
  * - każde pominięcie (`test.skip`) w testach e2e opisane w sekcji testów niewykonanych;
  * - brak adresu wdrożenia w dokumentacji, jeśli raport mówi, że wdrożenia nie ma (i odwrotnie);
  * - README odsyła do raportu.
@@ -19,13 +20,15 @@ import { createHash } from 'node:crypto';
 import { readdirSync, readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { describe, expect, it } from 'vitest';
+import { CONTENT_RELEASE } from '../../src/domain/contentRelease';
 
 const root = process.cwd();
 const read = (path: string): string => readFileSync(resolve(root, path), 'utf-8');
 
 const REPORT_PATH = 'docs/RAPORT_KONTROLI.md';
 const report = read(REPORT_PATH);
-const bankRaw = readFileSync(resolve(root, 'public/data/bank.json'));
+const bankRaw = readFileSync(resolve(root, 'public', CONTENT_RELEASE.bankFile));
+const retired = JSON.parse(readFileSync(resolve(root, 'public', CONTENT_RELEASE.retiredFile), 'utf-8')) as { ids: string[] };
 
 interface BankFile {
   bank_version: string;
@@ -142,10 +145,23 @@ describe('G07 — raport kontroli: zgodność z rzeczywistą pulą', () => {
   const pool = section('Pula pytań');
   const review = section('Status recenzji treści');
 
-  it('wersja i suma SHA-256 banku zgodne z public/data/bank.json', () => {
+  it('wersja i suma SHA-256 banku zgodne z plikiem banku V15', () => {
     const sha = createHash('sha256').update(bankRaw).digest('hex');
+    expect(sha).toBe(CONTENT_RELEASE.bankSha256);
     expect(hasRow(pool, 'bank_version', bank.bank_version)).toBe(true);
     expect(pool).toContain(sha);
+    expect(pool).toContain(CONTENT_RELEASE.bankFile);
+    expect(hasRow(pool, 'retired_question_ids', retired.ids.length)).toBe(true);
+  });
+
+  it('poziom z mniej niż 1000 pytań jest nazwany wprost, a A03 nie jest PASS', () => {
+    const low = Object.entries(bank.counts.by_difficulty).filter(([, n]) => n < 1000);
+    if (low.length === 0) return;
+    const a03 = /^\|\s*A03\s*\|\s*([^|]+?)\s*\|/m.exec(section('Macierz kryteriów'))?.[1];
+    expect(a03).not.toBe('PASS');
+    for (const [level, n] of low) {
+      expect(pool, level).toContain(`${level} ${n} < 1000`);
+    }
   });
 
   it('liczebności zgodne z bank.counts (pytania, rodziny, domeny, poziomy, schematy)', () => {

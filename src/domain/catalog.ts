@@ -2,8 +2,10 @@
  * Runtime bank i katalog pytań (DECYZJE §2, §5, §10; 03_ARCHITEKTURA §2, §9).
  *
  * - `parseRuntimeBank` — kontrola struktury pliku `bank.json` (bez zakładania liczby pytań).
- * - `buildCatalog` — bank + paczki, najnowsza POPRAWNA rewizja danego `id`, mapowanie na camelCase.
+ * - `buildCatalog` — WYŁĄCZNIE wbudowany bank (od V15 bez paczek importowanych), mapowanie na camelCase,
+ *   wykluczenie ID z `retired_question_ids.json`, przypisanie grup profilu treningowego.
  *   Niepoprawne rekordy trafiają do `catalog.issues` i poza pulę.
+ * - `parseRetiredIds`, `parseTrainingProfile` — kontrola plików towarzyszących bankowi V15.
  * - `checkRuntimeQuestion` — wspólna walidacja rekordu (katalog i import paczek).
  */
 import { normalizeText } from './fingerprint';
@@ -20,17 +22,14 @@ import {
   type CatalogTopic,
   type CommandResult,
   type FigureId,
-  type PackRecord,
   type QuestionId,
   type QuestionOrigin,
   type RuntimeBank,
   type RuntimeBankCounts,
-  type RuntimeFigure,
   type RuntimeQuestion,
-  type RuntimeSource,
-  type RuntimeTopic,
   type SourceId,
   type TopicId,
+  type TrainingProfile,
 } from './types';
 import { fail, isDifficulty, isDomainId, isNonEmptyString, isRecord, ok } from './util';
 
@@ -382,139 +381,95 @@ export function bankSummaryOf(bank: RuntimeBank, questions: readonly CatalogQues
 /* buildCatalog                                                               */
 /* ========================================================================== */
 
-interface Entry {
-  raw: unknown;
-  origin: QuestionOrigin;
-  index: number;
-}
-
-function sameContent(a: CatalogQuestion, b: CatalogQuestion): boolean {
-  return (
-    a.fingerprint === b.fingerprint &&
-    a.correctOptionId === b.correctOptionId &&
-    normalizeText(a.explanation) === normalizeText(b.explanation) &&
-    a.familyId === b.familyId &&
-    a.domainId === b.domainId &&
-    a.difficulty === b.difficulty
-  );
-}
-
-/** Paczki w kolejności importu (data, potem identyfikator) — deterministycznie. */
-export function sortPacks(packs: readonly PackRecord[]): PackRecord[] {
-  return [...packs].sort((a, b) => (a.importedAt < b.importedAt ? -1 : a.importedAt > b.importedAt ? 1 : a.id < b.id ? -1 : a.id > b.id ? 1 : 0));
+/** Pliki towarzyszące bankowi (V15): wyłączone ID, profil treningowy, wymagana wersja. */
+export interface CatalogContent {
+  /** ID wyłączone z aktywnej puli — nigdy nie trafiają do katalogu (wszystkie tryby). */
+  retiredQuestionIds?: readonly string[];
+  /** Profil treningowy (grupy ID i udziały) albo `null`. */
+  profile?: TrainingProfile | null;
+  /** Jedyna dopuszczalna `bank_version` — inna wersja pliku = `INVALID_BANK` (asercja wersji banku). */
+  requiredBankVersion?: string;
 }
 
 /**
- * Buduje katalog: bank + paczki (najnowsza poprawna rewizja danego `id`), mapowanie na camelCase,
- * walidacja rekordów. Niepoprawne rekordy → `catalog.issues`, poza pulą. Identyczna treść
- * (fingerprint) pod innym `id` → `DUPLICATE_FINGERPRINT` (zostaje pierwsze wystąpienie).
+ * Buduje katalog WYŁĄCZNIE z wbudowanego banku (od V15 katalog nie łączy żadnych paczek): walidacja
+ * rekordów, mapowanie na camelCase, wykluczenie ID wyłączonych, grupy profilu. Niepoprawne rekordy →
+ * `catalog.issues`, poza pulą. Identyczna treść (fingerprint) pod innym `id` → `DUPLICATE_FINGERPRINT`.
  */
-export function buildCatalog(bank: RuntimeBank, packs: readonly PackRecord[]): CommandResult<Catalog> {
+export function buildCatalog(bank: RuntimeBank, content: CatalogContent = {}): CommandResult<Catalog> {
   if (!isRecord(bank) || bank.format !== 'dme-runtime-bank' || bank.format_version !== 1 || !Array.isArray(bank.questions)) {
     return fail('INVALID_BANK', 'Plik pytań ma nieprawidłowy format.');
   }
+  if (content.requiredBankVersion !== undefined && bank.bank_version !== content.requiredBankVersion) {
+    return fail('INVALID_BANK', `Plik pytań ma nieoczekiwaną wersję (${String(bank.bank_version)}) — aplikacja używa wyłącznie banku ${content.requiredBankVersion}.`, {
+      found: String(bank.bank_version),
+      required: content.requiredBankVersion,
+    });
+  }
+  const profile = content.profile ?? null;
+  if (profile && profile.bankVersion !== bank.bank_version) {
+    return fail('INVALID_BANK', 'Profil treningowy dotyczy innej wersji banku pytań.', { profile: profile.bankVersion, bank: bank.bank_version });
+  }
+  const retired = new Set<string>(content.retiredQuestionIds ?? []);
   const issues: CatalogIssue[] = [];
   const bankOrigin: QuestionOrigin = { kind: 'bank', bankVersion: bank.bank_version };
-  const orderedPacks = sortPacks(packs);
 
-  // Rejestry: bank pierwszy, paczki uzupełniają (pierwszy wpis wygrywa).
   const sources: Record<SourceId, CatalogSource> = {};
   const topics: Record<TopicId, CatalogTopic> = {};
   const figures: Record<FigureId, CatalogFigure> = {};
-  const addRegistries = (
-    srcs: Record<SourceId, RuntimeSource> | undefined,
-    tops: Record<TopicId, RuntimeTopic> | undefined,
-    figs: Record<FigureId, RuntimeFigure> | undefined,
-    origin: QuestionOrigin,
-  ): void => {
-    for (const [id, raw] of Object.entries(isRecord(srcs) ? srcs : {})) {
-      if (sources[id]) continue;
-      const src = toCatalogSource(id, raw, () =>
-        issues.push({ questionId: null, origin, code: 'UNSAFE_URL', messagePl: `Źródło ${id}: adres publikacji pominięty (dozwolone tylko https).` }),
-      );
-      if (src) sources[id] = src;
-      else issues.push({ questionId: null, origin, code: 'INVALID_SOURCE', messagePl: `Źródło ${id}: nieprawidłowy rekord.` });
-    }
-    for (const [id, raw] of Object.entries(isRecord(tops) ? tops : {})) {
-      if (topics[id]) continue;
-      const t = toCatalogTopic(id, raw);
-      if (t) topics[id] = t;
-    }
-    for (const [id, raw] of Object.entries(isRecord(figs) ? figs : {})) {
-      if (figures[id]) continue;
-      const f = toCatalogFigure(id, raw);
-      if (f) figures[id] = f;
-      else issues.push({ questionId: null, origin, code: 'UNSAFE_FIGURE', messagePl: `Figura ${id}: nieprawidłowa ścieżka albo opis.` });
-    }
-  };
-  addRegistries(bank.sources, bank.topics, bank.figures, bankOrigin);
-  for (const p of orderedPacks) {
-    addRegistries(p.sources, p.topics, p.figures, { kind: 'pack', packId: p.id, bankVersion: p.bankVersion });
+  for (const [id, raw] of Object.entries(isRecord(bank.sources) ? bank.sources : {})) {
+    const src = toCatalogSource(id, raw, () =>
+      issues.push({ questionId: null, origin: bankOrigin, code: 'UNSAFE_URL', messagePl: `Źródło ${id}: adres publikacji pominięty (dozwolone tylko https).` }),
+    );
+    if (src) sources[id] = src;
+    else issues.push({ questionId: null, origin: bankOrigin, code: 'INVALID_SOURCE', messagePl: `Źródło ${id}: nieprawidłowy rekord.` });
+  }
+  for (const [id, raw] of Object.entries(isRecord(bank.topics) ? bank.topics : {})) {
+    const t = toCatalogTopic(id, raw);
+    if (t) topics[id] = t;
+  }
+  for (const [id, raw] of Object.entries(isRecord(bank.figures) ? bank.figures : {})) {
+    const f = toCatalogFigure(id, raw);
+    if (f) figures[id] = f;
+    else issues.push({ questionId: null, origin: bankOrigin, code: 'UNSAFE_FIGURE', messagePl: `Figura ${id}: nieprawidłowa ścieżka albo opis.` });
   }
   const registries: QuestionRegistries = {
     hasSource: (id) => sources[id] !== undefined,
     hasFigure: (id) => figures[id] !== undefined,
   };
 
-  const entries: Entry[] = bank.questions.map((raw, index) => ({ raw, origin: bankOrigin, index }));
-  for (const p of orderedPacks) {
-    const origin: QuestionOrigin = { kind: 'pack', packId: p.id, bankVersion: p.bankVersion };
-    (Array.isArray(p.questions) ? p.questions : []).forEach((raw, index) => entries.push({ raw, origin, index }));
-  }
-
-  // Najnowsza poprawna rewizja każdego id; kolejność = pierwsze pojawienie się id.
-  const order: QuestionId[] = [];
-  const chosen = new Map<QuestionId, CatalogQuestion>();
-  const seenInSameOrigin = new Set<string>();
-  for (const entry of entries) {
-    const found = checkRuntimeQuestion(entry.raw, registries, entry.index);
-    const qid = isRecord(entry.raw) && isNonEmptyString(entry.raw.id) ? entry.raw.id : null;
-    if (found.length > 0) {
-      for (const f of found) issues.push({ questionId: qid, origin: entry.origin, code: f.code, messagePl: f.messagePl });
-      continue;
-    }
-    const q = toCatalogQuestion(entry.raw as RuntimeQuestion, entry.origin);
-    const originKey = `${entry.origin.kind === 'bank' ? 'bank' : `pack:${entry.origin.packId}`}|${q.id}`;
-    if (seenInSameOrigin.has(originKey)) {
-      issues.push({ questionId: q.id, origin: entry.origin, code: 'DUPLICATE_ID', messagePl: `${q.id}: powtórzony identyfikator w tym samym pliku.` });
-      continue;
-    }
-    seenInSameOrigin.add(originKey);
-    const existing = chosen.get(q.id);
-    if (!existing) {
-      chosen.set(q.id, q);
-      order.push(q.id);
-    } else if (q.revision > existing.revision) {
-      chosen.set(q.id, q);
-    } else if (q.revision === existing.revision && !sameContent(q, existing)) {
-      issues.push({
-        questionId: q.id,
-        origin: entry.origin,
-        code: 'REVISION_CONFLICT',
-        messagePl: `${q.id}: inna treść bez wyższej wersji — pominięto.`,
-      });
-    }
-  }
-
-  // Ta sama treść pod innym id → zostaje pierwsze wystąpienie.
   const byFingerprint = new Map<string, QuestionId>();
+  const seenIds = new Set<QuestionId>();
   const questions: CatalogQuestion[] = [];
-  for (const id of order) {
-    const q = chosen.get(id);
-    if (!q) continue;
+  bank.questions.forEach((raw, index) => {
+    const found = checkRuntimeQuestion(raw, registries, index);
+    const qid = isRecord(raw) && isNonEmptyString(raw.id) ? raw.id : null;
+    if (found.length > 0) {
+      for (const f of found) issues.push({ questionId: qid, origin: bankOrigin, code: f.code, messagePl: f.messagePl });
+      return;
+    }
+    const q = toCatalogQuestion(raw as RuntimeQuestion, bankOrigin);
+    if (retired.has(q.id)) {
+      issues.push({ questionId: q.id, origin: bankOrigin, code: 'RETIRED', messagePl: `${q.id}: pytanie wyłączone z aktywnej puli — pominięto.` });
+      return;
+    }
+    if (seenIds.has(q.id)) {
+      issues.push({ questionId: q.id, origin: bankOrigin, code: 'DUPLICATE_ID', messagePl: `${q.id}: powtórzony identyfikator w tym samym pliku.` });
+      return;
+    }
+    seenIds.add(q.id);
     const other = byFingerprint.get(q.fingerprint);
     if (other !== undefined) {
-      issues.push({
-        questionId: q.id,
-        origin: q.origin,
-        code: 'DUPLICATE_FINGERPRINT',
-        messagePl: `${q.id}: ta sama treść co ${other} — pominięto.`,
-      });
-      continue;
+      issues.push({ questionId: q.id, origin: bankOrigin, code: 'DUPLICATE_FINGERPRINT', messagePl: `${q.id}: ta sama treść co ${other} — pominięto.` });
+      return;
+    }
+    if (profile && profile.groupOf[q.id] === undefined) {
+      issues.push({ questionId: q.id, origin: bankOrigin, code: 'PROFILE_GROUP_MISSING', messagePl: `${q.id}: brak grupy w profilu treningowym — pominięto.` });
+      return;
     }
     byFingerprint.set(q.fingerprint, q.id);
     questions.push(q);
-  }
+  });
   const questionsById: Record<QuestionId, CatalogQuestion> = {};
   for (const q of questions) questionsById[q.id] = q;
 
@@ -527,11 +482,6 @@ export function buildCatalog(bank: RuntimeBank, packs: readonly PackRecord[]): C
   }
   for (const id of DOMAIN_IDS) {
     if (!domainSeen.has(id) && questions.some((q) => q.domainId === id)) domains.push({ id, title: id, description: '' });
-  }
-
-  const bankVersions: BankVersion[] = [];
-  for (const v of [bank.bank_version, ...orderedPacks.map((p) => p.bankVersion)]) {
-    if (!bankVersions.includes(v)) bankVersions.push(v);
   }
 
   const bankSummary = bankSummaryOf(bank, questions);
@@ -547,7 +497,7 @@ export function buildCatalog(bank: RuntimeBank, packs: readonly PackRecord[]): C
   return ok({
     bankSummary,
     bankVersion: bank.bank_version,
-    bankVersions,
+    bankVersions: [bank.bank_version] as BankVersion[],
     builtOn: strOr(bank.built_on, ''),
     statusPl: strOr(bank.status_pl, ''),
     clinicalSignoff: bank.clinical_signoff === true,
@@ -558,7 +508,60 @@ export function buildCatalog(bank: RuntimeBank, packs: readonly PackRecord[]): C
     sources,
     figures,
     issues,
+    retiredQuestionIds: [...retired].sort(),
+    profile,
   });
+}
+
+/* ========================================================================== */
+/* Pliki towarzyszące V15: wyłączone ID, profil treningowy                    */
+/* ========================================================================== */
+
+/** `retired_question_ids.json`: `{ bank_version, reason, ids[] }`. Inna wersja albo kształt → `INVALID_BANK`. */
+export function parseRetiredIds(input: unknown, requiredBankVersion: string): CommandResult<string[]> {
+  if (!isRecord(input) || input.bank_version !== requiredBankVersion) {
+    return fail('INVALID_BANK', 'Lista wyłączonych pytań dotyczy innej wersji banku albo ma nieprawidłowy format.');
+  }
+  const ids = input.ids;
+  if (!Array.isArray(ids) || !ids.every(isNonEmptyString) || new Set(ids).size !== ids.length) {
+    return fail('INVALID_BANK', 'Lista wyłączonych pytań ma nieprawidłowy format.');
+  }
+  return ok([...ids]);
+}
+
+/**
+ * `training_profile.json`: `{ bank_version, weights{grupa: udział}, groups{grupa: [ID]} }`. Udziały są
+ * zamieniane na punkty bazowe (suma dokładnie 10 000), każde ID należy do dokładnie jednej grupy.
+ */
+export function parseTrainingProfile(input: unknown, requiredBankVersion: string): CommandResult<TrainingProfile> {
+  const bad = (why: string): CommandResult<TrainingProfile> => fail('INVALID_BANK', `Profil treningowy ma nieprawidłowy format (${why}).`);
+  if (!isRecord(input)) return bad('to nie jest obiekt JSON');
+  if (input.bank_version !== requiredBankVersion) return bad('inna wersja banku');
+  if (!isRecord(input.weights) || !isRecord(input.groups)) return bad('brak udziałów albo grup');
+  const groupOrder = Object.keys(input.weights);
+  if (groupOrder.length === 0) return bad('brak grup');
+  const weightsBp: Record<string, number> = {};
+  let total = 0;
+  for (const g of groupOrder) {
+    const w = input.weights[g];
+    if (typeof w !== 'number' || !Number.isFinite(w) || w < 0) return bad(`udział grupy ${g}`);
+    const bp = Math.round(w * 10000);
+    if (Math.abs(bp - w * 10000) > 1e-6) return bad(`udział grupy ${g} ma więcej niż 4 miejsca po przecinku`);
+    weightsBp[g] = bp;
+    total += bp;
+  }
+  if (total !== 10000) return bad('udziały nie sumują się do 1');
+  if (Object.keys(input.groups).some((g) => !groupOrder.includes(g))) return bad('grupa bez udziału');
+  const groupOf: Record<string, string> = {};
+  for (const g of groupOrder) {
+    const ids = input.groups[g];
+    if (!Array.isArray(ids) || !ids.every(isNonEmptyString)) return bad(`lista ID grupy ${g}`);
+    for (const id of ids) {
+      if (groupOf[id] !== undefined) return bad(`ID ${id} w więcej niż jednej grupie`);
+      groupOf[id] = g;
+    }
+  }
+  return ok({ bankVersion: requiredBankVersion, groupOrder, weightsBp, groupOf });
 }
 
 /** Tytuł domeny z katalogu (zapasowo identyfikator). */

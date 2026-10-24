@@ -43,6 +43,9 @@ import {
   undoReport as domainUndoReport,
   updateSettings,
   validateTestN,
+  parseRetiredIds,
+  parseTrainingProfile,
+  CONTENT_RELEASE,
   DEFAULT_TEST_N,
   type DomainCommandResult,
 } from '../domain/api';
@@ -53,8 +56,8 @@ import type {
   DmeEvent,
   DomainOutcome,
   HistoryFilter,
-  PackRecord,
   RuntimeBank,
+  TrainingProfile,
   Session,
   SessionConfig,
   SessionId,
@@ -64,7 +67,6 @@ import type {
   UserState,
 } from '../domain/types';
 import type { PersistenceError, ValidatedBackup } from '../persistence/api';
-import { parseAndValidatePack } from '../persistence/packs';
 import { isUpdateSafe } from '../pwa/updateGuard';
 import type { ActionResult, AppController, AppState, ControllerDeps, CreateAppController } from './controller';
 import { HOME_ROUTE, parseHash, routeToHash, sameRoute, type HistoryTab, type ResultOrigin, type Route } from './routes';
@@ -110,6 +112,19 @@ const MSG_UNSAVED_DATA =
   'Najpierw zapisz poprzednią zmianę („Spróbuj zapisać ponownie”). Dopiero potem można importować pulę lub wczytać kopię — dane na urządzeniu nie zostały zmienione.';
 
 const MSG_CLOSING = 'Sesja jest właśnie zamykana.';
+
+/** Import dodatkowych pul jest wyłączony (docs/MIGRACJA_V15.md). */
+export const MSG_PACKS_DISABLED = 'Aplikacja używa wyłącznie banku pytań V15 — import dodatkowych pul pytań jest wyłączony.';
+const MSG_MIGRATION_FAILED =
+  'Aktualizacja danych nie powiodła się. Dane na urządzeniu pozostały w poprzedniej wersji i nie zostały usunięte; pytania będą dostępne po udanej aktualizacji. Spróbuj ponownie.';
+const MSG_MIGRATION_BLOCKED =
+  'Aktualizacja danych czeka: aplikacja jest otwarta w innej karcie lub oknie ze starszą wersją. Zamknij pozostałe karty z aplikacją i dotknij „Spróbuj ponownie”.';
+const MSG_CONTENT_UPDATE_FAILED =
+  'Nie udało się uruchomić nowej wersji banku pytań. Sprawdź połączenie z internetem i spróbuj ponownie.';
+/** Czas na przejęcie strony przez nową wersję po wykryciu nowszego banku (potem — błąd z ponowieniem). */
+const CONTENT_UPDATE_TIMEOUT_MS = 60_000;
+/** Limit czasu sprawdzenia pliku wydania przy starcie (offline/wolna sieć nie blokuje nauki). */
+const RELEASE_CHECK_TIMEOUT_MS = 2500;
 
 const TOAST_HIDE_MS = 4500;
 
@@ -187,8 +202,11 @@ export const createAppController: CreateAppController = (deps: ControllerDeps): 
   let boot: BootState = { phase: 'loading', stage: 'opening-storage' };
   let bank: RuntimeBank | null = null;
   let catalog: Catalog | null = null;
-  let packs: PackRecord[] = [];
+  let retiredIds: string[] = [];
+  let profile: TrainingProfile | null = null;
   let user: UserState | null = null;
+  /** Wykryto nowszą wersję treści — przeładowanie przed pokazaniem pytań. */
+  let contentUpdating = false;
   let route: Route = HOME_ROUTE;
   let viewPosition = 0;
   let drafts: Record<SessionKind, ConfigDraft> = {
@@ -247,7 +265,6 @@ export const createAppController: CreateAppController = (deps: ControllerDeps): 
     return {
       catalog: catalog as Catalog,
       user: user as UserState,
-      packs,
       now: platform.nowIso(),
       route,
       viewPosition,
@@ -548,14 +565,32 @@ export const createAppController: CreateAppController = (deps: ControllerDeps): 
     }
   }
 
+  /** Katalog WYŁĄCZNIE z banku V15 (bez paczek), z wyłączonymi ID i profilem; asercja wersji i liczb. */
+  function buildContentCatalog(): ReturnType<typeof buildCatalog> {
+    if (!bank) return { ok: false, error: { code: 'INVALID_BANK', messagePl: 'Brak banku pytań.' } };
+    const built = buildCatalog(bank, { retiredQuestionIds: retiredIds, profile, requiredBankVersion: CONTENT_RELEASE.bankVersion });
+    if (!built.ok) return built;
+    const sum = built.value.bankSummary;
+    const c = CONTENT_RELEASE.counts;
+    if (
+      sum.questions !== c.questions ||
+      built.value.questions.length !== c.questions ||
+      (sum.byDifficulty.basic ?? 0) !== c.basic ||
+      (sum.byDifficulty.intermediate ?? 0) !== c.intermediate ||
+      (sum.byDifficulty.advanced ?? 0) !== c.advanced ||
+      built.value.retiredQuestionIds.length !== c.retired
+    ) {
+      return { ok: false, error: { code: 'INVALID_BANK', messagePl: 'Liczby pytań w pliku nie zgadzają się z bankiem V15.' } };
+    }
+    return built;
+  }
+
   async function reloadUserData(): Promise<boolean> {
     const loaded = await repository.loadUserState();
-    const listed = await repository.listPacks();
-    if (!loaded.ok || !listed.ok || !bank) return false;
-    const built = buildCatalog(bank, listed.value);
+    if (!loaded.ok || !bank) return false;
+    const built = buildContentCatalog();
     if (!built.ok) return false;
     user = loaded.value;
-    packs = listed.value;
     catalog = built.value;
     return true;
   }
@@ -576,7 +611,9 @@ export const createAppController: CreateAppController = (deps: ControllerDeps): 
   }
 
   function storageFatal(error: PersistenceError): void {
-    if (error.code === 'MigrationFailed') fatal('MIGRATION_FAILED', error.messagePl);
+    // Migracja do V15 nieudana albo zablokowana: baza zostaje w poprzedniej wersji, pytań nie pokazujemy.
+    if (error.code === 'MigrationFailed') fatal('MIGRATION_FAILED', MSG_MIGRATION_FAILED);
+    else if (error.code === 'Blocked') fatal('MIGRATION_BLOCKED', MSG_MIGRATION_BLOCKED);
     else if (error.code === 'Unavailable' || error.code === 'QuotaExceeded') fatal('STORAGE_UNAVAILABLE', error.messagePl + MSG_NO_STORAGE_SUFFIX);
     else fatal('STORAGE_UNAVAILABLE', error.messagePl);
   }
@@ -584,6 +621,13 @@ export const createAppController: CreateAppController = (deps: ControllerDeps): 
   async function runBoot(): Promise<void> {
     boot = { phase: 'loading', stage: 'opening-storage' };
     publish();
+    // Migracja schematu (podmiana treści na V15) — komunikat „Aktualizacja banku pytań…”.
+    repository.setUpgradeListener((info) => {
+      if (info.from > 0) {
+        boot = { phase: 'loading', stage: 'migrating' };
+        publish();
+      }
+    });
     let opened;
     try {
       opened = await repository.open();
@@ -606,12 +650,14 @@ export const createAppController: CreateAppController = (deps: ControllerDeps): 
         fatal('BANK_UNAVAILABLE', MSG_BANK_UNAVAILABLE);
         return;
       }
-      const parsed = parseRuntimeBank(raw);
-      if (!parsed.ok) {
-        fatal('BANK_INVALID', `Plik pytań jest uszkodzony albo ma nieobsługiwany format. ${parsed.error.messagePl}`);
+      const content = parseContent(raw);
+      if (!content.ok) {
+        fatal('BANK_INVALID', `Plik pytań jest uszkodzony albo nie jest bankiem V15. ${content.messagePl}`);
         return;
       }
-      bank = parsed.value;
+      bank = content.bank;
+      retiredIds = content.retired;
+      profile = content.profile;
     }
 
     boot = { phase: 'loading', stage: 'loading-user-data' };
@@ -621,18 +667,18 @@ export const createAppController: CreateAppController = (deps: ControllerDeps): 
       storageFatal(loaded.error);
       return;
     }
-    const listed = await repository.listPacks();
-    if (!listed.ok) {
-      storageFatal(listed.error);
-      return;
-    }
-    const built = buildCatalog(bank, listed.value);
+    const built = buildContentCatalog();
     if (!built.ok) {
       fatal('BANK_INVALID', `Nie udało się zbudować katalogu pytań. ${built.error.messagePl}`);
       return;
     }
+    // Nowsza wersja treści na serwerze (np. V16) — przeładowanie PRZED pokazaniem pytań (fallback, gdy
+    // nowy Service Worker nie przejął strony sam). Offline / brak pliku: start na bieżącym banku V15.
+    if (await newerContentAvailable()) {
+      void startContentUpdate();
+      return;
+    }
     user = loaded.value;
-    packs = listed.value;
     catalog = built.value;
     if (catalog.issues.length > 0) console.warn(`[DME] Pominięto ${catalog.issues.length} niepoprawnych rekordów pytań`, catalog.issues);
     resetDrafts();
@@ -648,6 +694,60 @@ export const createAppController: CreateAppController = (deps: ControllerDeps): 
     void refreshStorage();
     // Nowy bank (np. po aktualizacji aplikacji) może uzupełnić pozycje czekające na zastępstwo (LOG-02).
     void fillAwaitingIfNeeded(true);
+  }
+
+  type ParsedContent = { ok: true; bank: RuntimeBank; retired: string[]; profile: TrainingProfile } | { ok: false; messagePl: string };
+
+  /** Asercja treści V15: SHA-256 pliku, `bank_version` wszystkich trzech plików, kształt. */
+  function parseContent(raw: unknown): ParsedContent {
+    if (typeof raw !== 'object' || raw === null || !('bank' in raw)) return { ok: false, messagePl: 'Brak pliku banku.' };
+    const bundle = raw as { bank: unknown; retired: unknown; profile: unknown; bankSha256: string | null };
+    if (bundle.bankSha256 !== null && bundle.bankSha256 !== CONTENT_RELEASE.bankSha256) {
+      return { ok: false, messagePl: 'Suma kontrolna pliku pytań nie zgadza się z bankiem V15.' };
+    }
+    const parsed = parseRuntimeBank(bundle.bank);
+    if (!parsed.ok) return { ok: false, messagePl: parsed.error.messagePl };
+    if (parsed.value.bank_version !== CONTENT_RELEASE.bankVersion) {
+      return { ok: false, messagePl: `Nieoczekiwana wersja banku (${parsed.value.bank_version}).` };
+    }
+    const retired = parseRetiredIds(bundle.retired, CONTENT_RELEASE.bankVersion);
+    if (!retired.ok) return { ok: false, messagePl: retired.error.messagePl };
+    const prof = parseTrainingProfile(bundle.profile, CONTENT_RELEASE.bankVersion);
+    if (!prof.ok) return { ok: false, messagePl: prof.error.messagePl };
+    return { ok: true, bank: parsed.value, retired: retired.value, profile: prof.value };
+  }
+
+  /** Plik wydania na serwerze wskazuje inną wersję banku niż ta aplikacja. */
+  async function newerContentAvailable(): Promise<boolean> {
+    if (!pwa.checkRelease || !platform.isOnline()) return false;
+    try {
+      const release = await Promise.race([
+        pwa.checkRelease(),
+        new Promise<null>((resolve) => setTimeout(() => resolve(null), RELEASE_CHECK_TIMEOUT_MS)),
+      ]);
+      return release !== null && release.bankVersion !== CONTENT_RELEASE.bankVersion;
+    } catch {
+      return false;
+    }
+  }
+
+  /** Nowsza wersja treści: ekran „Aktualizacja banku pytań…”, przejęcie przez nowy SW albo przeładowanie. */
+  async function startContentUpdate(): Promise<void> {
+    if (contentUpdating || disposed) return;
+    // Niezapisana zmiana w toku — najpierw zapis (kolejka komend), potem przeładowanie.
+    await queue;
+    contentUpdating = true;
+    boot = { phase: 'loading', stage: 'content-update' };
+    publish();
+    try {
+      await Promise.race([
+        pwa.reloadForContentUpdate ? pwa.reloadForContentUpdate() : Promise.resolve(),
+        new Promise<void>((_, reject) => setTimeout(() => reject(new Error('timeout')), CONTENT_UPDATE_TIMEOUT_MS)),
+      ]);
+    } catch {
+      contentUpdating = false;
+      fatal('CONTENT_UPDATE_FAILED', MSG_CONTENT_UPDATE_FAILED);
+    }
   }
 
   function boot_(): Promise<void> {
@@ -726,6 +826,13 @@ export const createAppController: CreateAppController = (deps: ControllerDeps): 
         publish();
       }),
     );
+    if (pwa.onContentUpdate) {
+      unsubscribers.push(
+        pwa.onContentUpdate((info) => {
+          if (info.bankVersion !== CONTENT_RELEASE.bankVersion) void startContentUpdate();
+        }),
+      );
+    }
   }
 
   /* ---------- pomocnicze akcje ---------- */
@@ -836,6 +943,10 @@ export const createAppController: CreateAppController = (deps: ControllerDeps): 
     },
     async retryBoot() {
       if (boot.phase === 'ready') return;
+      if (boot.phase === 'fatal' && boot.code === 'CONTENT_UPDATE_FAILED') {
+        void startContentUpdate();
+        return;
+      }
       await boot_();
     },
     dispose() {
@@ -1406,77 +1517,11 @@ export const createAppController: CreateAppController = (deps: ControllerDeps): 
       backupFlow = { step: 'idle', lastSavedFileName: null };
       publish();
     },
-    importPackFile(file, fileName) {
-      return enqueue(async () => {
-        if (!isReady() || !bank) return failResult('NOT_READY', MSG_NOT_READY);
-        if (pending) {
-          // Import zmienia zapisany stan; niezapisana zmiana (np. odpowiedź) czeka na ponowienie
-          // tej samej komendy (DECYZJE §1) — nie wolno jej unieważnić importem (LOG-01).
-          poolFlow = { step: 'error', fileName, issues: [], messagePl: MSG_UNSAVED_DATA };
-          publish();
-          return failResult('UNSAVED_PENDING', MSG_UNSAVED_DATA);
-        }
-        poolFlow = { step: 'checking', fileName };
-        publish();
-        const now = platform.nowIso();
-        let plan;
-        try {
-          plan = await parseAndValidatePack(file, { fileName, packId: platform.randomId(), now }, catalog as Catalog, user as UserState);
-        } catch (error) {
-          console.error('[DME] Walidacja puli', error);
-          poolFlow = { step: 'error', fileName, issues: [], messagePl: 'Nie udało się sprawdzić pliku puli.' };
-          publish();
-          return failResult('INVALID_PACK', 'Nie udało się sprawdzić pliku puli.');
-        }
-        if (plan.fatal.length > 0) {
-          poolFlow = { step: 'error', fileName, issues: plan.fatal, messagePl: null };
-          publish();
-          return failResult('INVALID_PACK', plan.fatal[0]?.messagePl ?? 'Plik puli jest niepoprawny.');
-        }
-        const changes = plan.addedIds.length + plan.updatedIds.length;
-        if (changes > 0) {
-          const commandId = platform.randomId();
-          const event: DmeEvent = {
-            id: platform.randomId(),
-            at: now,
-            commandId,
-            type: 'pack_imported',
-            packId: plan.record.id,
-            added: plan.addedIds.length,
-            updated: plan.updatedIds.length,
-            skipped: plan.skippedSameIds.length + plan.skippedBlockedIds.length + plan.rejected.length,
-          };
-          const r = await repository.importPack(plan.record, { commandId, guards: [], stores: { events: { put: [event], delete: [] } } });
-          if (!r.ok) {
-            poolFlow = { step: 'error', fileName, issues: [], messagePl: r.error.messagePl };
-            publish();
-            return failResult(r.error.code, r.error.messagePl);
-          }
-          const nextPacks = [...packs, plan.record];
-          const built = buildCatalog(bank, nextPacks);
-          if (built.ok) {
-            packs = nextPacks;
-            catalog = built.value;
-          } else {
-            await reloadUserData();
-          }
-          const u = user as UserState;
-          user = { ...u, events: { ...u.events, [event.id]: event } };
-        }
-        poolFlow = {
-          step: 'done',
-          fileName,
-          added: plan.addedIds.length,
-          updated: plan.updatedIds.length,
-          skippedSame: plan.skippedSameIds.length,
-          skippedBlocked: plan.skippedBlockedIds.length,
-          rejected: plan.rejected,
-          activeBlocks: Object.values((user as UserState).blocks).filter((b) => b.revokedAt === null).length,
-        };
-        publish();
-        if (changes > 0) void fillAwaitingIfNeeded();
-        return okResult();
-      });
+    importPackFile(_file, fileName) {
+      // Od V15 import dodatkowych pul jest wyłączony w logice (nie tylko w UI): katalog = wyłącznie bank V15.
+      poolFlow = { step: 'error', fileName, issues: [], messagePl: MSG_PACKS_DISABLED };
+      publish();
+      return Promise.resolve(failResult('PACKS_DISABLED', MSG_PACKS_DISABLED));
     },
     resetPoolImportFlow() {
       poolFlow = { step: 'idle' };

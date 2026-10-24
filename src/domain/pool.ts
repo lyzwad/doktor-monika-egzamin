@@ -72,8 +72,15 @@ export function poolQuestions(
   difficulty: DifficultyChoice,
 ): CatalogQuestion[] {
   const index = blockIndex(blocks);
+  // Wyłączone ID (retired_question_ids.json) nie trafiają do żadnego trybu — katalog ich nie zawiera,
+  // a ten filtr jest drugą, niezależną zaporą (Test, Free Flow, runda błędów, zastępstwa, Moje błędy).
+  const retired = new Set(catalog.retiredQuestionIds ?? []);
   return catalog.questions.filter(
-    (q) => (scope === 'ALL' || q.domainId === scope) && (difficulty === 'mixed' || q.difficulty === difficulty) && !isBlockedBy(index, q),
+    (q) =>
+      (scope === 'ALL' || q.domainId === scope) &&
+      (difficulty === 'mixed' || q.difficulty === difficulty) &&
+      !retired.has(q.id) &&
+      !isBlockedBy(index, q),
   );
 }
 

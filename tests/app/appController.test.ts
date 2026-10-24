@@ -9,6 +9,7 @@ import { nextDayStartInZone } from '../../src/app/platform';
 import { createIndexedDbRepository } from '../../src/persistence/repository';
 import {
   BANK,
+  contentBundle,
   failingRepository,
   keyOf,
   openSession,
@@ -81,7 +82,7 @@ describe('uruchomienie', () => {
     const h = await startHarness({
       loadBank: async () => {
         if (fail) throw new Error('offline');
-        return structuredClone(BANK);
+        return contentBundle();
       },
     });
     expect(h.controller.getState().boot).toMatchObject({ phase: 'fatal', code: 'BANK_UNAVAILABLE' });
@@ -91,7 +92,7 @@ describe('uruchomienie', () => {
   });
 
   it('uszkodzony bank → BANK_INVALID', async () => {
-    const h = await startHarness({ loadBank: async () => ({ format: 'inny' }) as never });
+    const h = await startHarness({ loadBank: async () => contentBundle({ format: 'inny' }) });
     expect(h.controller.getState().boot).toMatchObject({ phase: 'fatal', code: 'BANK_INVALID' });
   });
 });
@@ -514,39 +515,22 @@ describe('kopia danych (F02, F03)', () => {
   });
 });
 
-describe('import puli', () => {
-  it('paczka z nowym pytaniem (runtime v1) → katalog rośnie; ponowny import = bez zmian; kopia danych to nie pula', async () => {
+describe('import puli — wyłączony (wyłącznie bank V15)', () => {
+  it('poprawny plik puli jest odrzucony w logice: katalog = dokładnie bank V15, nic nie trafia do bazy', async () => {
     const h = await startHarness();
     const src = BANK.questions[0]!;
-    const fresh = {
-      ...structuredClone(src),
-      id: 'ANAT-Q900',
-      family_id: 'FAM-ANAT-Q900',
-      stem_pl: `${src.stem_pl} (wariant testowy importu)`,
-    };
+    const fresh = { ...structuredClone(src), id: 'ANAT-Q900', family_id: 'FAM-ANAT-Q900', stem_pl: `${src.stem_pl} (wariant testowy importu)` };
     const { fingerprintRuntimeQuestion } = await import('../../src/domain/fingerprint');
     fresh.fingerprint = await fingerprintRuntimeQuestion(fresh);
-    const pack = {
-      ...structuredClone(BANK),
-      bank_version: 'pack-test-1',
-      questions: [fresh],
-    };
+    const pack = { ...structuredClone(BANK), bank_version: 'pack-test-1', questions: [fresh] };
     h.controller.openSettings();
     h.controller.openPoolImport();
-    expect(await h.controller.importPackFile(new Blob([JSON.stringify(pack)]), 'pula.json')).toEqual({ ok: true });
-    expect(h.controller.getState().screen).toMatchObject({ name: 'poolImport', flow: { step: 'done', added: 1, updated: 0 } });
-    expect(h.controller.getState().catalog?.questions.length).toBe(BANK.questions.length + 1);
-    h.controller.resetPoolImportFlow();
-    expect(await h.controller.importPackFile(new Blob([JSON.stringify(pack)]), 'pula.json')).toEqual({ ok: true });
-    expect(h.controller.getState().screen).toMatchObject({ flow: { step: 'done', added: 0 } });
-    expect(h.controller.getState().catalog?.questions.length).toBe(BANK.questions.length + 1);
-    // Po ponownym uruchomieniu paczka nadal w katalogu.
+    expect(await h.controller.importPackFile(new Blob([JSON.stringify(pack)]), 'pula.json')).toMatchObject({ ok: false, code: 'PACKS_DISABLED' });
+    expect(h.controller.getState().screen).toMatchObject({ name: 'poolImport', flow: { step: 'error', messagePl: expect.stringContaining('wyłącznie banku pytań V15') } });
+    expect(h.controller.getState().catalog?.questions.length).toBe(BANK.questions.length);
+    expect(h.controller.getState().catalog?.questionsById['ANAT-Q900']).toBeUndefined();
     const h2 = await startHarness({ factory: h.factory, dbName: h.dbName });
-    expect(h2.controller.getState().catalog?.questions.length).toBe(BANK.questions.length + 1);
-    h2.controller.openSettings();
-    h2.controller.openPoolImport();
-    const backupLike = JSON.stringify({ format: 'dme-backup', formatVersion: 1 });
-    expect(await h2.controller.importPackFile(new Blob([backupLike]), 'kopia.json')).toMatchObject({ ok: false });
-    expect(h2.controller.getState().screen).toMatchObject({ flow: { step: 'error' } });
+    expect(h2.controller.getState().catalog?.questions.length).toBe(BANK.questions.length);
   });
 });
+

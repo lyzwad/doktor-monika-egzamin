@@ -11,6 +11,7 @@ import { Segmented, Tag } from '../components/Controls';
 import { Icon } from '../components/Icon';
 import { Screen, ScreenHeader, cx } from '../components/Screen';
 import { configLabel, formatDate } from '../format';
+import { LegacyNotice } from './ResultScreen';
 import { RetrySheet } from './RetrySheet';
 
 const STATUS_TEXT: Record<ReviewItemVM['status'], string> = {
@@ -33,7 +34,8 @@ export function ReviewScreen({ vm }: { vm: ReviewVM }) {
         contentClassName="screen__content--tight"
       >
         {subtitle ? <p className="meta">{subtitle}</p> : null}
-        <Segmented<ReviewFilter>
+        {vm.legacy ? <LegacyNotice /> : null}
+        {vm.legacy ? null : <Segmented<ReviewFilter>
           label="Filtr przeglądu"
           minItemWidth="7.6rem"
           options={[
@@ -42,8 +44,8 @@ export function ReviewScreen({ vm }: { vm: ReviewVM }) {
           ]}
           value={vm.filter}
           onChange={(f) => controller.setReviewFilter(f)}
-        />
-        {vm.filter === 'wrong' && vm.counts.wrong === 0 ? (
+        />}
+        {vm.filter === 'wrong' && vm.counts.wrong === 0 && !vm.legacy ? (
           <div className="empty-state">
             <Icon name="check_circle" size={30} style={{ color: 'var(--ok)' }} />
             <div className="empty-state__title">W tej rundzie nie było błędnych odpowiedzi</div>

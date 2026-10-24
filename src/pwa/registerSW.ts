@@ -15,7 +15,8 @@
  * stan `unsupported` i nie zgłasza przygotowania ani aktualizacji.
  */
 import { registerSW } from 'virtual:pwa-register';
-import { createServiceWorkerPwaWith, PRECACHE_INFO_FILE, type ServiceWorkerPwa, type ServiceWorkerPwaOptions } from './swController';
+import { CONTENT_RELEASE } from '../domain/contentRelease';
+import { createServiceWorkerPwaWith, PRECACHE_INFO_FILE, RELEASE_INFO_FILE, type ServiceWorkerPwa, type ServiceWorkerPwaOptions } from './swController';
 
 function sessionStorageOrNull(): Storage | null {
   try {
@@ -61,6 +62,19 @@ export function createServiceWorkerPwa(options: ServiceWorkerPwaOptions): Servic
       onOnline(listener) {
         window.addEventListener('online', listener);
         return () => window.removeEventListener('online', listener);
+      },
+      contentBankVersion: CONTENT_RELEASE.bankVersion,
+      async fetchRelease() {
+        // Poza precache: zawsze z serwera (wersja treści aktualnie wdrożona).
+        const response = await fetch(`${base}${RELEASE_INFO_FILE}`, { cache: 'no-store' });
+        return response.ok ? ((await response.json()) as unknown) : null;
+      },
+      onServiceWorkerMessage(listener) {
+        const sw = serviceWorkerOrNull();
+        if (!sw) return () => undefined;
+        const handler = (event: MessageEvent): void => listener(event.data);
+        sw.addEventListener('message', handler);
+        return () => sw.removeEventListener('message', handler);
       },
       now: () => Date.now(),
       setTimeout: (callback, ms) => window.setTimeout(callback, ms),
