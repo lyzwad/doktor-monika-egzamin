@@ -41,6 +41,8 @@ const engines = { chromium, webkit };
 const swSource = readFileSync(resolve(dist, 'sw.js'), 'utf8');
 const precache = [...swSource.matchAll(/url:\s*"([^"]+)"\s*,\s*revision:\s*(null|"([^"]*)")/g)].map((m) => ({ url: m[1], revision: m[3] ?? null }));
 if (precache.length === 0) throw new Error('Brak listy precache w sw.js');
+/** Pliki ładowane przez `importScripts` w sw.js (część skryptu SW, pobierane przy każdej instalacji). */
+const SW_IMPORTS = [...swSource.matchAll(/importScripts\(([^)]*)\)/g)].flatMap((m) => [...m[1].matchAll(/"([^"]+)"/g)].map((x) => x[1]));
 const APP_TITLE = 'Doktor Monika Egzamin';
 /** Bank V15 pod wersjonowaną ścieżką (src/domain/contentRelease.ts). */
 const BANK_FILE = readFileSync(resolve('src/domain/contentRelease.ts'), 'utf8').match(/\bbankFile:\s*'([^']+)'/)?.[1];
@@ -188,7 +190,8 @@ async function interruptedFirstInstall(browser, name, server) {
       await navigator.serviceWorker.register(`${b}sw.js`, { scope: b });
     }, base);
     const second = await waitInstallSettled(page, { pollCaches });
-    const refetched = server.requests.slice(mark).filter((rel) => rel !== lastEntry.url && precache.some((e) => e.url === rel));
+    // Skrypty z importScripts (skrypt przejęcia) pobiera sama przeglądarka przy każdej instalacji SW — nie precache.
+    const refetched = server.requests.slice(mark).filter((rel) => rel !== lastEntry.url && !SW_IMPORTS.includes(rel) && precache.some((e) => e.url === rel));
     const ok = first === 'none' && second === 'active';
     record(name, ok ? 'PASS' : 'FAIL', `przerwane przygotowanie (błąd ${lastEntry.url}): brak aktywnego SW (${first}); ponowienie kończy instalację (${second})`);
     const resumed = savedBefore.length === precache.length - 1 && refetched.length === 0;

@@ -10,7 +10,7 @@ Dokument wiążący dla implementacji. Wymagania nadrzędne: `_zrodla/pakiet/Dok
 - `src/pwa/` — rejestracja SW i aktualizacja na żądanie.
 
 ## 2. Runtime bank
-Plik `public/data/bank.json` (format `dme-runtime-bank` v1) generowany skryptem `redakcja/narzedzia/zbuduj_runtime.py` z zatwierdzonego banku. Pola pytania: `id, revision, family_id, fingerprint (sha256 znormalizowanego stemu i posortowanych opcji: NFKC, zwinięte białe znaki, trim, lower-case), domain_id, topic_ids, difficulty, stem_pl, options[{id,text_pl}], correct_option_id, correct_explanation_pl, source_ids, source_locator_pl, question_type, figure_id, explanation_figure_id, review_status, approved_for_question_key, content_check_status, cognitive_level`. Oprócz tego `domains[]`, `topics{}` (tytuł, cel, perełki — „szerszy kontekst tematu” po odpowiedzi), `sources{}` (tytuł, url https z rejestru, doi, pmid, kind_pl, access_pl), `figures{}` (plik, alt bez klucza, podpis, wariant pytanie/objaśnienie), `counts`, `status_pl`. Aplikacja sama przelicza fingerprint (Web Crypto SHA-256) przy imporcie paczek i porównuje z dostarczonym.
+**Od 24.10.2026 (§14): wyłącznie bank V15** — plik `public/data/bank-37f3980a1129.json` (format `dme-runtime-bank` v1, bajt w bajt z paczki redakcji V15; nazwa z prefiksem SHA-256 — nowa ścieżka przy każdej wersji treści) z plikami towarzyszącymi `retired-question-ids-83b36ff80986.json` i `training-profile-c0edd4ca07c2.json`; jedyne źródło wersji: `src/domain/contentRelease.ts`. Dawny plik `public/data/bank.json` (do `release-2026-10-23c`) usunięto. Format pliku (bez zmian): Pola pytania: `id, revision, family_id, fingerprint (sha256 znormalizowanego stemu i posortowanych opcji: NFKC, zwinięte białe znaki, trim, lower-case), domain_id, topic_ids, difficulty, stem_pl, options[{id,text_pl}], correct_option_id, correct_explanation_pl, source_ids, source_locator_pl, question_type, figure_id, explanation_figure_id, review_status, approved_for_question_key, content_check_status, cognitive_level`. Oprócz tego `domains[]`, `topics{}` (tytuł, cel, perełki — „szerszy kontekst tematu” po odpowiedzi), `sources{}` (tytuł, url https z rejestru, doi, pmid, kind_pl, access_pl), `figures{}` (plik, alt bez klucza, podpis, wariant pytanie/objaśnienie), `counts`, `status_pl`. Aplikacja sama przelicza fingerprint (Web Crypto SHA-256) przy imporcie paczek i porównuje z dostarczonym.
 
 ## 3. Identyfikatory, czas, losowość
 `sessionId`, `slotId`, `commandId`, `blockId` — `crypto.randomUUID()` w kontrolerze. Seed sesji — 32-bit z `crypto.getRandomValues`, zapisany w sesji. PRNG: mulberry32 (deterministyczny). Czas: ISO 8601 z kontrolera.
@@ -24,7 +24,7 @@ Plik `public/data/bank.json` (format `dme-runtime-bank` v1) generowany skryptem 
 - `answer(sessionId, expectedRevision, slotId, optionId, commandId)`: idempotentna (ten sam `commandId` → ten sam wynik bez zmian), odrzuca: zamkniętą sesję, nieistniejącą opcję, slot oceniony, slot wykluczony, nieaktualną rewizję (z wyjątkiem identycznego powtórzenia komendy).
 
 ## 5. Pula dopuszczalna i pojemność
-Pula = pytania katalogu (bank + zaimportowane paczki, najnowsza rewizja danego `id`) przefiltrowane po zakresie, trudności (poza `mixed`), aktywnych blokadach (po `questionId`, `fingerprint`, `familyId`) i poprawności rekordu. Pojemność = liczba różnych `family_id` w puli. „Moje błędy” NIE filtruje pojemności. `N` dozwolone: liczba całkowita 1…pojemność; inaczej start zablokowany z komunikatem i podaną pojemnością.
+Pula = pytania katalogu (od V15 wyłącznie bank V15 — bez paczek; ID z `retired_question_ids.json` nigdy w katalogu ani w puli, filtr powtórzony w `poolQuestions`) przefiltrowane po zakresie, trudności (poza `mixed`), aktywnych blokadach (po `questionId`, `fingerprint`, `familyId`) i poprawności rekordu. Pojemność = liczba różnych `family_id` w puli. „Moje błędy” NIE filtruje pojemności. `N` dozwolone: liczba całkowita 1…pojemność; inaczej start zablokowany z komunikatem i podaną pojemnością.
 
 ## 6. TEST_POLICY_V2 (dobór testu)
 
@@ -37,6 +37,16 @@ Nowe sesje zapisują `allocation.policy = 'TEST_POLICY_V2'`; sesje zapisane wcze
 5. Kolejność slotów i opcji tasowana seedem (pozycje obowiązkowe wymieszane, nie na początku).
 6. `Seen` = pytanie faktycznie wyświetlone (zdarzenie `markShown` przy pierwszym pokazaniu slotu); rezerwacja w planie nie zużywa nowości. `markShown` aktualizuje `questionStats`, nie jest mutacją punktową (nie unieważnia „Cofnij”).
 
+## 6a. TEST_POLICY_V3 — profil treningowy V15 (24.10.2026)
+
+Nowe sesje testu na katalogu z profilem (bank V15) zapisują `allocation.policy = 'TEST_POLICY_V3'`. Profil (`training_profile.json`) jest redakcyjną proporcją treningu, nie oficjalnym rozkładem egzaminu.
+1. **Zakres `ALL` (domyślny, Test i runda „Uwzględnij błędy”, każdy wybór poziomu):** kubełkami doboru są GRUPY profilu (`skin`, `facial_anatomy`, `other`) wyznaczone listami ID z pliku — nie wyszukiwaniem słów; domeny nie mają kwot. Kwoty grup: metoda największych reszt na punktach bazowych (35/25/40 → 3500/2500/4000; `floor(N × w)`, pozostałe miejsca po jednym grupom o największej reszcie, remis — kolejność grup w pliku). Przykłady: 20 → 7+5+8, 30 → 11+7+12, 40 → 14+10+16, 50 → 18+12+20, 60 → 21+15+24, 1 → 0+0+1, 2 → 1+0+1, 3 → 1+1+1.
+2. W grupie obowiązują dotychczasowe reguły §6 pkt 1–6 bez zmian: pozycje obowiązkowe (runda błędów, „Moje błędy”) zaliczają się do kwoty swojej grupy (nadwyżkę pokrywa zmniejszenie innych grup), `mixed` = równy podział poziomów w kwocie grupy (rotacja od `(przesunięcie + indeks grupy) mod 3`), „najpierw niewidziane” w całym zakresie (przebiegi A/B), jedna rodzina na test — także gdy rodzina ma pytania w kilku grupach (32 rodziny V15).
+3. Niedobór pojemności grupy (dla wybranego poziomu): brakujące miejsca → inne poziomy tej grupy, potem inne grupy (rotacyjnie), każde przesunięcie zapisane w `allocation.profile.redistributed` (`kind: 'group' | 'difficulty'`, `reason: 'supply' | 'unseen'`) — bez duplikatów i bez pustych pozycji; za mało rodzin w całym zakresie → `INSUFFICIENT_CAPACITY` jak dotąd. Faktyczny dobór: `allocation.profile.groupTargets`, `groupActual`, `cells` (grupa × poziom).
+4. **Zakres jednej domeny:** bez profilu — przydział jak V2 (kwota = N w tej domenie), zapis `TEST_POLICY_V3`.
+5. Zastępstwo (§9) w sesji V3 z profilem: kroki preferencji wg grupy wykluczonego pytania (grupa × poziom → grupa → cały zakres), przebiegi A/B jak w V2.
+6. Katalog bez profilu (np. dane testowe) → TEST_POLICY_V2 bez zmian.
+
 ## 7. FREE_FLOW_POLICY_V2
 
 Nowe sesje: `allocation.policy = 'FREE_FLOW_POLICY_V2'` (starsze: `FREE_FLOW_POLICY_V1`). Wagi, adaptacja, wybór domeny i kolejność w domenie bez zmian względem V1; V2 dopisuje luzowanie wykluczeń w małych pulach (w V1 istniało tylko w kodzie, bez wpisu tutaj) i zasadę, że odstęp błędnych obowiązuje na każdej ścieżce doboru (23.10.2026, zgłoszenie LOG-04: w V1 błędne pytanie wracało po 5 innych przez ścieżkę „najdawniej widziane”, choć były inne dopuszczalne pytania).
@@ -46,6 +56,12 @@ Nowe sesje: `allocation.policy = 'FREE_FLOW_POLICY_V2'` (starsze: `FREE_FLOW_POL
 - W domenie: (1) należne aktywne błędy (nie rozwiązane poprawnie w tej sesji), (2) niewidziane, (3) najdawniej widziane. Błędne w tej sesji wracają najwcześniej po 8 innych pytaniach — na każdej z tych ścieżek. Wykluczenia: poprzednie pytanie, pytania pokazane w tej sesji w ostatnich 10 slotach, rodziny ostatnich 5 slotów.
 - Mała pula (V2): gdy przy pełnych wykluczeniach nie ma kandydata, reguły są luzowane stopniami, zawsze do pierwszego stopnia z kandydatem: (1) pełne okna + odstęp błędnych, (2) tylko inna rodzina niż poprzednie pytanie + odstęp błędnych, (3) tylko inna rodzina niż poprzednie pytanie, (4) tylko odstęp błędnych, (5) dowolne pytanie poza poprzednim. Poprzednie pytanie nigdy nie wraca bezpośrednio; brak kandydata na stopniu 5 → stan `empty`. Z „Moje błędy”: najpierw aktywne błędy z całego zakresu; po ich wyczerpaniu jednorazowy komunikat „Brak aktywnych błędów w tym zakresie — kontynuujesz zwykłe pytania” i zwykła polityka.
 - Pusta pula → stan `empty` (zmień zakres / importuj pytania / zakończ), bez pętli.
+
+## 7a. FREE_FLOW_POLICY_V3 — profil treningowy V15 (24.10.2026)
+
+Nowe sesje Free Flow na katalogu z profilem: `allocation.policy = 'FREE_FLOW_POLICY_V3'`.
+- Zakres `ALL`: kubełki = grupy profilu z wagami bazowymi z pliku (0,35 / 0,25 / 0,40) ZAMIAST dawnych wag domen (DEV 0,40, pozostałe 0,12). Adaptacja bez zmian, liczona per grupa: grupa z ≥ 10 ważnymi próbami, `err_g` z ostatnich 30 prób grupy, `w_g = base_g × clamp(1 + 0,5 × (err_g − średnia), 0,5, 1,5)`, podłoga 0,05, renormalizacja; próby pytań spoza profilu (np. sprzed V15) się nie liczą. Wybór grupy: maksymalny deficyt `w_g × (n + 1) − liczba_g_w_sesji`, remis rotacyjnie. W grupie i luzowanie wykluczeń — jak §7 (należne błędy → niewidziane → najdawniej widziane; „Moje błędy” jako priorytet; odstęp błędnych). Wagi po adaptacji i faktyczny udział grup: `allocation.profile.freeFlowWeights`, `groupActual`.
+- Zakres jednej domeny: 100% tej domeny, bez profilu.
 
 ## 8. REVIEW_POLICY_V1 (kolejka błędów, per `questionId`)
 - Błędna ważna odpowiedź: `activeError = true`, `streak = 0`, `lastWrongAt`, `lastWrongSessionId`, `dueAt = now`.
@@ -65,10 +81,16 @@ Nowe sesje: `allocation.policy = 'FREE_FLOW_POLICY_V2'` (starsze: `FREE_FLOW_POL
 - Paczka pytań: ten sam schemat banku 1.0 (lub runtime v1); walidacja jak walidator (4 różne opcje, klucz, źródła z rejestru paczki z URL https, brak `option_rationales_pl`/ustnych pól, brak treści HTML/skryptów); zablokowane fingerprinty/rodziny pozostają zablokowane pod nowym ID; kolizja ID: ta sama treść → pomiń; wyższa `revision` → nowa rewizja (historia nietknięta dzięki snapshotom); inna treść bez wyższej rewizji → odrzucenie pozycji.
 - `navigator.storage.persist()` — prośba po pierwszej zapisanej odpowiedzi; status pokazywany w Ustawieniach; brak gwarancji.
 
+## 10a. Wyłącznie bank V15 — import pul wyłączony, migracja danych (24.10.2026)
+- Import dodatkowych pul pytań jest **wyłączony** w UI i w logice (`importPackFile` → `PACKS_DISABLED`); moduł `src/persistence/packs.ts` usunięty; katalog nie łączy paczek. Magazyn `packs` zostaje w schemacie (pusty).
+- IndexedDB v2: migracja treści do V15 w transakcji `versionchange` (opis: `docs/MIGRACJA_V15.md`): sesje sprzed V15 → `legacy` (podsumowanie bez treści) albo `interrupted_by_update` (otwarte), powtórki/próby/blokady tylko dla 332 niezmienionych pytań, `packs` i `backups` wyczyszczone, `meta.content` = V15. Ta sama transformacja przy wczytaniu i eksporcie kopii; repozytorium odrzuca zapis sesji innej wersji treści (nie-`legacy`).
+- Status sesji `interrupted_by_update` (dodany): bez wyniku, niewznawialna i niekończalna, w historii („Przerwany aktualizacją banku pytań”), poza wykresem.
+
 ## 11. Routing, base, PWA
 - Routing hash (`#/…`): odświeżenie dowolnego ekranu na GitHub Pages nie daje 404.
 - `base` z `BASE_PATH` (domyślnie `/`; dla GitHub Pages `/<repozytorium>/`); manifest `start_url`/`scope` i rejestracja SW względne do `base`.
-- SW (Workbox przez vite-plugin-pwa, `registerType: 'prompt'`): precache shell, JS/CSS, fonty (lokalne woff2 Hanken Grotesk, OFL), ikony, `data/bank.json`, figury. Bez `skipWaiting`/`clientsClaim` automatycznie. Baner aktualizacji tylko poza ekranem pytania; „Zaktualizuj” dopiero po zapisie stanu.
+- SW (Workbox przez vite-plugin-pwa, `registerType: 'prompt'`): precache shell, JS/CSS, fonty (lokalne woff2 Hanken Grotesk, OFL), ikony, bank V15 (`data/bank-<sha12>.json` + pliki towarzyszące), figury. Zwykłe aktualizacje aplikacji: bez automatycznego `skipWaiting`/`clientsClaim`, baner tylko poza ekranem pytania, „Zaktualizuj” dopiero po zapisie stanu.
+- **Wyjątek od 24.10.2026 — zmiana wersji TREŚCI (banku pytań):** skrypt `dme-sw-takeover-<sha12>.js` (`scripts/sw-takeover.mjs`, `importScripts` w `sw.js`) przy aktualizacji ze znacznikiem innej wersji treści wywołuje `skipWaiting()`, przy aktywacji `clients.claim()`, wysyła `DME_CONTENT_UPDATE` i `client.navigate(client.url)` do okien (także starego kodu); dawna ścieżka banku → 404. Fallback: `dme-release.json` (poza precache) sprawdzany przy starcie i po powrocie z tła — nowsza wersja treści = przeładowanie przed pokazaniem pytań. Uzasadnienie: stara pula nie może pozostać dostępna (docs/MIGRACJA_V15.md §3).
 - Brak zewnętrznych żądań w czasie nauki (poza otwarciem linku źródła w Safari przez użytkowniczkę).
 - Nazwa na ekranie głównym (`short_name`, `apple-mobile-web-app-title`) dokładnie „Doktor Monika Egzamin” (USTALENIA pkt 33, A02); iOS sam skraca zbyt długą etykietę pod ikoną. Skrót wyłącznie za zgodą użytkowniczki.
 
@@ -84,3 +106,9 @@ Nowe sesje: `allocation.policy = 'FREE_FLOW_POLICY_V2'` (starsze: `FREE_FLOW_POL
 - **Kopia (LOG-08, F02)**: po eksporcie „Przygotowano plik kopii …” (aplikacja zna tylko wywołanie pobierania); opis zawartości wymienia treść pytań z sesji i zaimportowane pule.
 - **Fokus (UI-03)**: po odpowiedzi wybranej klawiaturą/czytnikiem (karta-przycisk znika) fokus przechodzi na nagłówek wyjaśnienia (`preventScroll`, przewija łagodnie `gentleScrollTo` z poszanowaniem reduced-motion); przy dotyku fokus nie jest przejmowany.
 - **Podwójne wywołania (LOG-05, LOG-06)**: odpowiedź w trakcie innej komendy użytkownika → `BUSY` (bez toastu); błąd akcji przy ważnym „Cofnij” — osobny `role="alert"`, toast „Cofnij” zostaje; `startRetryRound` blokowany flagą startu, zamykanie sesji — blokadą na czas zamykania.
+
+## 14. Wyłącznie bank V15 (24.10.2026, polecenie właścicielki — nadrzędne)
+- Aplikacja udostępnia wyłącznie bank `chatgpt-editorial-v15-2026-10-24-f020a0440df8` (2987 pytań: 1048 basic / 1366 intermediate / 573 advanced; 2501 rodzin; 133 ID wyłączone). Pełna podmiana aktywnej puli, bez możliwości korzystania z poprzedniej wersji (`release-2026-10-23c`).
+- Treść V15 bez zmian (klucze, poziomy, źródła, figury, metadane). Źródła i linki — wyłącznie po odpowiedzi (B04).
+- Asercje: build (SHA-256 plików w `public/data`), `check-dist` (SHA-256, wersja, liczby, wyłączone ID, brak `data/bank.json`), start aplikacji (SHA-256 bajtów, wersje trzech plików, liczby katalogu), katalog (`requiredBankVersion`). Brak awaryjnego ładowania innego banku (także mock w dev).
+- Polityki: §6a (TEST_POLICY_V3), §7a (FREE_FLOW_POLICY_V3); dane: §10a; PWA: §11.

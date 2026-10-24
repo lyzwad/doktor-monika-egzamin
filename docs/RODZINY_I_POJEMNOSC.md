@@ -2,6 +2,8 @@
 
 Rodzina = bliskie warianty jednego zadania (ten sam lub bardzo bliski rozstrzygający warunek albo treść jednego pytania zdradza klucz drugiego). Wspólna choroba, źródło lub łańcuch luźnych podobieństw nie wystarczają.
 
+> **Uwaga (24.10.2026):** sekcje „Przebieg” i „Podziały” dokumentują pracę nad rodzinami banku `release-2026-10-23c`, który usunięto z aplikacji (docs/MIGRACJA_V15.md). Rodziny banku V15 pochodzą z paczki redakcji V15 bez zmian w aplikacji.
+
 ## Przebieg
 
 1. Deduplikacja: grupy rodzin z ocen par i list domen; pierwotnie domknięcie przechodnie (union-find) dało zbyt szerokie grupy (np. AK: leczenie pola + krioterapia + PDT) — zastąpione grupowaniem bez łańcuchów.
@@ -9,17 +11,19 @@ Rodzina = bliskie warianty jednego zadania (ten sam lub bardzo bliski rozstrzyga
 3. Zastosowano 72 podziałów (198 pytań z nową rodziną; 10 cofniętych scaleń rodzin seed w runtime).
 4. Pary z przeciekiem klucza pozostawione w jednej rodzinie (wbrew podziałowi recenzenta), aby nie trafiły do jednego testu: części 3 — R158, R165, R197, R209, R221; pary: DEV-G30-003+DEV-P30-006; SAFE-G18-003+SAFE-P18-019; SKIN-G13-001+SKIN-P13-006; SAFE-P16-003+SAFE-Q008; SAFE-G16-004+SAFE-Q008.
 
-## Pojemność testu (liczba różnych rodzin po filtrach, bez blokad użytkowniczki)
+## Pojemność testu — bank V15 (liczba różnych rodzin po filtrach, bez blokad użytkowniczki)
+
+Bank `chatgpt-editorial-v15-2026-10-24-f020a0440df8` (2987 pytań, 2501 rodzin; policzone z `public/data/bank-37f3980a1129.json`, 24.10.2026). Dla całego zakresu kwoty dzieli profil treningowy (DECYZJE §6a); pojemność to nadal liczba rodzin.
 
 | zakres | mieszany | łatwy | średni | trudny |
 |---|---|---|---|---|
-| ALL | 806 | 279 | 501 | 172 |
-| ANAT | 99 | 35 | 54 | 21 |
-| INJ | 103 | 36 | 64 | 20 |
-| SKIN | 139 | 45 | 95 | 19 |
-| THER | 111 | 44 | 64 | 30 |
-| DEV | 237 | 78 | 153 | 48 |
-| SAFE | 133 | 43 | 76 | 36 |
+| ALL | 2501 | 981 | 1221 | 519 |
+| ANAT | 449 | 213 | 186 | 85 |
+| INJ | 256 | 129 | 103 | 45 |
+| SKIN | 529 | 176 | 277 | 117 |
+| THER | 234 | 108 | 108 | 46 |
+| DEV | 790 | 251 | 442 | 159 |
+| SAFE | 263 | 109 | 110 | 68 |
 
 Blokady (zgłoszenia) zmniejszają pojemność w aplikacji dynamicznie — maksimum N liczone jest w chwili konfiguracji testu.
 

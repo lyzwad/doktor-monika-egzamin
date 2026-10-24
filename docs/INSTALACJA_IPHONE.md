@@ -41,6 +41,8 @@ Postęp jest zapisany tylko na tym telefonie. Może zniknąć po usunięciu ikon
 
 Gdy jest nowa wersja, poza ekranem pytania pojawia się baner „Nowa wersja aplikacji jest gotowa” z przyciskiem **Uruchom ponownie**. Aplikacja nie przeładuje się sama w trakcie pytania. Nowa wersja uruchomi się też po zamknięciu i ponownym otwarciu aplikacji. Dane nauki zostają.
 
+**Wyjątek — nowa wersja banku pytań (np. przejście na bank V15, 24.10.2026):** aplikacja przeładuje się sama (także w trakcie pytania) i pokaże „Aktualizacja banku pytań…”, bo stara pula nie może pozostać dostępna. Dawne wyniki zostają w historii jako podsumowania; przerwana sesja ma opis „Przerwany aktualizacją banku pytań”. Szczegóły i instrukcja: `docs/MIGRACJA_V15.md` §4.
+
 ## 6. Lista kontroli G05 — fizyczny iPhone 15
 
 Status: **NOT RUN** (brak urządzenia w środowisku wykonawczym). Wypełnić przy teście; test w przeglądarce na komputerze nie zastępuje tej listy.

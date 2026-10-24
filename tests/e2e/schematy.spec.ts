@@ -266,7 +266,11 @@ test('figury z banku działają offline z precache (serwer niedostępny): P prze
     // Wszystkie pliki figur z banku są w precache Service Workera.
     const cached = await page.evaluate(async (files) => {
       const out: Record<string, boolean> = {};
-      for (const f of files) out[f] = (await caches.match(new URL(f, location.href).href, { ignoreSearch: true })) !== undefined;
+      // Szukamy w cache precache Workboxa tej aplikacji (CacheStorage.match przegląda wszystkie cache po kolei —
+      // od V15 jest też cache znacznika wersji treści; sprawdzamy dokładnie precache).
+      const precacheName = (await caches.keys()).find((n) => n.startsWith('workbox-precache-v2-'));
+      const precache = precacheName ? await caches.open(precacheName) : null;
+      for (const f of files) out[f] = precache !== null && (await precache.match(new URL(f, location.href).href, { ignoreSearch: true })) !== undefined;
       return out;
     }, Object.values(RAW.figures).map((f) => f.file));
     expect(Object.values(cached).every(Boolean), JSON.stringify(cached)).toBe(true);

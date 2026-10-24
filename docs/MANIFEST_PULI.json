@@ -1,62 +1,105 @@
 {
  "app": "Doktor Monika Egzamin",
- "bank_version": "release-2026-10-23c",
- "built_on": "2026-10-23",
- "runtime_file": "public/data/bank.json",
- "runtime_sha256": "ae49224b3ad5049489e44f45f8c231cda472266ee84c77bb376280ec49e16fc1",
- "release_bank_sha256": "23c847b7d5830c3bde10e8c9b18c8ae2611651f44ef2e4f01c81b9fecfcc62b7",
- "questions": 1097,
- "families_bank": 810,
- "families_runtime": 806,
- "seed_questions": 248,
- "new_questions": 852,
+ "bank_version": "chatgpt-editorial-v15-2026-10-24-f020a0440df8",
+ "built_on": "2026-10-24",
+ "schema_version": "1.0",
+ "runtime_file": "public/data/bank-37f3980a1129.json",
+ "runtime_sha256": "37f3980a1129f782213553360ba0221fbe9281f4710d31f86dfdea2a488f0770",
+ "retired_file": "public/data/retired-question-ids-83b36ff80986.json",
+ "retired_sha256": "83b36ff80986596c73a49fa33646eb817d187d467ea03b4501172617b2ebca6a",
+ "training_profile_file": "public/data/training-profile-c0edd4ca07c2.json",
+ "training_profile_sha256": "c0edd4ca07c272fd07ed63635116aad433c2e4e9917f284dcb884f28d6d58dbc",
+ "source": "paczka redakcji V15 (runtime/bank.json, retired_question_ids.json, training_profile.json) — kopia bajt w bajt; figury z package/figures",
+ "questions": 2987,
+ "families_runtime": 2501,
+ "retired_question_ids": 133,
+ "retired_in_bank": 0,
  "target_min": 2000,
- "target_met": false,
- "gap_to_target_min": 903,
+ "target_met": true,
+ "min_per_level": 1000,
+ "min_per_level_met": false,
+ "levels_below_min": {
+  "advanced": 573
+ },
  "by_domain": {
-  "ANAT": 124,
-  "DEV": 317,
-  "INJ": 141,
-  "SAFE": 178,
-  "SKIN": 182,
-  "THER": 155
+  "ANAT": 535,
+  "INJ": 318,
+  "SKIN": 621,
+  "THER": 285,
+  "DEV": 901,
+  "SAFE": 327
  },
  "by_difficulty": {
-  "advanced": 195,
-  "basic": 306,
-  "intermediate": 596
+  "basic": 1048,
+  "intermediate": 1366,
+  "advanced": 573
  },
  "by_domain_difficulty": {
   "ANAT": {
-   "basic": 37,
-   "intermediate": 65,
-   "advanced": 22
+   "basic": 226,
+   "intermediate": 203,
+   "advanced": 106
   },
   "INJ": {
-   "basic": 43,
-   "intermediate": 76,
-   "advanced": 22
+   "basic": 144,
+   "intermediate": 123,
+   "advanced": 51
   },
   "SKIN": {
-   "basic": 48,
-   "intermediate": 111,
-   "advanced": 23
+   "basic": 190,
+   "intermediate": 303,
+   "advanced": 128
   },
   "THER": {
-   "intermediate": 75,
-   "basic": 47,
-   "advanced": 33
+   "basic": 113,
+   "intermediate": 123,
+   "advanced": 49
   },
   "DEV": {
-   "intermediate": 178,
-   "basic": 86,
-   "advanced": 53
+   "basic": 260,
+   "intermediate": 476,
+   "advanced": 165
   },
   "SAFE": {
-   "intermediate": 91,
-   "advanced": 42,
-   "basic": 45
+   "basic": 115,
+   "intermediate": 138,
+   "advanced": 74
   }
+ },
+ "training_profile": {
+  "weights": {
+   "skin": 0.35,
+   "facial_anatomy": 0.25,
+   "other": 0.4
+  },
+  "example_20_question_test": {
+   "skin": 7,
+   "facial_anatomy": 5,
+   "other": 8
+  },
+  "group_sizes": {
+   "skin": 993,
+   "facial_anatomy": 486,
+   "other": 1508
+  },
+  "group_by_difficulty": {
+   "skin": {
+    "basic": 289,
+    "intermediate": 481,
+    "advanced": 223
+   },
+   "facial_anatomy": {
+    "basic": 188,
+    "intermediate": 185,
+    "advanced": 113
+   },
+   "other": {
+    "basic": 571,
+    "intermediate": 700,
+    "advanced": 237
+   }
+  },
+  "editorial_training_mix_not_official_exam_blueprint": true
  },
  "schematic_questions": [
   "ANAT-Q001",
@@ -68,106 +111,29 @@
   "FIG-DEV-01-O",
   "FIG-DEV-01-P"
  ],
+ "sources": 887,
+ "topics": 194,
  "clinical_signoff": false,
- "approved_for_question_key_true": 0,
  "official_exam_question_bank": false,
- "reconciliation": {
-  "seed_delivered": 248,
-  "seed_quarantined_after_blind_review": [
-   "ANAT-Q022",
-   "DEV-Q030",
-   "SAFE-Q022"
-  ],
-  "pass1_accepted": 729,
-  "pass2_accepted": 164,
-  "dedup_removed_unique": 41,
-  "dedup_removed_ids": [
-   "ANAT-G03-005",
-   "ANAT-G03-008",
-   "DEV-G28-001",
-   "DEV-G28-005",
-   "DEV-P20-011",
-   "DEV-P21-004",
-   "DEV-P21-005",
-   "DEV-P21-010",
-   "DEV-P22-004",
-   "DEV-P22-009",
-   "DEV-P23-002",
-   "DEV-P25-012",
-   "DEV-P25-014",
-   "DEV-P28-003",
-   "DEV-P28-012",
-   "DEV-P28-017",
-   "DEV-P29-022",
-   "DEV-P31-016",
-   "DEV-P31-018",
-   "DEV-P31-026",
-   "INJ-P05-024",
-   "INJ-P05-028",
-   "INJ-P06-026",
-   "SAFE-G17-008",
-   "SAFE-G17-009",
-   "SAFE-G27-006",
-   "SAFE-P12-037",
-   "SAFE-P15-023",
-   "SAFE-P16-010",
-   "SAFE-P16-014",
-   "SAFE-P17-020",
-   "SAFE-P18-002",
-   "SAFE-P18-016",
-   "SAFE-P31-003",
-   "SAFE-P31-006",
-   "SKIN-G13-002",
-   "SKIN-G13-004",
-   "SKIN-P13-001",
-   "SKIN-P24-026",
-   "THER-G09-010",
-   "THER-G10-005"
-  ],
-  "formula": "248 − 3 + 729 + 164 − 41 = 1097",
-  "bank_questions": 1097,
-  "runtime_questions": 1097,
-  "consistent": true,
-  "revisions_changed_not_removed": [
-   "ANAT-Q001",
-   "DEV-Q041"
-  ],
-  "family_changes": {
-   "dedup_family_groups": 227,
-   "review_splits": 72,
-   "questions_reassigned_by_split": 198,
-   "seed_runtime_merges_active": 4
-  },
-  "note_pl": "Wcześniej raportowane „168” przyjętych w drugim przebiegu było błędem rachunkowym w komunikacie; po identyfikatorach jest 164. Deduplikacja potwierdziła 44 decyzje dla 42 identyfikatorów (2 ID potwierdzone dwukrotnie); po korekcie par wzajemnych usuniętych jest 41 (DEV-P28-002 przywrócone)."
+ "approved_for_question_key_true": 0,
+ "review_status": {
+  "draft_pending_clinical_review": 2987
  },
- "seed_blind_review": {
-  "counts": {
-   "verified": 173,
-   "verified_with_note": 72,
-   "quarantine": 3
-  },
-  "quarantined": [
-   "ANAT-Q022",
-   "DEV-Q030",
-   "SAFE-Q022"
-  ],
-  "note_pl": "Ślepy przegląd AI 248 pytań seed (6 partii; S03 powtórzone w izolacji po unieważnieniu). verified/verified_with_note = klucz i wsparcie potwierdzone przez AI, nie recenzja lekarska."
+ "content_check_status": {
+  "editorially_revised_draft": 1665,
+  "independently_checked_draft": 1322
  },
- "content_check": {
-  "new_questions_independently_checked_draft": 852,
-  "reviewer_role": "independent_ai_review",
-  "qualified_human_review": 0
- },
- "validator": {
-  "release_mode": "FAIL",
-  "release_errors": [
-   "RELEASE_COUNT"
-  ],
-  "release_warnings": {
-   "MANUFACTURER_SCOPE": 12
-  },
-  "seed_mode": "PASS",
-  "self_test": "PASS"
- },
- "stage_status_pl": "Etap rozbudowy puli NIE jest zakończony: rzeczywista pula < 2000 (cel z paczki)."
+ "status_pl": "Istniejący bank po redakcji pod praktyczny test. Bez nowego researchu. Zmiany redakcyjne nie są nowym zatwierdzeniem klinicznym.",
+ "pool_note_pl": "Bank zamknięty. Pytania metodologiczne bez klinicznego rdzenia wyłączono z aktywnej puli, zachowując je w archiwum i rejestrze wyłączeń. Poziomy trudności są redakcyjne, bez kalibracji empirycznej.",
+ "previous_bank": {
+  "bank_version": "release-2026-10-23c",
+  "runtime_sha256": "ae49224b3ad5049489e44f45f8c231cda472266ee84c77bb376280ec49e16fc1",
+  "questions": 1097,
+  "deployed_tag": "v0.1.0-pages",
+  "status": "usunięty z aplikacji 24.10.2026 (docs/MIGRACJA_V15.md); prywatna kopia poza repozytorium",
+  "common_ids_with_v15": 1001,
+  "unchanged_in_v15": 332,
+  "changed_same_id": 669,
+  "retired_in_v15": 96
+ }
 }
