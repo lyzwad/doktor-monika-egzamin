@@ -5,6 +5,7 @@ import { defineConfig, type Plugin } from 'vite';
 import react from '@vitejs/plugin-react';
 import { VitePWA } from 'vite-plugin-pwa';
 import { CONTENT_RELEASE } from './src/domain/contentRelease';
+import { takeoverScript } from './scripts/sw-takeover.mjs';
 
 /**
  * Ścieżka bazowa publikacji. Lokalnie `/`; dla GitHub Pages `/<repozytorium>/`
@@ -40,60 +41,6 @@ const RELEASE_INFO_FILE = 'dme-release.json';
 const TAKEOVER_FILE = `dme-sw-takeover-${CONTENT_RELEASE.bankSha256.slice(0, 12)}.js`;
 
 /**
- * Treść skryptu przejęcia. Zasady (MDN/BCD: `skipWaiting`, `Clients.claim` — Safari 11.1/iOS 11.3;
- * `WindowClient.navigate` — Safari/iOS 16+, wcześniej `NotSupportedError`):
- *  - install: jeśli to AKTUALIZACJA (jest aktywny poprzedni worker) i znacznik wersji treści w Cache Storage
- *    jest inny niż ten build → zapis „przejęcie oczekuje” i `skipWaiting()`; pierwsza instalacja i zwykłe
- *    aktualizacje aplikacji bez zmiany treści — bez przejęcia (aktualizacja na żądanie, DECYZJE §11);
- *  - activate: znacznik = ta wersja; przy oczekującym przejęciu `clients.claim()`, wiadomość
- *    `DME_CONTENT_UPDATE` do okien (nowa aplikacja przeładowuje się sama) i `client.navigate(client.url)`
- *    (przeładowanie także STAREGO kodu, który wiadomości nie zna). `navigate` nie jest awaitowane w
- *    `waitUntil` — żądanie nawigacji czeka na zakończenie aktywacji;
- *  - stary precache tej aplikacji usuwa Workbox przy aktywacji (wpisy spoza nowego manifestu, tylko cache
- *    `workbox-precache-v2-<scope>` tej rejestracji); `cleanupOutdatedCaches` usuwa stare formaty Workboxa.
- */
-function takeoverScript(): string {
-  const content = JSON.stringify({ bankVersion: CONTENT_RELEASE.bankVersion, bankSha256: CONTENT_RELEASE.bankSha256, bankFile: CONTENT_RELEASE.bankFile });
-  return `/* Doktor Monika Egzamin — przejęcie po zmianie wersji treści (wygenerowane w vite.config.ts). */
-(() => {
-  const CONTENT = ${content};
-  const scope = self.registration.scope;
-  const MARKER_CACHE = 'dme-content-marker-v1:' + scope;
-  const VERSION_KEY = new URL('__dme-content-version', scope).href;
-  const PENDING_KEY = new URL('__dme-content-takeover', scope).href;
-  self.addEventListener('install', (event) => {
-    event.waitUntil((async () => {
-      const cache = await caches.open(MARKER_CACHE);
-      const stored = await cache.match(VERSION_KEY);
-      const previous = stored ? await stored.text() : null;
-      if (self.registration.active && previous !== CONTENT.bankVersion) {
-        await cache.put(PENDING_KEY, new Response(CONTENT.bankVersion));
-        await self.skipWaiting();
-      }
-    })());
-  });
-  self.addEventListener('activate', (event) => {
-    event.waitUntil((async () => {
-      const cache = await caches.open(MARKER_CACHE);
-      const pending = await cache.match(PENDING_KEY);
-      await cache.put(VERSION_KEY, new Response(CONTENT.bankVersion));
-      if (!pending) return;
-      await cache.delete(PENDING_KEY);
-      await self.clients.claim();
-      const windows = await self.clients.matchAll({ type: 'window', includeUncontrolled: true });
-      for (const client of windows) {
-        try { client.postMessage({ type: 'DME_CONTENT_UPDATE', bankVersion: CONTENT.bankVersion }); } catch (e) { /* okno zamknięte */ }
-        try {
-          if (typeof client.navigate === 'function') client.navigate(client.url).catch(() => undefined);
-        } catch (e) { /* Safari < 16: NotSupportedError — fallback: wiadomość, przeładowanie przy starcie/powrocie */ }
-      }
-    })());
-  });
-})();
-`;
-}
-
-/**
  * Plik wydania, skrypt przejęcia i kontrola katalogu `public/data` (wyłącznie trzy pliki V15 z poprawnymi
  * sumami SHA-256) — build przerywa się przy niezgodności.
  */
@@ -119,7 +66,7 @@ function contentReleasePlugin(): Plugin {
       }
     },
     generateBundle() {
-      this.emitFile({ type: 'asset', fileName: TAKEOVER_FILE, source: takeoverScript() });
+      this.emitFile({ type: 'asset', fileName: TAKEOVER_FILE, source: takeoverScript(CONTENT_RELEASE) });
       this.emitFile({
         type: 'asset',
         fileName: RELEASE_INFO_FILE,

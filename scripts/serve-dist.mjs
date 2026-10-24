@@ -30,13 +30,14 @@ const MIME = {
  * @param {{ dist: string, base: string, port?: number, host?: string }} options
  * Zwraca serwer z hakami do kontroli: `hooks.transformSw(text)`, `hooks.fail(pathRel) → status|null`,
  * `hooks.offline` (zrywa połączenia — brak sieci), `hooks.dist` (inny katalog buildu — „wdrożenie”
- * nowej wersji pod tym samym adresem), `requests` (lista ścieżek względem base).
+ * nowej wersji pod tym samym adresem), `hooks.delay(pathRel) → ms|null` (opóźnienie odpowiedzi — np. przerwanie
+ * pobierania aktualizacji), `requests` (lista ścieżek względem base).
  */
 export async function startDistServer({ dist, base, port = 0, host = '127.0.0.1' }) {
   const initialRoot = resolve(dist);
   let normalizedBase = base.startsWith('/') ? base : `/${base}`;
   if (!normalizedBase.endsWith('/')) normalizedBase += '/';
-  const hooks = { transformSw: null, fail: null, offline: false, dist: null };
+  const hooks = { transformSw: null, fail: null, offline: false, dist: null, delay: null };
   const requests = [];
 
   const server = createServer(async (req, res) => {
@@ -53,6 +54,8 @@ export async function startDistServer({ dist, base, port = 0, host = '127.0.0.1'
       return;
     }
     requests.push(rel);
+    const wait = hooks.delay?.(rel);
+    if (wait) await new Promise((ok) => setTimeout(ok, wait));
     const forced = hooks.fail?.(rel);
     if (forced) {
       res.writeHead(forced, { 'content-type': 'text/plain; charset=utf-8' }).end(String(forced));

@@ -8,7 +8,8 @@
  * Scenariusze dla każdej przeglądarki:
  *  1. pierwsze uruchomienie: rejestracja SW w scope `base`, komplet precache, strona NIE przejęta bez
  *     ponownego otwarcia (brak clientsClaim);
- *  2. offline po pierwszym pobraniu: start aplikacji, bank, fonty, trasa hash, nawigacja w scope → index.html;
+ *  2. offline po pierwszym pobraniu: start aplikacji, bank V15 (wersjonowana ścieżka), fonty, trasa hash,
+ *     nawigacja w scope → index.html;
  *  3. aktualizacja: nowa wersja SW czeka (`waiting`), strona nie jest przeładowana; aktywacja dopiero
  *     po komunikacie SKIP_WAITING (to wysyła src/pwa na żądanie użytkowniczki);
  *  4. nieudane pobranie aktualizacji (błąd serwera dla zmienionego pliku): nowa wersja odrzucona,
@@ -41,6 +42,9 @@ const swSource = readFileSync(resolve(dist, 'sw.js'), 'utf8');
 const precache = [...swSource.matchAll(/url:\s*"([^"]+)"\s*,\s*revision:\s*(null|"([^"]*)")/g)].map((m) => ({ url: m[1], revision: m[3] ?? null }));
 if (precache.length === 0) throw new Error('Brak listy precache w sw.js');
 const APP_TITLE = 'Doktor Monika Egzamin';
+/** Bank V15 pod wersjonowaną ścieżką (src/domain/contentRelease.ts). */
+const BANK_FILE = readFileSync(resolve('src/domain/contentRelease.ts'), 'utf8').match(/\bbankFile:\s*'([^']+)'/)?.[1];
+if (!BANK_FILE) throw new Error('contentRelease.ts: brak bankFile');
 
 const results = [];
 function record(browser, level, msg) {
@@ -127,7 +131,7 @@ async function appLoads(page) {
   const title = await page.title();
   const bank = await page.evaluate(async (b) => {
     try {
-      const r = await fetch(`${b}data/bank.json`);
+      const r = await fetch(`${b.base}${b.bankFile}`);
       if (!r.ok) return { ok: false, status: r.status };
       const json = await r.json();
       const n = Array.isArray(json.questions) ? json.questions.length : Object.keys(json).length;
@@ -135,7 +139,7 @@ async function appLoads(page) {
     } catch (e) {
       return { ok: false, error: String(e) };
     }
-  }, base);
+  }, { base, bankFile: BANK_FILE });
   const font = await page.evaluate(async () => {
     try {
       await document.fonts.load('700 28px "Hanken Grotesk"', 'Żółć gęś');
@@ -314,7 +318,7 @@ async function runBrowser(name, server) {
     await page.reload();
     const off = await appLoads(page);
     record(name, off.title === APP_TITLE ? 'PASS' : 'FAIL', `offline: start aplikacji (tytuł „${off.title}”)`);
-    record(name, off.bank.ok ? 'PASS' : 'FAIL', `offline: data/bank.json z precache (${off.bank.ok ? `${off.bank.n} pytań` : JSON.stringify(off.bank)})`);
+    record(name, off.bank.ok ? 'PASS' : 'FAIL', `offline: ${BANK_FILE} z precache (${off.bank.ok ? `${off.bank.n} pytań` : JSON.stringify(off.bank)})`);
     record(name, off.font ? 'PASS' : 'FAIL', 'offline: lokalny krój Hanken Grotesk (latin + latin-ext) dostępny');
     await page.goto(`${server.url}#/historia`);
     record(name, (await page.title()) === APP_TITLE ? 'PASS' : 'FAIL', 'offline: trasa hash #/historia');
@@ -354,9 +358,9 @@ async function runBrowser(name, server) {
     await page.reload();
 
     // 4. nieudane pobranie aktualizacji → stara wersja działa
-    const bankEntry = precache.find((e) => e.url === 'data/bank.json');
+    const bankEntry = precache.find((e) => e.url === BANK_FILE);
     server.hooks.transformSw = (text) => `${text.replace(`"${bankEntry?.revision}"`, '"dme-check-zmiana"')}\n// dme-check v3\n`;
-    server.hooks.fail = (rel) => (rel === 'data/bank.json' ? 503 : null);
+    server.hooks.fail = (rel) => (rel === BANK_FILE ? 503 : null);
     const activeBefore = await registrationState(page);
     const outcome = await page.evaluate(async () => {
       const reg = await navigator.serviceWorker.getRegistration();

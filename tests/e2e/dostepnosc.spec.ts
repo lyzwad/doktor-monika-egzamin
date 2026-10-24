@@ -63,11 +63,11 @@ test('UI-02: arkusz „Przerwać test?” na ekranie pytania — fokus zostaje w
  * ma zastępstwa — ostatnia pozycja nie zostaje bez akcji: „Przejdź do pytania 1” i baner z wyjaśnieniem;
  * pozycja oczekująca ma baner S24g z akcjami; karta „Kontynuuj” podaje liczbę oczekujących.
  * Koszyk (domena × poziom) o najmniejszej liczbie rodzin wybierany z banku na dysku — bez założeń o jego wielkości.
- * W banku release-2026-10-23c najmniejszy koszyk ma 19 rodzin (SKIN/zaawansowany); dawny próg 12
- * pomijał test po cichu, więc próg podniesiono do 40 (test odpowiada na N pytań — czas rośnie liniowo).
+ * W banku V15 najmniejszy koszyk ma 45 rodzin (INJ/zaawansowany; w release-2026-10-23c: 19, SKIN/zaawansowany).
+ * Próg pominięcia podniesiono do 60 (test odpowiada na N pytań — czas rośnie liniowo), aby test nie znikał po cichu.
  */
 test('E03: brak zastępstwa dla wcześniejszej pozycji — na ostatniej przycisk do pozycji oczekującej, bez martwego ekranu', async ({ page }) => {
-  test.setTimeout(180_000);
+  test.setTimeout(300_000);
   const families = new Map<string, Set<string>>();
   for (const q of BANK.questions as Array<{ domain_id: string; difficulty?: string; family_id: string }>) {
     const key = `${q.domain_id}|${q.difficulty ?? ''}`;
@@ -77,7 +77,7 @@ test('E03: brak zastępstwa dla wcześniejszej pozycji — na ostatniej przycisk
   const [cellKey, fams] = [...families.entries()].filter(([, f]) => f.size >= 3).sort((a, b) => a[1].size - b[1].size)[0] ?? ['', new Set<string>()];
   const [domainId, difficulty] = cellKey.split('|');
   const n = fams.size;
-  test.skip(n === 0 || n > 40, `brak małego koszyka w banku (najmniejszy: ${n} rodzin)`);
+  test.skip(n === 0 || n > 60, `brak małego koszyka w banku (najmniejszy: ${n} rodzin)`);
   const domainTitle = BANK.domains.find((d) => d.id === domainId)?.title_pl ?? '';
   const levelLabel = { basic: 'Łatwy', intermediate: 'Średni', advanced: 'Trudny' }[difficulty as 'basic'] ?? '';
 

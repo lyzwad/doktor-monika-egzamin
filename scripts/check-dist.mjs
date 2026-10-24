@@ -292,8 +292,8 @@ if (fileSet.has('sw.js')) {
   if (fileSet.has(TAKEOVER)) {
     const t = read(TAKEOVER);
     check(
-      t.includes(RELEASE.bankVersion) && /self\.registration\.active && previous !== CONTENT\.bankVersion/.test(t) && /self\.skipWaiting\(\)/.test(t) && /self\.clients\.claim\(\)/.test(t) && /client\.navigate\(client\.url\)/.test(t) && /DME_CONTENT_UPDATE/.test(t),
-      `${TAKEOVER}: przejęcie tylko przy zmianie wersji treści (warunkowy skipWaiting, clients.claim, navigate, wiadomość DME_CONTENT_UPDATE)`,
+      t.includes(RELEASE.bankVersion) && /self\.registration\.active && previous !== CONTENT\.bankVersion/.test(t) && /self\.skipWaiting\(\)/.test(t) && /self\.clients\.claim\(\)/.test(t) && /client\.navigate\(client\.url\)/.test(t) && /DME_CONTENT_UPDATE/.test(t) && /LEGACY_BANK = new URL\('data\/bank\.json', scope\)/.test(t) && /status: 404/.test(t),
+      `${TAKEOVER}: przejęcie tylko przy zmianie wersji treści (warunkowy skipWaiting, clients.claim, navigate, wiadomość DME_CONTENT_UPDATE); dawna ścieżka banku → 404`,
       `${TAKEOVER}: niekompletny skrypt przejęcia`,
     );
   }
@@ -428,7 +428,8 @@ scan('klucz prywatny / tokeny (AKIA, ghp_, PRIVATE KEY)', /AKIA[0-9A-Z]{16}|\bgh
 scan('anthropic / openai / claude.ai w kodzie', /anthropic|openai|claude\.ai/i, codeFiles);
 scan('mock kontrolera w buildzie (__dmeMock, createMockController)', /__dmeMock|createMockController/, codeFiles);
 scan('mapy źródeł (sourceMappingURL)', /sourceMappingURL=/, codeFiles);
-scan(`dawna ścieżka banku (${RELEASE.legacyBankFile}) w kodzie`, new RegExp(RELEASE.legacyBankFile.replace(/[.*+?^${}()|[\]\\/]/g, '\\$&')), codeFiles);
+// Wyjątek: skrypt przejęcia SW zawiera tę ścieżkę wyłącznie po to, by odpowiadać na nią 404.
+scan(`dawna ścieżka banku (${RELEASE.legacyBankFile}) w kodzie`, new RegExp(RELEASE.legacyBankFile.replace(/[.*+?^${}()|[\]\\/]/g, '\\$&')), codeFiles.filter((f) => f.rel !== TAKEOVER));
 
 // Figury i inne SVG: bez skryptów, zdarzeń, foreignObject i zasobów zewnętrznych (G04).
 const svgs = textFiles.filter((f) => f.rel.endsWith('.svg'));

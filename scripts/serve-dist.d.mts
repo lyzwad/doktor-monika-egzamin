@@ -8,6 +8,8 @@ export interface DistServerHooks {
   offline: boolean;
   /** Inny katalog buildu serwowany pod tym samym adresem (wdrożenie nowej wersji) albo `null` = `dist` z opcji. */
   dist: string | null;
+  /** Opóźnienie odpowiedzi (ms) dla ścieżki względem `base` albo `null`. */
+  delay: ((pathRel: string) => number | null) | null;
 }
 
 export interface DistServer {
