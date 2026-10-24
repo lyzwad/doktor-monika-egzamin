@@ -6,7 +6,7 @@ PASS testu albo kontroli oznacza, że aplikacja działa zgodnie z wymaganiami i 
 
 **Trzy osobne oceny:**
 
-- **Gotowość techniczna aplikacji: tak, w emulacji i lokalnie.** Typecheck, Vitest, build pod podścieżką, `check-dist`, `check-offline` i e2e w WebKit „iPhone 15” oraz w Chromium przeszły na banku V15 (§2–§3). W e2e jest też aktualizacja z prawdziwej starej aplikacji (tag `v0.1.0-pages`) pod tym samym adresem. Testu na fizycznym iPhonie 15 (G05) nie wykonano (§6). Wersji z V15 nie wdrożono: wdrożenie wykona koordynator (§7).
+- **Gotowość techniczna aplikacji: tak, w emulacji i lokalnie.** Typecheck, Vitest, build pod podścieżką, `check-dist`, `check-offline` i e2e w WebKit „iPhone 15” oraz w Chromium przeszły na banku V15 (§2–§3). W e2e jest też aktualizacja z prawdziwej starej aplikacji (tag `v0.1.0-pages`) pod tym samym adresem. Testu na fizycznym iPhonie 15 (G05) nie wykonano (§6). Wersję z V15 wdrożono na GitHub Pages 24.10.2026 i sprawdzono na żywym adresie (§7).
 - **Liczebność puli.** Próg 2000 pytań jest spełniony (2987). **Minimum 1000 pytań na każdy poziom nie jest spełnione dla poziomu trudnego: advanced 573 < 1000** (§4, wiersz A03).
 - **Recenzja treści.** Żadne pytanie nie ma recenzji lekarskiej (§5).
 
@@ -17,7 +17,7 @@ Zgodność raportu z repozytorium sprawdza test `tests/docs/raport-kontroli.test
 | Element | Wartość |
 |---|---|
 | Aplikacja | `doktor-monika-egzamin` 0.1.0 (build lokalny bez sufiksu `APP_BUILD_ID`) |
-| Kod | gałąź `main`, commity z 24.10.2026 (lista w §2), bez wypchnięcia (`git push` wykona koordynator) |
+| Kod | gałąź `main`, commity z 24.10.2026 (lista w §2), wypchnięte na `origin/main` i wdrożone (§7) |
 | Bank pytań | `chatgpt-editorial-v15-2026-10-24-f020a0440df8`, plik `public/data/bank-37f3980a1129.json` (szczegóły w §4) |
 | System | macOS 26.5.2 (25F84), Apple M1 Pro (8 rdzeni), 16 GB RAM. Maszynę współdzielą inne procesy, więc testy szły sekwencyjnie (`--maxWorkers=2`, `--workers=1`) z limitem czasu `perl -e 'alarm shift; exec @ARGV'` |
 | Obciążenie w czasie przebiegu | load average (1 / 5 / 15 min): typecheck i Vitest 14:36 — 3,28 / 4,89 / 5,12; build i `check-dist` 14:37 — 3,61–3,96; e2e 14:37–14:50 — 3,57–5,64. Przy 8 rdzeniach obciążenie nie blokowało testów; żadnej kontroli nie przerwał limit czasu |
@@ -122,16 +122,23 @@ Najmniejszy koszyk domena × poziom to INJ/trudny z 45 rodzinami (test e2e E03 d
 | `pwa.spec.ts`: „G02 + A04: offline (context.setOffline)” w projekcie WebKit | **SKIP** | Playwright WebKit (rev. 2359) przy `context.setOffline(true)` blokuje każdą nawigację, także obsługiwaną przez Service Workera. To ograniczenie narzędzia, nie aplikacji | w Chromium ten sam test: PASS. W WebKit: `pwa.spec.ts` „G02 (serwer niedostępny)”, `schematy.spec.ts` (figury offline), `aktualizacja-v15.spec.ts` (start offline na V15) i `check-offline.mjs`: PASS |
 | `dostepnosc.spec.ts`: E03 (brak zastępstwa dla wcześniejszej pozycji) | wykonany: **PASS** w obu przeglądarkach | test pomija się warunkowo, gdy w banku nie ma koszyka domena × poziom z co najwyżej 60 rodzinami. W banku V15 najmniejszy koszyk to INJ/trudny z 45 rodzinami, więc test nie był pominięty | — |
 | Aktualizacja w trybie standalone (aplikacja z ikony) i w karcie zamrożonej w tle | **NOT RUN** | Playwright nie emuluje trybu standalone iOS ani zamrażania kart | fallback w kodzie (`dme-release.json` przy starcie i powrocie z tła, wiadomość `DME_CONTENT_UPDATE`) pokrywa `tests/pwa/tresc-v15.test.ts` |
-| Publikacja wersji z V15 na GitHub Pages | **NOT RUN** | zgodnie z poleceniem bez `git push`; wdrożenie wykona koordynator | §7 |
 | Recenzja lekarska kluczy | **NOT RUN** | poza zakresem kontroli aplikacji; wymaga lekarza recenzenta | status w §5 |
 | Kryterium treści: minimum 1000 pytań na poziom | **FAIL** (niespełnione dla advanced: 573) | bank V15 dostarczono jako zamknięty; aplikacja nie dopisuje pytań | §4 |
 | Porównanie pikselowe z Claude Design | **NOT RUN** | brak wzorcowych obrazów referencyjnych w tej samej rozdzielczości | zrzuty `docs/zrzuty/01–09` (ocena wzrokowa) |
 
 ## 7. Wdrożenie
 
-Adres wdrożenia: https://lyzwad.github.io/doktor-monika-egzamin/ (GitHub Pages, repozytorium https://github.com/lyzwad/doktor-monika-egzamin). Obecnie działa tam **poprzednia wersja**: wdrożenie z 23.10.2026 z commita `930ab22` (tag `v0.1.0-pages`), bank `release-2026-10-23c`. Kontrolę tamtego wdrożenia opisuje poprzednia wersja tego raportu w historii git.
+Adres wdrożenia: https://lyzwad.github.io/doktor-monika-egzamin/ (GitHub Pages, repozytorium https://github.com/lyzwad/doktor-monika-egzamin). Działa tam **wersja z bankiem V15**: przebiegi workflow Pages `40095756942` (commit `51d7a4d`) i `40096528336` (commit `0af5b48`, tylko poprawka testu e2e), oba: build i deploy — success. Poprzednie wdrożenie (23.10.2026, commit `930ab22`, tag `v0.1.0-pages`, bank `release-2026-10-23c`) zastąpiono. Domena, adres i konfiguracja Pages bez zmian.
 
-Wersji z V15 nie wypchnięto i nie wdrożono: zrobi to koordynator. Po wdrożeniu nowy Service Worker przejmie otwarte karty i aplikację z ikony, a migracja wykona się przy pierwszym uruchomieniu (`docs/MIGRACJA_V15.md` §3–§4). Kontrolę po wdrożeniu trzeba wykonać i dopisać tutaj. G05 pozostaje **NOT RUN**.
+Kontrola na żywym adresie (24.10.2026, 15:00–15:09):
+
+- `data/bank-37f3980a1129.json`: SHA-256 `37f3980a1129f782213553360ba0221fbe9281f4710d31f86dfdea2a488f0770` (bajt w bajt z plikiem w repozytorium), `bank_version` `chatgpt-editorial-v15-2026-10-24-f020a0440df8`, 2987 pytań: 1048 / 1366 / 573;
+- `dme-release.json`: ta sama wersja i SHA-256, `appVersion` `0.1.0+0af5b48`;
+- dawna ścieżka `data/bank.json`: **404**; w `sw.js` brak odwołania do niej; `sw.js` importuje `dme-sw-takeover-37f3980a1129.js`;
+- precache z `sw.js`: 25 wpisów, każdy **200**;
+- e2e na żywym adresie (`smoke`, `schematy`, `flow-a`, `flows`, `pwa`; WebKit „iPhone 15” i Chromium, `--workers=1`): **31 PASS, 1 SKIP, 0 FAIL**. SKIP to `pwa.spec.ts` G02 + A04 w WebKit (§6). Test „figury z banku działają offline” uruchamia własny serwer z lokalnego `dist`. Wcześniejszy przebieg (15:00) miał 1 FAIL w WebKit: `schematy.spec.ts` ANAT-Q001, kliknięcie w arkuszu zakresu na elemencie odłączonym od DOM. Ten test powtórzony ×3: PASS. Skrypt przejęcia nie przeładowuje strony przy pierwszej instalacji ani przy tej samej wersji treści, więc uznano to za niestabilność testu. W tym samym powtórzeniu lokalny test figur offline miał 1 FAIL na 3 (jednorazowy odczyt cache w chwili, gdy WebKit ponawia niepełną pierwszą instalację). Test odpytuje teraz cache do 30 s: ×5 w WebKit oraz `schematy` i `aktualizacja-v15` w obu przeglądarkach: PASS (commit `0af5b48`). Kod aplikacji bez zmian.
+
+Po wdrożeniu nowy Service Worker przejmuje otwarte karty i aplikację z ikony, a migracja wykonuje się przy pierwszym uruchomieniu (`docs/MIGRACJA_V15.md` §3–§4). Na urządzeniach użytkowniczek tego nie obserwowano. G05 pozostaje **NOT RUN**.
 
 ## 8. Macierz kryteriów A01–G07
 

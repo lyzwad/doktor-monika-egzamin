@@ -8,7 +8,7 @@ Co jest gotowe:
 - **Rzeczywisty kontroler** `src/app/appController.ts` (`createAppController`) spinający domenę, IndexedDB i SW; platforma przeglądarki `src/app/platform.ts`; modele widoku `src/app/screenModels.ts`; punkt wejścia `src/main.tsx` uruchamia go w produkcji. Mock kontrolera działa wyłącznie w `npm run dev` z `?mock=1` i jest wycinany z buildu (kontrola: `scripts/check-dist.mjs`).
 - Bank V15 `public/data/bank-37f3980a1129.json` (`chatgpt-editorial-v15-2026-10-24-f020a0440df8`, bajt w bajt z paczki redakcji): 2987 pytań (1048 / 1366 / 573), 2501 rodzin, 133 ID wyłączone (`retired-question-ids-83b36ff80986.json`), profil treningowy 35/25/40 (`training-profile-c0edd4ca07c2.json`), 2 pytania ze schematem (ANAT-Q001, DEV-Q041; figury `public/figures/*.svg` z paczki V15). Wersja i sumy: `src/domain/contentRelease.ts`. Liczby w UI są liczone z katalogu i sprawdzane względem `bank.counts` (`docs/RAPORT_PULI.md`). Dawny bank `release-2026-10-23c` usunięto.
 - Testy: jednostkowe/integracyjne (Vitest: domain, persistence, app, pwa, ui, docs) i e2e (Playwright: WebKit „iPhone 15” 393×852 i Chromium mobile) na buildzie produkcyjnym pod podścieżką `/doktor-monika-egzamin/`. Wyniki ostatniego przebiegu, środowisko i macierz kryteriów A01–G07: `docs/RAPORT_KONTROLI.md`.
-- Nie wykonano: testu na fizycznym iPhonie 15 (G05 — NOT RUN). Publikacja wersji 0.1.0 na GitHub Pages: 23.10.2026; wersja z V15 czeka na wdrożenie (koordynator).
+- Nie wykonano: testu na fizycznym iPhonie 15 (G05 — NOT RUN). Publikacja wersji 0.1.0 na GitHub Pages: 23.10.2026; wersja z bankiem V15 wdrożona 24.10.2026 (`docs/RAPORT_KONTROLI.md` §7).
 
 ## 1. Stos i wersje
 
