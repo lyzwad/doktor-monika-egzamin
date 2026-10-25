@@ -7,7 +7,7 @@
  * Nie zastępuje testu na iPhonie (G05: tryb samolotowy, aktualizacja po „Dodaj do ekranu głównego”).
  */
 import { resolve } from 'node:path';
-import { expect, test } from '@playwright/test';
+import { expect, test } from './fixtures';
 import { startDistServer, type DistServer } from '../../scripts/serve-dist.mjs';
 import { BASE_PATH, answer, next, openFresh, progressText, readStore, reloadUntilControlled, startTest, trackExternalRequests, waitOfflineReady } from './helpers';
 

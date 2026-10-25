@@ -14,7 +14,8 @@
 import { execFileSync } from 'node:child_process';
 import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
-import { expect, test, type Page } from '@playwright/test';
+import { type Page } from '@playwright/test';
+import { expect, test } from './fixtures';
 import { startDistServer, type DistServer } from '../../scripts/serve-dist.mjs';
 import {
   BASE_PATH,

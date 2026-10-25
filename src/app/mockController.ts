@@ -1009,6 +1009,7 @@ export function createMockController(options: MockControllerOptions): MockContro
       catalog,
       userState: booted ? user : null,
       resume: booted ? resumeVM() : null,
+      profile: null,
       save,
       toast,
       online: !sim.offline,
@@ -1059,6 +1060,18 @@ export function createMockController(options: MockControllerOptions): MockContro
     subscribe: (listener) => {
       listeners.add(listener);
       return () => listeners.delete(listener);
+    },
+    async whenIdle() {
+      /* mock: zapisy w pamięci */
+    },
+    switchProfile() {
+      /* mock: bez profili */
+    },
+    assignUnassignedHistory() {
+      /* mock: bez profili */
+    },
+    setBackupTarget() {
+      /* mock: bez profili */
     },
     async start() {
       catalog = mockCatalog(options.bank, options.retiredIds ?? []);
@@ -1574,11 +1587,11 @@ export function createMockController(options: MockControllerOptions): MockContro
       if (!b || b.format !== 'dme-backup' || b.appId !== 'doktor-monika-egzamin' || typeof b.formatVersion !== 'number' || !b.data) {
         return fail({ code: 'InvalidBackup', messagePl: 'To nie jest kopia tej aplikacji.', reasonsPl: ['Brak oznaczenia formatu dme-backup.'], foundVersion: null });
       }
-      if (b.formatVersion !== 1) {
+      if (b.formatVersion !== 1 && b.formatVersion !== 2) {
         return fail({ code: 'UnsupportedBackupVersion', messagePl: 'Kopia z nowszej wersji aplikacji.', reasonsPl: [], foundVersion: b.formatVersion });
       }
       validatedBackup = b as BackupFileV1;
-      backupFlow = { step: 'confirm', fileName, summary: summarize(validatedBackup) };
+      backupFlow = { step: 'confirm', fileName, summary: summarize(validatedBackup), sourceEmail: null, targetEmail: null, activeEmail: null, profiles: [] };
       publish();
       return { ok: true };
     },
@@ -1586,7 +1599,7 @@ export function createMockController(options: MockControllerOptions): MockContro
       if (backupFlow.step !== 'confirm' || !validatedBackup) return failResult('NOT_ALLOWED', 'Najpierw wybierz plik kopii.');
       const fileName = backupFlow.fileName;
       const incoming = validatedBackup;
-      backupFlow = { step: 'replacing', fileName };
+      backupFlow = { step: 'replacing', fileName, targetEmail: null };
       publish();
       await delay();
       const safetyFileName = `dme-przed-wczytaniem-${nowIso().slice(0, 10)}.json`;
@@ -1603,7 +1616,7 @@ export function createMockController(options: MockControllerOptions): MockContro
         events: Object.fromEntries(d.events.map((x) => [x.id, x])),
       });
       undo = null;
-      backupFlow = { step: 'done', summary: summarize(incoming), safetyBackupId: safetyId, safetyFileName };
+      backupFlow = { step: 'done', summary: summarize(incoming), safetyBackupId: safetyId, safetyFileName, targetEmail: null, activeEmail: null };
       validatedBackup = null;
       publish();
       return { ok: true };
@@ -1724,6 +1737,7 @@ export function createMockController(options: MockControllerOptions): MockContro
       exportedAt: b.exportedAt,
       formatVersion: b.formatVersion,
       appVersion: b.appVersion,
+      profileEmail: null,
       completedTests: s.filter((x) => x.kind === 'test' && x.status === 'completed').length,
       unfinishedTests: s.filter((x) => x.kind === 'test' && x.status === 'unfinished').length,
       freeFlowSessions: s.filter((x) => x.kind === 'freeflow' && x.status === 'ended').length,

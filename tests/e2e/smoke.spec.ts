@@ -2,7 +2,7 @@
  * Smoke e2e (fundament): zbudowana aplikacja się ładuje, metadane PWA i brak żądań zewnętrznych.
  * Scenariusze kryteriów odbioru dopisują kolejni agenci. Nie zastępuje testu na fizycznym iPhonie (G05).
  */
-import { expect, test } from '@playwright/test';
+import { expect, test } from './fixtures';
 import { CONTENT_RELEASE } from '../../src/domain/contentRelease';
 import { waitOfflineReady } from './helpers';
 

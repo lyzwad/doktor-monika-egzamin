@@ -15,9 +15,11 @@
 import { execFileSync } from 'node:child_process';
 import { existsSync, mkdirSync, readFileSync, rmSync, symlinkSync } from 'node:fs';
 import { resolve } from 'node:path';
-import { expect, test, type BrowserContext, type Page } from '@playwright/test';
+import { type BrowserContext, type Page } from '@playwright/test';
+import { expect, test } from './fixtures';
 import { startDistServer, type DistServer } from '../../scripts/serve-dist.mjs';
 import { CONTENT_RELEASE } from '../../src/domain/contentRelease';
+import { DB_SCHEMA_VERSION } from '../../src/persistence/api';
 import { BANK, BASE_PATH, answer, currentQuestion, next } from './helpers';
 
 const OLD_TAG = 'v0.1.0-pages';
@@ -150,16 +152,18 @@ async function cacheUrls(page: Page): Promise<string[]> {
   });
 }
 
-/** Czeka, aż strona pokaże NOWĄ aplikację (bank V15 w IndexedDB i ekran startowy). */
+/** Czeka, aż strona pokaże NOWĄ aplikację (bank V15 w IndexedDB, ekran wyboru profilu — DECYZJE §16). */
 async function waitNewApp(page: Page): Promise<void> {
   await expect
     .poll(async () => (await page.evaluate(() => (window as unknown as { __dmeOld?: number }).__dmeOld ?? null).catch(() => 'nav')) ?? null, { timeout: 90_000 })
     .toBeNull();
-  await expect(page.getByRole('heading', { level: 1, name: 'Doktor Monika Egzamin' })).toBeVisible({ timeout: 60_000 });
-  await expect.poll(async () => (await dumpDb(page).catch(() => ({ version: 0, stores: {} }))).version, { timeout: 30_000 }).toBe(2);
+  await expect(page.getByRole('heading', { level: 1, name: 'Wybierz profil' })).toBeVisible({ timeout: 60_000 });
+  await expect.poll(async () => (await dumpDb(page).catch(() => ({ version: 0, stores: {} }))).version, { timeout: 30_000 }).toBe(DB_SCHEMA_VERSION);
 }
 
 test.describe.configure({ mode: 'serial' });
+// Stara aplikacja nie zna profili; nowa zaczyna od ekranu wyboru z historią bez profilu.
+test.use({ presetProfile: null });
 
 test.beforeAll(() => {
   test.setTimeout(400_000);
@@ -202,7 +206,7 @@ test('V15: nowy Service Worker przejmuje otwarte karty starej aplikacji, migracj
 
     // Baza po migracji: brak treści, legacy, przerwany test, meta V15, bez paczek i kopii.
     const after = await dumpDb(page);
-    expect(after.version).toBe(2);
+    expect(after.version).toBe(DB_SCHEMA_VERSION);
     const sessions = after.stores.sessions as { id: string; status: string; slots: object; plan: unknown[]; legacy?: { previousBankVersion: string } }[];
     expect(sessions.map((s) => s.status).sort()).toEqual(['completed', 'ended', 'interrupted_by_update']);
     expect(sessions.every((s) => Object.keys(s.slots).length === 0 && s.plan.length === 0 && s.legacy?.previousBankVersion === 'release-2026-10-23c')).toBe(true);
@@ -219,6 +223,13 @@ test('V15: nowy Service Worker przejmuje otwarte karty starej aplikacji, migracj
     // Dawna ścieżka banku: 404 z Service Workera (także gdy przeglądarka ma ją w pamięci HTTP) i z serwera.
     expect(await page.evaluate(async (u) => (await fetch(u)).status, `${server.url}data/bank.json`)).toBe(404);
     expect(await page.evaluate(async (u) => (await fetch(u, { cache: 'no-store' })).status, `${server.url}data/bank.json`)).toBe(404);
+
+    // Profile: historia sprzed aktualizacji czeka na decyzję (bez automatycznego przypisania); przypisanie przez UI.
+    await expect(page.getByRole('note')).toContainText('Na tym urządzeniu jest historia bez profilu');
+    await page.getByRole('button', { name: 'monika@doktormonika.pl' }).click();
+    await page.getByRole('button', { name: 'Przypisz do tego profilu' }).click();
+    await expect(page.getByRole('heading', { level: 1, name: 'Doktor Monika Egzamin' })).toBeVisible({ timeout: 30_000 });
+    await expect(page.getByLabel('Aktywny profil')).toContainText('monika@doktormonika.pl');
 
     // Historia: podsumowania bez treści; przerwany test; brak „Kontynuuj”.
     await expect(page.locator('.resume')).toHaveCount(0);
@@ -302,8 +313,8 @@ test('V15: zamknięcie karty w trakcie pobierania aktualizacji i ponowne otwarci
     await p2.goto(server.url);
     await expect
       .poll(async () => (await dumpDb(p2).catch(() => ({ version: 0, stores: {} }))).version, { timeout: 120_000, intervals: [1000] })
-      .toBe(2);
-    await expect(p2.getByRole('heading', { level: 1, name: 'Doktor Monika Egzamin' })).toBeVisible({ timeout: 60_000 });
+      .toBe(DB_SCHEMA_VERSION);
+    await expect(p2.getByRole('heading', { level: 1, name: 'Wybierz profil' })).toBeVisible({ timeout: 60_000 });
     const dump = await dumpDb(p2);
     const sessions = dump.stores.sessions as { status: string; slots: object }[];
     expect(sessions.map((s) => s.status).sort()).toEqual(['completed', 'ended', 'interrupted_by_update']);

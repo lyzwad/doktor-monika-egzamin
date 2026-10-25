@@ -12,7 +12,7 @@ import { describe, expect, it } from 'vitest';
 import { CONTENT_RELEASE } from '../../src/domain/contentRelease';
 import { chartPoints, summarizeHistory } from '../../src/domain/selectors';
 import type { Session, UserState } from '../../src/domain/types';
-import { APP_ID, BACKUP_FORMAT, BACKUP_FORMAT_VERSION } from '../../src/persistence/api';
+import { APP_ID, BACKUP_FORMAT, DB_SCHEMA_VERSION } from '../../src/persistence/api';
 import type { BackupData, Repository } from '../../src/persistence/api';
 import { MSG_STALE_CONTENT_WRITE } from '../../src/persistence/repository';
 import { createMigrationV2, MIGRATIONS } from '../../src/persistence/schema';
@@ -116,7 +116,7 @@ describe('migracja IndexedDB v1 → v2 (bank V15)', () => {
 
     const { repo } = freshRepository({ indexedDB: factory, dbName, now: () => MIGRATED_AT });
     const info = await repo.open();
-    expect(info).toEqual({ ok: true, value: { schemaVersion: 2, migratedFrom: 1, created: false } });
+    expect(info).toEqual({ ok: true, value: { schemaVersion: DB_SCHEMA_VERSION, migratedFrom: 1, created: false } });
     const state = await load(repo);
     const s1 = state.sessions['sess-1'] as Session;
     const s2 = state.sessions['sess-2'] as Session;
@@ -165,7 +165,7 @@ describe('migracja IndexedDB v1 → v2 (bank V15)', () => {
     expect((await repo.open()).ok).toBe(true);
     repo.close();
     const dump = await dumpAll(factory, dbName);
-    expect(dump.version).toBe(2);
+    expect(dump.version).toBe(DB_SCHEMA_VERSION);
     expectNoOldContent(dump.stores);
     expect(dump.stores.packs).toEqual([]);
     expect(dump.stores.backups).toEqual([]);
@@ -225,7 +225,7 @@ describe('migracja IndexedDB v1 → v2 (bank V15)', () => {
     const a = await load(first);
     first.close();
     const second = freshRepository({ indexedDB: factory, dbName, now: () => '2026-12-01T00:00:00.000Z' }).repo;
-    expect(await second.open()).toEqual({ ok: true, value: { schemaVersion: 2, migratedFrom: null, created: false } });
+    expect(await second.open()).toEqual({ ok: true, value: { schemaVersion: DB_SCHEMA_VERSION, migratedFrom: null, created: false } });
     const b = await load(second);
     expect(b).toEqual(a);
     second.close();
@@ -255,24 +255,24 @@ describe('migracja IndexedDB v1 → v2 (bank V15)', () => {
     expect((await repo.open()).ok).toBe(true);
     repo.close();
     const done = await dumpAll(factory, dbName);
-    expect(done.version).toBe(2);
+    expect(done.version).toBe(DB_SCHEMA_VERSION);
     expectNoOldContent(done.stores);
   });
 
-  it('nowa baza (pierwsze uruchomienie): v0 → v2, rekord treści V15', async () => {
+  it('nowa baza (pierwsze uruchomienie): v0 → bieżąca wersja, rekord treści V15', async () => {
     const { repo, factory, dbName } = freshRepository({ now: () => MIGRATED_AT });
-    expect(await repo.open()).toEqual({ ok: true, value: { schemaVersion: 2, migratedFrom: null, created: true } });
+    expect(await repo.open()).toEqual({ ok: true, value: { schemaVersion: DB_SCHEMA_VERSION, migratedFrom: null, created: true } });
     const meta = await repo.readContentMeta();
     expect(meta.ok && meta.value.content?.bankVersion).toBe(CONTENT_RELEASE.bankVersion);
     repo.close();
-    expect((await dumpAll(factory, dbName)).version).toBe(2);
+    expect((await dumpAll(factory, dbName)).version).toBe(DB_SCHEMA_VERSION);
   });
 });
 
 describe('import starszej kopii danych (dme-backup v1 sprzed migracji / ze starej aplikacji)', () => {
   function oldBackupText(): string {
     const data = legacyUserData();
-    return JSON.stringify({ format: BACKUP_FORMAT, formatVersion: BACKUP_FORMAT_VERSION, appId: APP_ID, exportedAt: '2026-10-22T20:00:00.000Z', appVersion: '0.1.0', bankVersions: [OLD_BANK_VERSION, 'pula-stara-1'], data });
+    return JSON.stringify({ format: BACKUP_FORMAT, formatVersion: 1, appId: APP_ID, exportedAt: '2026-10-22T20:00:00.000Z', appVersion: '0.1.0', bankVersions: [OLD_BANK_VERSION, 'pula-stara-1'], data });
   }
 
   it('walidacja przekształca kopię: bez starej treści, sesja otwarta → przerwana, paczki odrzucone', async () => {

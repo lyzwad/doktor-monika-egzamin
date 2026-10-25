@@ -66,7 +66,10 @@ import type {
   UndoToken,
   UserState,
 } from '../domain/types';
-import type { PersistenceError, ValidatedBackup } from '../persistence/api';
+import type { PersistenceError, Repository, ValidatedBackup } from '../persistence/api';
+import { MSG_NO_STORAGE_SUFFIX } from '../persistence/errors';
+import { knownProfile } from '../profiles/profiles';
+import type { ProfileEmail } from '../profiles/profiles';
 import { isUpdateSafe } from '../pwa/updateGuard';
 import type { ActionResult, AppController, AppState, ControllerDeps, CreateAppController } from './controller';
 import { HOME_ROUTE, parseHash, routeToHash, sameRoute, type HistoryTab, type ResultOrigin, type Route } from './routes';
@@ -102,14 +105,13 @@ import type {
 
 const MSG_UNSAVED = 'Poprzednia zmiana nie została zapisana. Użyj „Spróbuj zapisać ponownie”.';
 const MSG_NOT_READY = 'Aplikacja jeszcze się uruchamia.';
-const MSG_NO_STORAGE_SUFFIX =
-  ' Bez zapisu na tym urządzeniu nauka nie jest możliwa: odpowiedzi, przerwane sesje, wyniki i powtórki muszą być zapisywane lokalnie.';
 const MSG_BANK_UNAVAILABLE =
   'Nie udało się wczytać pytań. Przy pierwszym uruchomieniu potrzebny jest internet — sprawdź połączenie i spróbuj ponownie. Po pełnym wczytaniu aplikacja działa bez internetu.';
 const MSG_INTERNAL = 'Wystąpił nieoczekiwany błąd. Zmiana nie została zapisana — spróbuj ponownie.';
 /** Import puli / wczytanie kopii przy niezapisanej zmianie (DECYZJE §1: najpierw ponowienie tej samej komendy). */
 const MSG_UNSAVED_DATA =
   'Najpierw zapisz poprzednią zmianę („Spróbuj zapisać ponownie”). Dopiero potem można importować pulę lub wczytać kopię — dane na urządzeniu nie zostały zmienione.';
+const MSG_CHOOSE_TARGET = 'Wybierz profil, do którego wczytać kopię. Dane na urządzeniu nie zostały zmienione.';
 
 const MSG_CLOSING = 'Sesja jest właśnie zamykana.';
 
@@ -310,6 +312,7 @@ export const createAppController: CreateAppController = (deps: ControllerDeps): 
       preparation,
       storage,
       appVersion,
+      profile: deps.profile ? { email: deps.profile.email, unassigned: deps.profile.getUnassigned() } : null,
     };
     next.update = { available: needRefresh, canApplyNow: needRefresh && !updateApplying && isUpdateSafe(next), applying: updateApplying };
     return next;
@@ -949,6 +952,19 @@ export const createAppController: CreateAppController = (deps: ControllerDeps): 
       }
       await boot_();
     },
+    async whenIdle() {
+      let current: Promise<unknown>;
+      do {
+        current = queue;
+        await current;
+      } while (current !== queue);
+    },
+    switchProfile() {
+      deps.profile?.switchProfile();
+    },
+    assignUnassignedHistory() {
+      deps.profile?.assignUnassigned();
+    },
     dispose() {
       disposed = true;
       for (const u of unsubscribers.splice(0)) {
@@ -1422,9 +1438,26 @@ export const createAppController: CreateAppController = (deps: ControllerDeps): 
         return failResult(r.error.code, r.error.messagePl);
       }
       validatedBackup = r.value;
-      backupFlow = { step: 'confirm', fileName, summary: r.value.summary };
+      const sourceEmail = r.value.summary.profileEmail ?? null;
+      backupFlow = {
+        step: 'confirm',
+        fileName,
+        summary: r.value.summary,
+        sourceEmail,
+        // Kopia z mailem → domyślnie jej profil; kopia bez maila (format 1) → wybór wymagany.
+        targetEmail: deps.profile ? sourceEmail : null,
+        activeEmail: deps.profile?.email ?? null,
+        profiles: deps.profile?.emails ?? [],
+      };
       publish();
       return okResult();
+    },
+    setBackupTarget(email) {
+      if (backupFlow.step !== 'confirm' || !deps.profile) return;
+      const target = email === null ? null : knownProfile(email);
+      if (email !== null && (target === null || !deps.profile.emails.includes(target))) return;
+      backupFlow = { ...backupFlow, targetEmail: target };
+      publish();
     },
     confirmBackupReplace() {
       return enqueue(async () => {
@@ -1437,19 +1470,40 @@ export const createAppController: CreateAppController = (deps: ControllerDeps): 
           return failResult('UNSAVED_PENDING', MSG_UNSAVED_DATA);
         }
         const fileName = backupFlow.fileName;
-        backupFlow = { step: 'replacing', fileName };
+        const activeEmail = deps.profile?.email ?? null;
+        const targetEmail = deps.profile ? backupFlow.targetEmail : null;
+        if (deps.profile && targetEmail === null) {
+          showFailure(MSG_CHOOSE_TARGET);
+          publish();
+          return failResult('NO_TARGET', MSG_CHOOSE_TARGET);
+        }
+        backupFlow = { step: 'replacing', fileName, targetEmail };
         publish();
-        const r = await repository.replaceAllFromBackup(v, {
-          now: platform.nowIso(),
-          safetyBackupId: platform.randomId(),
-          appVersion,
-          bankVersions: (catalog as Catalog).bankVersions,
-        });
+        // Kopia innego profilu: zamiana wyłącznie w jego bazie (właściciel sprawdzany w transakcji); dane
+        // aktywnego profilu i pozostałych profili bez zmian.
+        const other = deps.profile && targetEmail !== null && targetEmail !== activeEmail ? deps.profile.repositoryFor(targetEmail as ProfileEmail) : null;
+        let r: Awaited<ReturnType<Repository['replaceAllFromBackup']>>;
+        try {
+          r = await (other ?? repository).replaceAllFromBackup(v, {
+            now: platform.nowIso(),
+            safetyBackupId: platform.randomId(),
+            appVersion,
+            bankVersions: (catalog as Catalog).bankVersions,
+          });
+        } finally {
+          other?.close();
+        }
         validatedBackup = null;
         if (!r.ok) {
           backupFlow = { step: 'error', fileName, error: backupErrorVM(r.error) };
           publish();
           return failResult(r.error.code, r.error.messagePl);
+        }
+        if (targetEmail !== null) deps.profile?.dataReplaced(targetEmail as ProfileEmail);
+        if (other) {
+          backupFlow = { step: 'done', summary: r.value.summary, safetyBackupId: r.value.safetyBackup.id, safetyFileName: r.value.safetyBackup.fileName, targetEmail, activeEmail };
+          publish();
+          return okResult();
         }
         // Dane zastąpione w całości: stan lokalny kontrolera wraca do zera, dane wczytane z bazy.
         pending = null;
@@ -1468,7 +1522,7 @@ export const createAppController: CreateAppController = (deps: ControllerDeps): 
           return failResult('RELOAD_FAILED', 'Nie udało się odczytać danych po wczytaniu kopii.');
         }
         resetDrafts();
-        backupFlow = { step: 'done', summary: r.value.summary, safetyBackupId: r.value.safetyBackup.id, safetyFileName: r.value.safetyBackup.fileName };
+        backupFlow = { step: 'done', summary: r.value.summary, safetyBackupId: r.value.safetyBackup.id, safetyFileName: r.value.safetyBackup.fileName, targetEmail, activeEmail };
         publish();
         await refreshSafetyBackups();
         return okResult();
@@ -1482,7 +1536,17 @@ export const createAppController: CreateAppController = (deps: ControllerDeps): 
     async downloadSafetyBackup(backupId) {
       const id = backupId ?? (backupFlow.step === 'done' ? backupFlow.safetyBackupId : null);
       if (!id) return failResult('NOT_ALLOWED', 'Brak kopii bezpieczeństwa.');
-      const r = await repository.getBackupFile(id);
+      // Kopia bezpieczeństwa innego profilu (wczytanie do niego) leży w jego bazie.
+      const otherTarget =
+        backupId === undefined && backupFlow.step === 'done' && deps.profile && backupFlow.targetEmail !== null && backupFlow.targetEmail !== backupFlow.activeEmail
+          ? deps.profile.repositoryFor(backupFlow.targetEmail as ProfileEmail)
+          : null;
+      let r: Awaited<ReturnType<Repository['getBackupFile']>>;
+      try {
+        r = await (otherTarget ?? repository).getBackupFile(id);
+      } finally {
+        otherTarget?.close();
+      }
       if (!r.ok) {
         showFailure(r.error.messagePl);
         publish();

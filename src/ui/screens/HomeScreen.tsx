@@ -12,6 +12,7 @@ import { Icon } from '../components/Icon';
 import { Screen } from '../components/Screen';
 import { AlertDialog, Sheet } from '../components/Sheet';
 import { configLabel, pluralPl } from '../format';
+import { EmailText } from './ProfileScreens';
 import { isStandaloneDisplay } from '../hooks';
 
 type Overlay = null | 'menu' | 'confirm';
@@ -74,6 +75,17 @@ export function HomeScreen({ vm }: { vm: HomeVM }) {
         <h1 className="app-title" ref={titleRef} tabIndex={-1}>
           Doktor Monika Egzamin
         </h1>
+        {state.profile ? (
+          <div className="profile-line" aria-label="Aktywny profil">
+            <span className="profile-line__who">
+              <Icon name="person" size={18} />
+              <EmailText email={state.profile.email} />
+            </span>
+            <button type="button" className="btn btn--text btn--sm" onClick={() => controller.switchProfile()}>
+              Zmień profil
+            </button>
+          </div>
+        ) : null}
         {showHint ? (
           <section className="hint" aria-label="Wskazówka instalacji">
             <Icon name="ios_share" size={22} className="hint__icon" />

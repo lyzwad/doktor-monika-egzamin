@@ -6,7 +6,8 @@
  * łamią słów w środku (UI-01). Powiększenie tekstu symulowane przez rozmiar fontu `html` (na iPhonie:
  * Dynamic Type przez `-apple-system-body` — do sprawdzenia na urządzeniu, G05).
  */
-import { expect, test, type Page } from '@playwright/test';
+import { type Page } from '@playwright/test';
+import { expect, test } from './fixtures';
 import { answer, next, openFresh, startTest } from './helpers';
 
 async function horizontalOverflow(page: Page): Promise<{ doc: number; scrollers: number }> {

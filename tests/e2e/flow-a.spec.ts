@@ -4,7 +4,7 @@
  * Dodatkowo B04 (brak klucza w DOM przed odpowiedzią), B05 (znaczenie nie tylko kolorem), A04 (brak
  * żądań zewnętrznych w czasie nauki) i zrzuty ekranu kluczowych stanów (WebKit, 393×852).
  */
-import { expect, test } from '@playwright/test';
+import { expect, test } from './fixtures';
 import { BANK, answer, currentQuestion, finishTest, next, openFresh, progressText, screenshot, trackExternalRequests } from './helpers';
 
 test('A: test 20 — błędna odpowiedź, komentarz, Dalej, wynik, przegląd tylko błędów', async ({ page, baseURL }, testInfo) => {

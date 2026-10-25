@@ -24,6 +24,7 @@
 import { createHash } from 'node:crypto';
 import { existsSync, readFileSync, readdirSync, statSync } from 'node:fs';
 import { extname, join, relative, resolve, sep } from 'node:path';
+import { DATA_EPOCH, takeoverFileName } from './sw-takeover.mjs';
 
 /* ---------------- argumenty ---------------- */
 
@@ -90,7 +91,7 @@ const RELEASE = {
 const BANK = RELEASE.bankFile;
 const PRECACHE_INFO = 'pwa-precache.json';
 const RELEASE_INFO = 'dme-release.json';
-const TAKEOVER = `dme-sw-takeover-${RELEASE.bankSha256.slice(0, 12)}.js`;
+const TAKEOVER = takeoverFileName(RELEASE);
 
 console.log(`Kontrola dist: ${distDir}\nbase: ${base}\nplików: ${files.length}\n`);
 
@@ -292,8 +293,8 @@ if (fileSet.has('sw.js')) {
   if (fileSet.has(TAKEOVER)) {
     const t = read(TAKEOVER);
     check(
-      t.includes(RELEASE.bankVersion) && /self\.registration\.active && previous !== CONTENT\.bankVersion/.test(t) && /self\.skipWaiting\(\)/.test(t) && /self\.clients\.claim\(\)/.test(t) && /client\.navigate\(client\.url\)/.test(t) && /DME_CONTENT_UPDATE/.test(t) && /LEGACY_BANK = new URL\('data\/bank\.json', scope\)/.test(t) && /status: 404/.test(t),
-      `${TAKEOVER}: przejęcie tylko przy zmianie wersji treści (warunkowy skipWaiting, clients.claim, navigate, wiadomość DME_CONTENT_UPDATE); dawna ścieżka banku → 404`,
+      t.includes(`${RELEASE.bankVersion}#${DATA_EPOCH}`) && /self\.registration\.active && previous !== CONTENT\.marker/.test(t) && /self\.skipWaiting\(\)/.test(t) && /self\.clients\.claim\(\)/.test(t) && /client\.navigate\(client\.url\)/.test(t) && /DME_CONTENT_UPDATE/.test(t) && /LEGACY_BANK = new URL\('data\/bank\.json', scope\)/.test(t) && /status: 404/.test(t),
+      `${TAKEOVER}: przejęcie tylko przy zmianie wersji treści albo epoki danych ${DATA_EPOCH} (warunkowy skipWaiting, clients.claim, navigate, wiadomość DME_CONTENT_UPDATE); dawna ścieżka banku → 404`,
       `${TAKEOVER}: niekompletny skrypt przejęcia`,
     );
   }

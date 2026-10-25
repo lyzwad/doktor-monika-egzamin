@@ -224,6 +224,14 @@ async function appPreparationRetry(browser, name, server, mode) {
   const lastEntry = precache[precache.length - 1];
   server.hooks.fail = (rel) => (rel === lastEntry.url ? 503 : null);
   const ctx = await browser.newContext({ serviceWorkers: 'allow' });
+  // Profil wybrany (DECYZJE §16): ekran przygotowania pokazuje aplikacja profilu, nie ekran wyboru profilu.
+  await ctx.addInitScript(() => {
+    try {
+      sessionStorage.setItem('dme-profil-karty', 'monika@doktormonika.pl');
+    } catch {
+      /* bez sessionStorage */
+    }
+  });
   try {
     let page = await ctx.newPage();
     await page.goto(server.url);

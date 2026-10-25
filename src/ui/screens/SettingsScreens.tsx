@@ -10,6 +10,7 @@ import { Banner } from '../components/Banner';
 import { ListRow } from '../components/Controls';
 import { Icon } from '../components/Icon';
 import { Screen, ScreenHeader } from '../components/Screen';
+import { EmailText, unassignedText } from './ProfileScreens';
 import { DIFFICULTY_LABELS, familiesCount, formatBytes, formatDate, pluralPl, questionsCount } from '../format';
 
 /** Zdanie o charakterze wyniku (task: „wynik nie jest oceną komisji”) — wspólne dla ustawień i „O bazie”. */
@@ -47,6 +48,35 @@ export function SettingsScreen({ vm }: { vm: SettingsVM }) {
         >
           Nowa wersja aplikacji jest gotowa.
         </Banner>
+      ) : null}
+      {state.profile ? (
+        <section className="section" aria-label="Profil">
+          <h2 className="section__title">Profil</h2>
+          <ul className="list" role="list">
+            <li>
+              <ListRow icon="person" title="Aktywny profil" subtitle={<EmailText email={state.profile.email} />} />
+            </li>
+          </ul>
+          <button type="button" className="btn btn--secondary btn--sm btn--start" onClick={() => controller.switchProfile()}>
+            Zmień profil
+          </button>
+          {state.profile.unassigned ? (
+            <Banner
+              tone="info"
+              role="note"
+              title="Historia bez profilu"
+              actions={
+                <button type="button" className="btn btn--secondary btn--sm" onClick={() => controller.assignUnassignedHistory()}>
+                  Przypisz do tego profilu
+                </button>
+              }
+            >
+              <span className="banner__text">
+                Na tym urządzeniu są wyniki sprzed wprowadzenia profili ({unassignedText(state.profile.unassigned)}). Możesz jednorazowo przypisać je do tego profilu.
+              </span>
+            </Banner>
+          ) : null}
+        </section>
       ) : null}
       <section className="section">
         <h2 className="section__title">Dane na tym urządzeniu</h2>

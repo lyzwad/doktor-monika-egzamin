@@ -7,7 +7,7 @@
  *   i zwykłe pytania.
  * Nie zastępuje testu na fizycznym iPhonie (G05).
  */
-import { expect, test } from '@playwright/test';
+import { expect, test } from './fixtures';
 import { answer, currentStem, finishTest, next, openFresh, progressText, readStore, startTest } from './helpers';
 
 test('E04: zgłoszenie w przeglądzie zamkniętego testu nie zmienia wyniku, oznacza pozycję i blokuje przyszłość', async ({ page }) => {

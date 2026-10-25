@@ -32,7 +32,7 @@ import type { V15TransformReport } from './v15Migration';
 
 export const DB_NAME = 'doktor-monika-egzamin';
 /** Wersja schematu IndexedDB (migracje wersjonowane, `onupgradeneeded`). */
-export const DB_SCHEMA_VERSION = 2;
+export const DB_SCHEMA_VERSION = 3;
 
 /** Magazyny (DECYZJE §10). */
 export const STORE_NAMES = [
@@ -64,6 +64,34 @@ export const STORE_KEY_PATHS: Readonly<Record<StoreName, string>> = Object.freez
   packs: 'id',
   backups: 'id',
 });
+
+/**
+ * Właściciel bazy profilu (magazyn `meta`, klucz `'owner'`, DECYZJE §16). Zapisany przy pierwszym otwarciu
+ * bazy profilu; każda transakcja zapisu sprawdza go w tej samej transakcji — zapis z repozytorium innego
+ * profilu (opóźniony, z innej karty) jest odrzucany zamiast trafić do cudzych danych.
+ */
+export interface OwnerMetaRecord {
+  key: 'owner';
+  email: string;
+  since: IsoDateTime;
+}
+
+/** Wynik przypisania historii bez profilu (magazyn `meta`, klucz `'merge:unassigned'`) — chroni przed powtórzeniem. */
+export interface MergeMetaRecord {
+  key: 'merge:unassigned';
+  mergeId: string;
+  mergedAt: IsoDateTime;
+  sourceDb: string;
+  counts: MergeCounts;
+}
+
+export interface MergeCounts {
+  sessions: number;
+  attempts: number;
+  questionStats: number;
+  blocks: number;
+  events: number;
+}
 
 /** Rekord metadanych schematu (magazyn `meta`, klucz `'schema'`). */
 export interface MetaRecord {
@@ -99,7 +127,9 @@ export interface MigrationMetaRecord {
 /* ========================================================================== */
 
 export const BACKUP_FORMAT = 'dme-backup';
-export const BACKUP_FORMAT_VERSION = 1;
+/** Format 2 (profile): pole `profileEmail`. Format 1 (bez maila) nadal się wczytuje — z wyborem profilu docelowego. */
+export const BACKUP_FORMAT_VERSION = 2;
+export const SUPPORTED_BACKUP_FORMAT_VERSIONS: readonly number[] = [1, 2];
 export const APP_ID = 'doktor-monika-egzamin';
 /** Limit rozmiaru pliku kopii przy imporcie. */
 export const BACKUP_MAX_BYTES = 25 * 1024 * 1024;
@@ -119,10 +149,15 @@ export interface BackupData {
   packs: unknown[];
 }
 
-/** Plik kopii, format 1. Nie zawiera banku pytań, kluczy API, kont ani danych pacjentów. */
+/**
+ * Plik kopii, format 1 albo 2. Nie zawiera banku pytań, kluczy API, haseł ani danych pacjentów.
+ * Format 2: `profileEmail` = profil, którego dane zawiera plik (`null` — dane bez profilu).
+ */
 export interface BackupFileV1 {
   format: typeof BACKUP_FORMAT;
-  formatVersion: typeof BACKUP_FORMAT_VERSION;
+  formatVersion: 1 | 2;
+  /** (Format 2) Mail profilu źródłowego; brak w formacie 1. */
+  profileEmail?: string | null;
   appId: typeof APP_ID;
   exportedAt: IsoDateTime;
   appVersion: string;
@@ -135,6 +170,8 @@ export interface BackupSummary {
   exportedAt: IsoDateTime;
   formatVersion: number;
   appVersion: string;
+  /** Profil źródłowy z pliku (format 2) albo `null` (format 1 / dane bez profilu). */
+  profileEmail: string | null;
   completedTests: number;
   unfinishedTests: number;
   freeFlowSessions: number;
@@ -176,7 +213,8 @@ export interface ValidatedBackup {
 export interface BackupRecord {
   id: string;
   createdAt: IsoDateTime;
-  reason: 'before_restore';
+  /** `before_restore` — przed „Wczytaj kopię”; `before_assign` — przed przypisaniem historii bez profilu. */
+  reason: 'before_restore' | 'before_assign';
   /** Np. `dme-przed-wczytaniem-2026-10-22.json`. */
   fileName: string;
   sizeBytes: number;
@@ -198,6 +236,8 @@ export interface ExportBackupInput {
   now: IsoDateTime;
   appVersion: string;
   bankVersions: BankVersion[];
+  /** Mail profilu w pliku (repozytorium profilu wpisuje właściciela bazy; jawna wartość tylko w testach). */
+  profileEmail?: string | null;
 }
 
 export interface ReplaceFromBackupInput {
@@ -211,6 +251,23 @@ export interface ReplaceFromBackupInput {
 export interface ReplaceInfo {
   safetyBackup: BackupRecordInfo;
   summary: BackupSummary;
+}
+
+export interface MergeUnassignedInput {
+  now: IsoDateTime;
+  /** Identyfikator przypisania (ten sam przy ponowieniu po przerwaniu). */
+  mergeId: string;
+  /** Nazwa bazy źródłowej (diagnostyka). */
+  sourceDb: string;
+  safetyBackupId: string;
+  appVersion: string;
+  bankVersions: BankVersion[];
+}
+
+export interface MergeInfo {
+  /** `true` — przypisanie było już zapisane wcześniej (ponowienie po przerwaniu); dane bez zmian. */
+  alreadyMerged: boolean;
+  counts: MergeCounts;
 }
 
 /* ========================================================================== */
@@ -246,6 +303,8 @@ export type PersistenceError =
   | { code: 'QuotaExceeded'; messagePl: string }
   /** Inny błąd zapisu/przerwana transakcja. */
   | { code: 'WriteFailed'; messagePl: string; cause?: string }
+  /** Baza należy do innego profilu niż repozytorium (zapis odrzucony, dane bez zmian). */
+  | { code: 'OwnerMismatch'; messagePl: string; expected: string; found: string | null }
   /** Niespełniony `SessionRevisionGuard` (np. zmiana z innej karty). */
   | { code: 'Conflict'; messagePl: string; sessionId: SessionId }
   | { code: 'NotFound'; messagePl: string }
@@ -301,6 +360,12 @@ export interface RepositoryOptions {
    * nie jest sesją `legacy`, jest odrzucany (ochrona przed opóźnionym zapisem starego kodu).
    */
   contentBankVersion?: string;
+  /**
+   * (Profile, DECYZJE §16) Mail profilu — właściciel bazy. Przy otwarciu: zapis właściciela w pustej bazie albo
+   * sprawdzenie zgodności; każda transakcja zapisu sprawdza właściciela w tej samej transakcji.
+   * `undefined` — bez kontroli (baza historii bez profilu, testy).
+   */
+  owner?: string;
 }
 
 export interface Repository {
@@ -334,6 +399,17 @@ export interface Repository {
    * Błąd → stary stan nietknięty.
    */
   replaceAllFromBackup(validated: ValidatedBackup, input: ReplaceFromBackupInput): Promise<PersistenceResult<ReplaceInfo>>;
+
+  /**
+   * (Profile) Dołącza historię bez profilu do tej bazy w JEDNEJ transakcji: kopia bezpieczeństwa bieżącego
+   * stanu, suma sesji/prób/zdarzeń/blokad (rekordy już obecne zostają), statystyki pytań obecne w obu
+   * odtworzone z połączonego dziennika prób, rekord `meta` przypisania. Ponowienie z tym samym `mergeId`
+   * po przerwaniu nic nie duplikuje (`alreadyMerged`).
+   */
+  mergeUnassignedHistory(source: UserState, input: MergeUnassignedInput): Promise<PersistenceResult<MergeInfo>>;
+
+  /** Właściciel bazy (`meta.owner`) albo `null`. */
+  readOwner(): Promise<PersistenceResult<string | null>>;
 
   /** Automatyczne kopie bezpieczeństwa (najnowsze pierwsze). */
   listBackups(): Promise<PersistenceResult<BackupRecordInfo[]>>;

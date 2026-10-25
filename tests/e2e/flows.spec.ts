@@ -3,7 +3,7 @@
  * Każdy test ma świeży kontekst przeglądarki (pusta baza). Nie zastępuje testu na iPhonie (G05).
  */
 import { readFileSync } from 'node:fs';
-import { expect, test } from '@playwright/test';
+import { E2E_PROFILE, expect, test } from './fixtures';
 import {
   BANK,
   answer,
@@ -229,9 +229,11 @@ test('F: eksport kopii (pobranie) i import z podsumowaniem i zamianą; uszkodzon
   expect(download.suggestedFilename()).toMatch(/^dme-kopia-\d{4}-\d{2}-\d{2}\.json$/);
   const backupPath = testInfo.outputPath('kopia.json');
   await download.saveAs(backupPath);
-  const backup = JSON.parse(readFileSync(backupPath, 'utf-8')) as { format: string; formatVersion: number; data: { attempts: unknown[]; sessions: unknown[] } };
+  const backup = JSON.parse(readFileSync(backupPath, 'utf-8')) as { format: string; formatVersion: number; profileEmail: string; data: { attempts: unknown[]; sessions: unknown[] } };
   expect(backup.format).toBe('dme-backup');
-  expect(backup.formatVersion).toBe(1);
+  // Format 2 (profile, DECYZJE §16): kopia zawiera mail aktywnego profilu.
+  expect(backup.formatVersion).toBe(2);
+  expect(backup.profileEmail).toBe(E2E_PROFILE);
   expect(backup.data.attempts).toHaveLength(2);
   // LOG-08: aplikacja nie twierdzi, że plik zapisano — wie tylko, że przekazała go do pobrania.
   await expect(page.getByRole('status').filter({ hasText: `Przygotowano plik kopii ${download.suggestedFilename()}.` })).toBeVisible();

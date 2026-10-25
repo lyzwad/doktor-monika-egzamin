@@ -23,11 +23,13 @@ import type {
 } from '../domain/types';
 import type { ExportedFile, Repository } from '../persistence/api';
 import type { PwaPort } from '../pwa/api';
+import type { ControllerProfileDeps } from '../profiles/profileShell';
 import type { HistoryTab, ReviewFilter, Route } from './routes';
 import type {
   BootState,
   ConfigDraft,
   PreparationState,
+  ProfileVM,
   ResumeVM,
   SaveStatus,
   ScreenVM,
@@ -61,6 +63,8 @@ export interface AppState {
   preparation: PreparationState | null;
   storage: StorageStatusVM;
   appVersion: string;
+  /** Aktywny profil (DECYZJE §16); `null` — kontroler bez profili (testy, mock). */
+  profile: ProfileVM | null;
 }
 
 /** Wynik akcji UI (błędy już odzwierciedlone w `AppState` — zwrot służy testom i fokusowi). */
@@ -83,6 +87,17 @@ export interface AppController {
   /** Ponowienie po błędzie krytycznym uruchomienia. */
   retryBoot(): Promise<void>;
   dispose(): void;
+  /**
+   * Kończy się, gdy kolejka komend jest pusta (wszystkie rozpoczęte zapisy zakończone — sukcesem albo błędem).
+   * Zmiana profilu czeka na to przed zamknięciem bazy profilu.
+   */
+  whenIdle(): Promise<void>;
+
+  /* ---------- Profil (DECYZJE §16) ---------- */
+  /** „Zmień profil” — ekran wyboru profilu (dane bieżącego profilu zostają, otwarte sesje też). */
+  switchProfile(): void;
+  /** „Przypisz historię bez profilu” do aktywnego profilu. */
+  assignUnassignedHistory(): void;
 
   /* ---------- Nawigacja ---------- */
   /** Przejście do trasy (np. z `hashchange`). Trasy do nieistniejących sesji → start. */
@@ -165,7 +180,9 @@ export interface AppController {
   exportBackup(): Promise<ActionResult>;
   /** „Wybierz plik kopii” → sprawdzanie → podsumowanie do decyzji (dane jeszcze bez zmian). */
   selectBackupFile(file: Blob, fileName: string): Promise<ActionResult>;
-  /** „Zabezpiecz bieżące dane i zastąp”. */
+  /** Profil docelowy wczytania kopii (lista profili); `null` — nie wybrano. */
+  setBackupTarget(email: string | null): void;
+  /** „Zabezpiecz bieżące dane i zastąp” — dane wyłącznie profilu docelowego. */
   confirmBackupReplace(): Promise<ActionResult>;
   /** „Anuluj — zostaw obecne dane”. */
   cancelBackupReplace(): void;
@@ -245,6 +262,8 @@ export interface ControllerDeps {
   platform: Platform;
   pwa: PwaPort;
   appVersion: string;
+  /** Profil, którego dane obsługuje kontroler (DECYZJE §16); brak — tryb bez profili (testy). */
+  profile?: ControllerProfileDeps;
 }
 
 export type CreateAppController = (deps: ControllerDeps) => AppController;

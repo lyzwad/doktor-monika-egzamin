@@ -2606,3 +2606,40 @@ button.answer-card:active {
 .excluded-row .btn svg {
   color: var(--text-2);
 }
+
+/* Profile (DECYZJE §16): mail zawija się w dowolnym miejscu zamiast poszerzać ekran (G06, duży tekst). */
+.profile-email {
+  overflow-wrap: anywhere;
+}
+
+.app-kicker {
+  margin: 20px 0 -16px;
+  font-size: var(--fs-meta);
+  line-height: var(--lh-meta);
+  font-weight: 600;
+  color: var(--text-2);
+}
+
+.profile-line {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px 10px;
+  margin-top: -4px;
+}
+
+.profile-line__who {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+  font-size: var(--fs-meta);
+  line-height: var(--lh-meta);
+  color: var(--text-2);
+}
+
+.profile-line .btn {
+  min-height: 44px;
+  padding: 6px 8px;
+  margin-left: -8px;
+}

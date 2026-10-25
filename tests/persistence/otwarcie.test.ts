@@ -128,15 +128,17 @@ describe('otwarcie bazy i migracja v1', () => {
 });
 
 describe('migracja do kolejnej wersji (szkielet wersjonowania)', () => {
-  const v3: Migration = {
-    version: 3,
+  /** Kolejna wersja po bieżącej (`DB_SCHEMA_VERSION`). */
+  const NEXT = DB_SCHEMA_VERSION + 1;
+  const next: Migration = {
+    version: NEXT,
     description: 'test: indeks attempts.domainId',
     up(_db, tx) {
       tx.objectStore('attempts').createIndex('domainId', 'domainId');
     },
   };
 
-  it('v2 → v3 zachowuje dane, zapisuje migratedFrom i migratedAt', async () => {
+  it('bieżąca → kolejna wersja zachowuje dane, zapisuje migratedFrom i migratedAt', async () => {
     const { repo, factory, dbName } = await seededRepository();
     const before = await repo.loadUserState();
     repo.close();
@@ -144,37 +146,37 @@ describe('migracja do kolejnej wersji (szkielet wersjonowania)', () => {
     const { repo: upgraded } = freshRepository({
       indexedDB: factory,
       dbName,
-      schemaVersion: 3,
-      migrations: [...MIGRATIONS, v3],
+      schemaVersion: NEXT,
+      migrations: [...MIGRATIONS, next],
       now: () => '2026-11-01T09:00:00.000Z',
     });
     const info = await upgraded.open();
-    expect(info).toEqual({ ok: true, value: { schemaVersion: 3, migratedFrom: 2, created: false } });
+    expect(info).toEqual({ ok: true, value: { schemaVersion: NEXT, migratedFrom: DB_SCHEMA_VERSION, created: false } });
     expect(await upgraded.loadUserState()).toEqual(before);
     upgraded.close();
 
     const db = await rawOpen(factory, dbName);
-    expect(db.version).toBe(3);
+    expect(db.version).toBe(NEXT);
     expect([...db.transaction('attempts').objectStore('attempts').indexNames]).toContain('domainId');
     const meta = await rawGet<MetaRecord>(db, 'meta', 'schema');
-    expect(meta).toMatchObject({ schemaVersion: 3, createdAt: '2026-10-22T10:00:00.000Z', migratedAt: '2026-11-01T09:00:00.000Z' });
+    expect(meta).toMatchObject({ schemaVersion: NEXT, createdAt: '2026-10-22T10:00:00.000Z', migratedAt: '2026-11-01T09:00:00.000Z' });
     db.close();
   });
 
-  it('błąd migracji → MigrationFailed; baza zostaje w v2 z nietkniętymi danymi', async () => {
+  it('błąd migracji → MigrationFailed; baza zostaje w bieżącej wersji z nietkniętymi danymi', async () => {
     const { repo, factory, dbName } = await seededRepository();
     const before = await repo.loadUserState();
     repo.close();
 
     const broken: Migration = {
-      version: 3,
+      version: NEXT,
       description: 'test: migracja z błędem w połowie',
       up(db) {
         db.deleteObjectStore('attempts');
         throw new Error('awaria migracji');
       },
     };
-    const { repo: failing } = freshRepository({ indexedDB: factory, dbName, schemaVersion: 3, migrations: [...MIGRATIONS, broken] });
+    const { repo: failing } = freshRepository({ indexedDB: factory, dbName, schemaVersion: NEXT, migrations: [...MIGRATIONS, broken] });
     const info = await failing.open();
     expect(info.ok).toBe(false);
     if (info.ok) return;
@@ -183,7 +185,7 @@ describe('migracja do kolejnej wersji (szkielet wersjonowania)', () => {
     failing.close();
 
     const db = await rawOpen(factory, dbName);
-    expect(db.version).toBe(2);
+    expect(db.version).toBe(DB_SCHEMA_VERSION);
     expect([...db.objectStoreNames]).toContain('attempts');
     db.close();
     const { repo: v2r } = freshRepository({ indexedDB: factory, dbName });
@@ -194,7 +196,7 @@ describe('migracja do kolejnej wersji (szkielet wersjonowania)', () => {
   it('baza z nowszej wersji aplikacji → Unavailable z komunikatem o odświeżeniu (bez zmian danych)', async () => {
     const { repo, factory, dbName } = await seededRepository();
     repo.close();
-    const { repo: newer } = freshRepository({ indexedDB: factory, dbName, schemaVersion: 3, migrations: [...MIGRATIONS, v3] });
+    const { repo: newer } = freshRepository({ indexedDB: factory, dbName, schemaVersion: NEXT, migrations: [...MIGRATIONS, next] });
     expect((await newer.open()).ok).toBe(true);
     newer.close();
 
@@ -214,7 +216,7 @@ describe('migracja do kolejnej wersji (szkielet wersjonowania)', () => {
     const otherTab = await rawOpen(factory, dbName);
     // Starsza karta nie reaguje na versionchange (nie zamyka połączenia).
     otherTab.onversionchange = () => undefined;
-    const { repo: upgrading } = freshRepository({ indexedDB: factory, dbName, schemaVersion: 3, migrations: [...MIGRATIONS, v3] });
+    const { repo: upgrading } = freshRepository({ indexedDB: factory, dbName, schemaVersion: NEXT, migrations: [...MIGRATIONS, next] });
     const blocked = await upgrading.open();
     expect(blocked.ok).toBe(false);
     if (blocked.ok) return;

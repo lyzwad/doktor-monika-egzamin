@@ -3,7 +3,8 @@
  * nie może wyprowadzić fokusu do tła (WebKit domyślnie pomija przyciski przy Tab), Escape zamyka
  * arkusz, a fokus wraca do wywołującego elementu. Ten sam scenariusz w Chromium.
  */
-import { expect, test, type Page } from '@playwright/test';
+import { type Page } from '@playwright/test';
+import { expect, test } from './fixtures';
 import { BANK, answer, next, openFresh, startTest } from './helpers';
 
 async function activeInDialog(page: Page): Promise<{ inDialog: boolean; label: string }> {

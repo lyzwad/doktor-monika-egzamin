@@ -2,7 +2,7 @@
  * Stany systemowe na buildzie produkcyjnym: brak IndexedDB (zablokowane dane witryn, przeglądarka bez
  * lokalnej bazy) → ekran błędu z wyjaśnieniem; nauka bez zapisu na urządzeniu nie jest uruchamiana.
  */
-import { expect, test } from '@playwright/test';
+import { expect, test } from './fixtures';
 
 test('brak IndexedDB → komunikat „Nie można uruchomić aplikacji” z wyjaśnieniem, bez ekranów nauki', async ({ page }) => {
   await page.addInitScript(() => {

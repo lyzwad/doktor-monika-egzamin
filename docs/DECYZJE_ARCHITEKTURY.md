@@ -118,3 +118,11 @@ Nowe sesje Free Flow na katalogu z profilem: `allocation.policy = 'FREE_FLOW_POL
 - Bez logowania, kont, synchronizacji, Supabase, Cloudflare Workers i D1. Jeden profil lokalny na urządzeniu (IndexedDB), historia zapisywana lokalnie bez oczekiwania na API. Prace nad kontami (v0.2) zostają w osobnej gałęzi `v0.2-konta` — poza produkcją.
 - Dawny adres `https://lyzwad.github.io/doktor-monika-egzamin/` przekierowuje (301) na nowy. Dane lokalne należą do originu, więc postępy przenosi plik kopii (Ustawienia → Kopia danych) z zasadami V15 przy imporcie (§10a, §14): `docs/PRZENIESIENIE_NA_WIEDZA.md`.
 - Bank: wyłącznie V15 (§14); minimum 1000 pytań na poziom nie blokuje wdrożenia — braki podane jawnie (advanced 573).
+
+## 16. Profile lokalne bez logowania (25.10.2026, polecenie właściciela — nadrzędne wobec §15 w części „jeden profil”)
+- Ekran „Wybierz profil” z 9 adresami @doktormonika.pl; wybór dotknięciem, bez hasła, rejestracji, weryfikacji maila i wysyłki wiadomości. Słowo „profil”, nie „konto”/„logowanie”. Adresy normalizowane `trim().toLowerCase()`.
+- Osobna baza IndexedDB na profil (`doktor-monika-egzamin:profil:<mail>`) z właścicielem w `meta.owner`, sprawdzanym przy otwarciu i w każdej transakcji zapisu. Bank V15 i zasoby wspólne (wczytywane raz).
+- Ostatni profil w rejestrze urządzenia, profil karty w sessionStorage. Zmiana profilu po zakończeniu zapisów bieżącego (`whenIdle`), bez zamykania sesji.
+- Historia sprzed profili: bez automatycznego przypisania; jednorazowe przypisanie do wybranego profilu (scalenie w jednej transakcji, kopia bezpieczeństwa, ponowienie bez duplikatów) albo „Nie teraz”. Baza źródłowa zostaje jako zabezpieczenie.
+- Kopia formatu 2 z `profileEmail`; import do wskazanego profilu, pozostałe bez zmian.
+- Schemat IndexedDB 3 i epoka danych SW `profile-1` (jednorazowe przejęcie otwartych kart). Szczegóły: `docs/PROFILE.md`.

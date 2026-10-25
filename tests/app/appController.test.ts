@@ -509,9 +509,9 @@ describe('kopia danych (F02, F03)', () => {
     const h = await startHarness();
     h.controller.openSettings();
     h.controller.openBackup();
-    const text = JSON.stringify({ format: 'dme-backup', formatVersion: 2, appId: 'doktor-monika-egzamin', exportedAt: '2026-10-22T08:00:00.000Z', appVersion: 'x', bankVersions: [], data: {} });
+    const text = JSON.stringify({ format: 'dme-backup', formatVersion: 3, appId: 'doktor-monika-egzamin', exportedAt: '2026-10-22T08:00:00.000Z', appVersion: 'x', bankVersions: [], data: {} });
     expect(await h.controller.selectBackupFile(new Blob([text]), 'nowa.json')).toMatchObject({ ok: false, code: 'UnsupportedBackupVersion' });
-    expect(h.controller.getState().screen).toMatchObject({ flow: { step: 'error', error: { code: 'UnsupportedBackupVersion', foundVersion: 2 } } });
+    expect(h.controller.getState().screen).toMatchObject({ flow: { step: 'error', error: { code: 'UnsupportedBackupVersion', foundVersion: 3 } } });
   });
 });
 

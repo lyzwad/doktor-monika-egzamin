@@ -14,11 +14,26 @@
  *    `workbox-precache-v2-<scope>` tej rejestracji); `cleanupOutdatedCaches` usuwa stare formaty Workboxa.
  */
 /**
+ * Epoka danych lokalnych (DECYZJE §16): zmiana modelu danych bez zmiany banku też wymaga jednorazowego przejęcia
+ * otwartych kart — `profile-1` = profile (kod sprzed profili nie może dalej pisać do bazy bez profilu).
+ * Znacznik w Cache Storage = `<bankVersion>#<epoka>`; nowa epoka = nowa nazwa pliku (bez pamięci HTTP importScripts).
+ */
+export const DATA_EPOCH = 'profile-1';
+
+/**
+ * @param {{ bankSha256: string }} release
+ * @returns {string}
+ */
+export function takeoverFileName(release) {
+  return `dme-sw-takeover-${release.bankSha256.slice(0, 12)}-${DATA_EPOCH}.js`;
+}
+
+/**
  * @param {{ bankVersion: string, bankSha256: string, bankFile: string }} release
  * @returns {string}
  */
 export function takeoverScript(release) {
-  const content = JSON.stringify({ bankVersion: release.bankVersion, bankSha256: release.bankSha256, bankFile: release.bankFile });
+  const content = JSON.stringify({ bankVersion: release.bankVersion, bankSha256: release.bankSha256, bankFile: release.bankFile, marker: `${release.bankVersion}#${DATA_EPOCH}` });
   return `/* Doktor Monika Egzamin — przejęcie po zmianie wersji treści (wygenerowane w vite.config.ts). */
 (() => {
   const CONTENT = ${content};
@@ -39,8 +54,8 @@ export function takeoverScript(release) {
       const cache = await caches.open(MARKER_CACHE);
       const stored = await cache.match(VERSION_KEY);
       const previous = stored ? await stored.text() : null;
-      if (self.registration.active && previous !== CONTENT.bankVersion) {
-        await cache.put(PENDING_KEY, new Response(CONTENT.bankVersion));
+      if (self.registration.active && previous !== CONTENT.marker) {
+        await cache.put(PENDING_KEY, new Response(CONTENT.marker));
         await self.skipWaiting();
       }
     })());
@@ -49,7 +64,7 @@ export function takeoverScript(release) {
     event.waitUntil((async () => {
       const cache = await caches.open(MARKER_CACHE);
       const pending = await cache.match(PENDING_KEY);
-      await cache.put(VERSION_KEY, new Response(CONTENT.bankVersion));
+      await cache.put(VERSION_KEY, new Response(CONTENT.marker));
       if (!pending) return;
       await cache.delete(PENDING_KEY);
       await self.clients.claim();

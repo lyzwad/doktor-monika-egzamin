@@ -2,7 +2,7 @@
  * B03 (pierwszy tap ocenia; drugi szybki tap / dwuklik nic nie zmienia; restart nie dopisuje prób)
  * i C01 (walidacja liczby pytań w UI: puste, 0, ujemne, ułamki, tekst, ponad pojemność; ±10, szybkie wartości).
  */
-import { expect, test } from '@playwright/test';
+import { expect, test } from './fixtures';
 import { BANK, answer, next, openFresh, optionIndex, progressText, readStore, startTest } from './helpers';
 
 test('B03: drugi szybki tap innej opcji i dwuklik tej samej nie zmieniają wyboru ani licznika', async ({ page }) => {

@@ -13,7 +13,8 @@ import {
   SLOT_ORIGINS,
 } from '../domain/types';
 import type { DmeEvent, IsoDateTime, Session } from '../domain/types';
-import { APP_ID, BACKUP_FORMAT, BACKUP_FORMAT_VERSION, BACKUP_MAX_BYTES } from './api';
+import { knownProfile } from '../profiles/profiles';
+import { APP_ID, BACKUP_FORMAT, BACKUP_FORMAT_VERSION, BACKUP_MAX_BYTES, SUPPORTED_BACKUP_FORMAT_VERSIONS } from './api';
 import type {
   BackupData,
   BackupFileV1,
@@ -79,6 +80,7 @@ export function buildBackupFile(data: BackupData, input: ExportBackupInput): Bac
   return {
     format: BACKUP_FORMAT,
     formatVersion: BACKUP_FORMAT_VERSION,
+    profileEmail: knownProfile(input.profileEmail) ?? null,
     appId: APP_ID,
     exportedAt: input.now,
     appVersion: input.appVersion,
@@ -147,6 +149,7 @@ export function summarizeBackup(file: BackupFileV1): BackupSummary {
     exportedAt: file.exportedAt,
     formatVersion: file.formatVersion,
     appVersion: file.appVersion,
+    profileEmail: knownProfile(file.profileEmail) ?? null,
     completedTests: sessions.filter((s) => s.kind === 'test' && s.status === 'completed').length,
     unfinishedTests: sessions.filter((s) => s.kind === 'test' && s.status === 'unfinished').length,
     freeFlowSessions: sessions.filter((s) => s.kind === 'freeflow' && s.status === 'ended').length,
@@ -816,12 +819,16 @@ export async function validateBackupJson(json: unknown, fileName: string, now: I
     return fail(invalidBackup(fileName, reasons));
   }
   if (!isInt(json.formatVersion, 0)) return fail(invalidBackup(fileName, ['Brak numeru formatu kopii (formatVersion).']));
-  if (json.formatVersion !== BACKUP_FORMAT_VERSION) return fail(unsupportedBackupVersion(fileName, json.formatVersion));
+  if (!SUPPORTED_BACKUP_FORMAT_VERSIONS.includes(json.formatVersion)) return fail(unsupportedBackupVersion(fileName, json.formatVersion));
+  if (json.formatVersion >= 2 && json.profileEmail !== null && knownProfile(json.profileEmail) === null) {
+    return fail(invalidBackup(fileName, ['Kopia wskazuje profil spoza listy profili tej aplikacji (pole profileEmail).']));
+  }
 
   const reasons = new ReasonList();
   if (!checkBackupStructure(json, reasons) || !reasons.empty) return fail(invalidBackup(fileName, reasons.toArray()));
   const original = json as unknown as BackupFileV1;
-  return ok(toV15Backup(original, now).backup);
+  const profileEmail = original.formatVersion >= 2 ? (knownProfile(original.profileEmail) ?? null) : null;
+  return ok(toV15Backup({ ...original, profileEmail }, now).backup);
 }
 
 /**

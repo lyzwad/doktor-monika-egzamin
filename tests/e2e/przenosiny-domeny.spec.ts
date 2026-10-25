@@ -6,7 +6,7 @@
  */
 import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
-import { expect, test } from '@playwright/test';
+import { expect, test } from './fixtures';
 import { startDistServer } from '../../scripts/serve-dist.mjs';
 import { BASE_PATH, finishTest, readStore, startTest, waitOfflineReady } from './helpers';
 
@@ -37,6 +37,9 @@ test('przenosiny: kopia ze starego originu wczytana na nowym — historia, wykre
     expect(new URL(server.url).origin).not.toBe(new URL(page.url()).origin);
     await fresh.goto(server.url);
     await waitOfflineReady(fresh);
+    // Nowe urządzenie: najpierw wybór profilu (bez hasła), potem pusta historia tego profilu.
+    await expect(fresh.getByRole('heading', { level: 1, name: 'Wybierz profil' })).toBeVisible();
+    await fresh.getByRole('button', { name: 'monika@doktormonika.pl' }).click();
     await expect(fresh.getByRole('heading', { level: 1, name: 'Doktor Monika Egzamin' })).toBeVisible();
     expect(await readStore(fresh, 'attempts')).toHaveLength(0);
 
@@ -44,6 +47,9 @@ test('przenosiny: kopia ze starego originu wczytana na nowym — historia, wykre
     await fresh.getByRole('button', { name: /Kopia danych/ }).click();
     await fresh.locator('input[type="file"]').first().setInputFiles(backupPath);
     await expect(fresh.getByText('kopia-stary-adres.json — plik poprawny')).toBeVisible();
+    // Kopia z mailem profilu: profil źródłowy i docelowy widoczne przed zastąpieniem.
+    await expect(fresh.getByText('Profil w pliku:')).toContainText('monika@doktormonika.pl');
+    await expect(fresh.getByRole('radio', { name: /monika@doktormonika\.pl/ })).toHaveAttribute('aria-checked', 'true');
     await fresh.getByRole('button', { name: 'Zabezpiecz bieżące dane i zastąp' }).click();
     await expect(fresh.getByText('Dane wczytane z kopii.')).toBeVisible();
     expect(await readStore(fresh, 'attempts')).toHaveLength(5);

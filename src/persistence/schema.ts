@@ -183,8 +183,22 @@ export function createMigrationV2(options: MigrationV2Options = {}): Migration {
   };
 }
 
+/**
+ * v3 (profile, DECYZJE §16): bez zmian magazynów i danych. Podniesienie wersji sprawia, że kod sprzed profili
+ * (otwierający wersję 2) nie otworzy tej bazy, a jego otwarte połączenie z bazą historii bez profilu zostaje
+ * zamknięte (`versionchange`) — stary kod nie dopisze danych po przypisaniu historii profilowi.
+ * Właściciel bazy profilu (`meta.owner`) zapisuje repozytorium przy otwarciu.
+ */
+const MIGRATION_V3: Migration = {
+  version: 3,
+  description: 'Profile: wersja 3 bez zmian danych (blokada zapisu kodu sprzed profili)',
+  up() {
+    /* brak zmian magazynów */
+  },
+};
+
 /** Lista migracji aplikacji (rosnąco po wersji). */
-export const MIGRATIONS: readonly Migration[] = Object.freeze([MIGRATION_V1, createMigrationV2()]);
+export const MIGRATIONS: readonly Migration[] = Object.freeze([MIGRATION_V1, createMigrationV2(), MIGRATION_V3]);
 
 /**
  * Migracje do wykonania przy przejściu `oldVersion → newVersion`. Rzuca, jeśli brakuje którejś

@@ -502,13 +502,38 @@ export interface BackupErrorVM {
 }
 
 /** Przepływ kopii danych (S22a–S22h, S24e). */
+/** Aktywny profil (DECYZJE §16): mail i historia bez profilu czekająca na decyzję. */
+export interface ProfileVM {
+  email: string;
+  /** Historia sprzed profili na tym urządzeniu (bez treści) — `null`, gdy brak albo przypisana. */
+  unassigned: {
+    completedTests: number;
+    unfinishedTests: number;
+    freeFlowSessions: number;
+    openSessions: number;
+    attempts: number;
+    lastActivityAt: IsoDateTime | null;
+  } | null;
+}
+
+/**
+ * Profile przy wczytaniu kopii: źródłowy z pliku (`null` — kopia bez maila) i docelowy (wybór; `null` — nie
+ * wybrano). `profiles` — lista profili do wyboru; pusta w trybie bez profili.
+ */
+export interface BackupProfilesVM {
+  sourceEmail: string | null;
+  targetEmail: string | null;
+  activeEmail: string | null;
+  profiles: readonly string[];
+}
+
 export type BackupFlowVM =
   | { step: 'idle'; lastSavedFileName: string | null }
   | { step: 'saving' }
   | { step: 'checking'; fileName: string }
-  | { step: 'confirm'; fileName: string; summary: BackupSummary }
-  | { step: 'replacing'; fileName: string }
-  | { step: 'done'; summary: BackupSummary; safetyBackupId: string; safetyFileName: string }
+  | ({ step: 'confirm'; fileName: string; summary: BackupSummary } & BackupProfilesVM)
+  | { step: 'replacing'; fileName: string; targetEmail: string | null }
+  | { step: 'done'; summary: BackupSummary; safetyBackupId: string; safetyFileName: string; targetEmail: string | null; activeEmail: string | null }
   | { step: 'error'; fileName: string | null; error: BackupErrorVM };
 
 /** Automatyczna kopia bezpieczeństwa sprzed „Wczytaj kopię” (magazyn `backups`, DECYZJE §10, F03). */

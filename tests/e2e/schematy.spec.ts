@@ -15,7 +15,8 @@
 import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { CONTENT_RELEASE } from '../../src/domain/contentRelease';
-import { expect, test, type Locator, type Page } from '@playwright/test';
+import { type Locator, type Page } from '@playwright/test';
+import { expect, test } from './fixtures';
 import { startDistServer } from '../../scripts/serve-dist.mjs';
 import { buildCatalog, emptyUserState, parseRuntimeBank, parseTrainingProfile, startTest as domainStartTest, type DifficultyChoice, type Scope } from '../../src/domain/api';
 import { BASE_PATH, openFresh, readStore, reloadUntilControlled, waitOfflineReady } from './helpers';

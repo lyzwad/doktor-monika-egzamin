@@ -44,6 +44,7 @@ export const ICONS = {
   "file_upload": { viewBox: "0 0 24 24", d: "M9 16h6v-6h4l-7-7-7 7h4zm-4 2h14v2H5z" },
   "undo": { viewBox: "0 0 24 24", d: "M12.5 8c-2.65 0-5.05.99-6.9 2.6L2 7v9h9l-3.62-3.62c1.39-1.16 3.16-1.88 5.12-1.88 3.54 0 6.55 2.31 7.6 5.5l2.37-.78C21.08 11.03 17.15 8 12.5 8z" },
   "remove": { viewBox: "0 0 24 24", d: "M19 13H5v-2h14v2z" },
+  "person": { viewBox: "0 0 24 24", d: "M12 12c2.21 0 4-1.79 4-4s-1.79-4-4-4-4 1.79-4 4 1.79 4 4 4zm0 2c-2.67 0-8 1.34-8 4v2h16v-2c0-2.66-5.33-4-8-4z" },
   "add": { viewBox: "0 0 24 24", d: "M19 13h-6v6h-2v-6H5v-2h6V5h2v6h6v2z" },
 } as const satisfies Record<string, IconDefinition>;
 

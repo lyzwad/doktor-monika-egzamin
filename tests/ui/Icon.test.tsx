@@ -6,8 +6,9 @@ import { ICON_NAMES, ICONS } from '../../src/ui/icons';
 afterEach(cleanup);
 
 describe('Icon', () => {
-  it('zawiera 33 ikony z projektu Design, każda z viewBox i ścieżką', () => {
-    expect(ICON_NAMES).toHaveLength(33);
+  it('zawiera 33 ikony z projektu Design i ikonę profilu (Material Icons „person”), każda z viewBox i ścieżką', () => {
+    expect(ICON_NAMES).toHaveLength(34);
+    expect(ICON_NAMES).toContain('person');
     for (const name of ICON_NAMES) {
       expect(ICONS[name].viewBox).toBe('0 0 24 24');
       expect(ICONS[name].d.length).toBeGreaterThan(0);

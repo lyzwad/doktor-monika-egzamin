@@ -54,6 +54,9 @@ export const MSG_UNAVAILABLE =
 export const MSG_NO_INDEXEDDB =
   'Ta przeglądarka nie udostępnia lokalnej bazy danych (IndexedDB), więc wyniki nie mogą zostać zapisane. ' +
   'Otwórz aplikację w Safari (poza trybem prywatnym) albo dodaj ją do ekranu głównego.';
+/** Dopisek do błędów braku lokalnej bazy przy uruchomieniu (kontroler i ekran wyboru profilu). */
+export const MSG_NO_STORAGE_SUFFIX =
+  ' Bez zapisu na tym urządzeniu nauka nie jest możliwa: odpowiedzi, przerwane sesje, wyniki i powtórki muszą być zapisywane lokalnie.';
 export const MSG_NEWER_DB =
   'Dane na tym urządzeniu zapisała nowsza wersja aplikacji. Odśwież aplikację, aby wczytać aktualną wersję. ' +
   'Dane nie zostały zmienione.';
@@ -89,6 +92,16 @@ export function conflict(sessionId: SessionId): PersistenceError {
   return { code: 'Conflict', messagePl: MSG_CONFLICT, sessionId };
 }
 
+/** Baza należy do innego profilu (DECYZJE §16) — zapis odrzucony. */
+export function ownerMismatch(expected: string, found: string | null): PersistenceError {
+  return {
+    code: 'OwnerMismatch',
+    messagePl: `Te dane należą do innego profilu (${found ?? 'bez profilu'}), a nie do ${expected}. Zapis odrzucono — dane obu profili są bez zmian. Wybierz profil ponownie.`,
+    expected,
+    found,
+  };
+}
+
 export function notFound(messagePl: string): PersistenceError {
   return { code: 'NotFound', messagePl };
 }
@@ -111,10 +124,10 @@ export function unsupportedBackupVersion(fileName: string, foundVersion: number)
   const messagePl =
     foundVersion > BACKUP_FORMAT_VERSION
       ? `Ta kopia pochodzi z nowszej wersji aplikacji. Plik ${quoted(fileName)} ma format ${foundVersion}, ` +
-        `a ta wersja obsługuje format ${BACKUP_FORMAT_VERSION}. Zaktualizuj aplikację, a potem wczytaj kopię ponownie. ` +
+        `a ta wersja obsługuje formaty 1–${BACKUP_FORMAT_VERSION}. Zaktualizuj aplikację, a potem wczytaj kopię ponownie. ` +
         'Dane na tym urządzeniu nie zostały zmienione.'
-      : `Plik ${quoted(fileName)} ma nieobsługiwany format kopii (${foundVersion}); ta wersja obsługuje format ` +
-        `${BACKUP_FORMAT_VERSION}. Dane na tym urządzeniu nie zostały zmienione.`;
+      : `Plik ${quoted(fileName)} ma nieobsługiwany format kopii (${foundVersion}); ta wersja obsługuje formaty ` +
+        `1–${BACKUP_FORMAT_VERSION}. Dane na tym urządzeniu nie zostały zmienione.`;
   return { code: 'UnsupportedBackupVersion', messagePl, foundVersion, supportedVersion: BACKUP_FORMAT_VERSION };
 }
 

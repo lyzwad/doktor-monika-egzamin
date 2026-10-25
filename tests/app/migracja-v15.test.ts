@@ -4,6 +4,7 @@
  * runda błędów), przerwana sesja niewznawialna, nowe sesje wyłącznie z V15, błąd migracji → ekran błędu
  * bez pytań i ponowienie.
  */
+import { DB_SCHEMA_VERSION } from '../../src/persistence/api';
 import { IDBFactory } from 'fake-indexeddb';
 import { describe, expect, it } from 'vitest';
 import { CONTENT_RELEASE } from '../../src/domain/contentRelease';
@@ -41,7 +42,7 @@ describe('kontroler: pierwsze uruchomienie V15 na danych starej aplikacji', () =
       repository: repo,
     });
     const c = h.controller;
-    expect(stages).toEqual(['upgrade:1->2']);
+    expect(stages).toEqual([`upgrade:1->${DB_SCHEMA_VERSION}`]);
     expect(c.getState().boot).toEqual({ phase: 'ready' });
     // Brak otwartej sesji (stara runda przerwana aktualizacją).
     expect(c.getState().resume).toBeNull();

@@ -8,6 +8,7 @@ import { mkdirSync, readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { CONTENT_RELEASE } from '../../src/domain/contentRelease';
 import { expect, type Page, type TestInfo } from '@playwright/test';
+import { E2E_PROFILE } from './fixtures';
 
 interface BankOption {
   id: string;
@@ -170,11 +171,11 @@ export async function screenshot(page: Page, testInfo: TestInfo, name: string): 
 }
 
 /** Odczyt rekordów z IndexedDB aplikacji (audyt w teście — np. próby, sesje). */
-export async function readStore<T>(page: Page, store: string): Promise<T[]> {
+export async function readStore<T>(page: Page, store: string, dbName: string = profileDb(E2E_PROFILE)): Promise<T[]> {
   return page.evaluate(
-    (name) =>
+    ([name, databaseName]) =>
       new Promise<T[]>((resolvePromise, reject) => {
-        const req = indexedDB.open('doktor-monika-egzamin');
+        const req = indexedDB.open(databaseName);
         req.onerror = () => reject(req.error);
         req.onsuccess = () => {
           const db = req.result;
@@ -187,8 +188,13 @@ export async function readStore<T>(page: Page, store: string): Promise<T[]> {
           all.onerror = () => reject(all.error);
         };
       }),
-    store,
+    [store, dbName] as const,
   );
+}
+
+/** Baza danych nauki profilu (src/profiles/profiles.ts). */
+export function profileDb(email: string): string {
+  return `doktor-monika-egzamin:profil:${email}`;
 }
 
 /** Lista hostów żądań innych niż origin aplikacji (A04). */

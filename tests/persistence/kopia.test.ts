@@ -48,7 +48,7 @@ async function expectRejected(repo: Repository, input: string | Blob, code: Pers
 }
 
 describe('eksport kopii', () => {
-  it('buduje plik dme-backup v1 ze wszystkimi danymi użytkownika, z nazwą z datą', async () => {
+  it('buduje plik dme-backup (format 2, bez profilu w repozytorium bez właściciela) ze wszystkimi danymi użytkownika, z nazwą z datą', async () => {
     const { repo, data } = await seededRepository();
     const exported = await repo.exportBackup(EXPORT_INPUT);
     if (!exported.ok) throw new Error(exported.error.code);
@@ -59,7 +59,8 @@ describe('eksport kopii', () => {
     const parsed = JSON.parse(file.text) as BackupFileV1;
     expect(parsed).toMatchObject({
       format: BACKUP_FORMAT,
-      formatVersion: 1,
+      formatVersion: 2,
+      profileEmail: null,
       appId: APP_ID,
       exportedAt: NOW,
       appVersion: '1.0.0',
@@ -98,8 +99,9 @@ describe('podsumowanie kopii (ekran decyzji)', () => {
     const v = await validated(repo, await exportText(repo));
     expect(v.summary).toEqual({
       exportedAt: NOW,
-      formatVersion: 1,
+      formatVersion: 2,
       appVersion: '1.0.0',
+      profileEmail: null,
       completedTests: 1,
       unfinishedTests: 0,
       freeFlowSessions: 1,
@@ -255,9 +257,9 @@ describe('F03 — błędny plik nie zmienia danych', () => {
   it('nieznana (nowsza) wersja formatu → UnsupportedBackupVersion (S24e)', async () => {
     const { repo } = await seededRepository();
     const text = await exportText(repo);
-    const error = await expectRejected(repo, mutate(text, (f) => { f.formatVersion = 2 as never; }), 'UnsupportedBackupVersion');
-    expect(error).toMatchObject({ foundVersion: 2, supportedVersion: 1 });
-    expect(error.messagePl).toMatch(/format 2/);
+    const error = await expectRejected(repo, mutate(text, (f) => { f.formatVersion = 3 as never; }), 'UnsupportedBackupVersion');
+    expect(error).toMatchObject({ foundVersion: 3, supportedVersion: 2 });
+    expect(error.messagePl).toMatch(/format 3/);
     expect(error.messagePl).toMatch(/nowszej wersji aplikacji/);
     await expectRejected(repo, mutate(text, (f) => { f.formatVersion = '1' as never; }), 'InvalidBackup', /formatVersion/);
     repo.close();

@@ -26,7 +26,11 @@ import type {
   CreateRepository,
   ExportBackupInput,
   ExportedFile,
+  MergeInfo,
+  MergeMetaRecord,
+  MergeUnassignedInput,
   OpenInfo,
+  OwnerMetaRecord,
   PersistenceError,
   PersistenceResult,
   ReplaceFromBackupInput,
@@ -55,6 +59,7 @@ import {
   mapWriteError,
   notFound,
   ok,
+  ownerMismatch,
   unavailable,
   writeFailed,
   MSG_NO_INDEXEDDB,
@@ -66,6 +71,8 @@ import type { Migration } from './schema';
 import { createStorageApi, defaultStorageManager } from './storage';
 import { isIsoDateTime, isNonEmptyString, isObject } from './validation';
 import { transformToV15, V15_MIGRATION_ID } from './v15Migration';
+import { planUnassignedMerge } from './merge';
+import type { StoreRecords } from './merge';
 
 /** Ile automatycznych kopii bezpieczeństwa (sprzed wczytania) przechowywać — najstarsze są usuwane. */
 export const SAFETY_BACKUPS_KEPT = 5;
@@ -254,6 +261,8 @@ export function createIndexedDbRepository(options: InternalRepositoryOptions = {
   const now = options.now ?? (() => new Date().toISOString());
   const appVersion = options.appVersion ?? 'nieznana';
   const contentBankVersion = options.contentBankVersion ?? CONTENT_RELEASE.bankVersion;
+  /** Właściciel bazy profilu (DECYZJE §16); `undefined` — baza bez kontroli właściciela. */
+  const owner = options.owner;
   let upgradeListener: ((info: { from: number; to: number }) => void) | null = null;
   const storage = createStorageApi(options.storageManager === undefined ? defaultStorageManager() : options.storageManager);
 
@@ -287,14 +296,55 @@ export function createIndexedDbRepository(options: InternalRepositoryOptions = {
         if (db === lost) db = null;
       },
       onUpgradeStart: (info) => upgradeListener?.(info),
-    }).then((result) => {
+    }).then(async (result) => {
+      if (!result.ok) {
+        opening = null;
+        return result;
+      }
+      const connection = result.value.db;
+      if (owner !== undefined) {
+        const claimed = await claimOwner(connection);
+        if (!claimed.ok) {
+          opening = null;
+          try {
+            connection.close();
+          } catch {
+            /* już zamknięte */
+          }
+          return claimed;
+        }
+      }
       opening = null;
-      if (!result.ok) return result;
-      db = result.value.db;
+      db = connection;
       openInfo = result.value.info;
       return ok(openInfo);
     });
     return opening;
+  };
+
+  /** Pusta baza profilu: zapis właściciela; istniejąca: sprawdzenie, że należy do tego profilu. */
+  const claimOwner = (connection: IDBDatabase): Promise<PersistenceResult<void>> => {
+    const expected = owner as string;
+    let tx: IDBTransaction;
+    try {
+      tx = createTransaction(connection, ['meta'], 'readwrite');
+    } catch (error) {
+      return Promise.resolve(fail(mapWriteError(error)));
+    }
+    return runTransaction(tx, (t, control) => {
+      const store = t.objectStore('meta');
+      const request = store.get('owner');
+      request.onsuccess = control.guard(() => {
+        const found = request.result as OwnerMetaRecord | undefined;
+        if (found === undefined) {
+          const record: OwnerMetaRecord = { key: 'owner', email: expected, since: now() };
+          store.put(record);
+        } else if (found.email !== expected) {
+          control.fail(ownerMismatch(expected, found.email ?? null));
+        }
+      });
+      return () => undefined;
+    }, mapWriteError);
   };
 
   /**
@@ -312,9 +362,10 @@ export function createIndexedDbRepository(options: InternalRepositoryOptions = {
       if (!opened.ok) return opened;
       const connection = db;
       if (!connection) continue;
+      const guarded = owner !== undefined && mode === 'readwrite';
       let tx: IDBTransaction;
       try {
-        tx = createTransaction(connection, stores, mode);
+        tx = createTransaction(connection, guarded ? [...stores, 'meta'] : stores, mode);
       } catch (error) {
         if (attempt === 0 && errorName(error) === 'InvalidStateError') {
           dropConnection();
@@ -323,7 +374,7 @@ export function createIndexedDbRepository(options: InternalRepositoryOptions = {
         return fail(mapError(error));
       }
       let failureName: string | null = null;
-      const result = await runTransaction(tx, body, (error) => {
+      const result = await runTransaction(tx, guarded ? ownerGuarded(body) : body, (error) => {
         failureName = errorName(error);
         return mapError(error);
       });
@@ -333,6 +384,27 @@ export function createIndexedDbRepository(options: InternalRepositoryOptions = {
       return result;
     }
     return fail(unavailable());
+  };
+
+  /**
+   * Ciało transakcji zapisu poprzedzone sprawdzeniem właściciela w TEJ SAMEJ transakcji: zapis wydawany jest
+   * dopiero po potwierdzeniu, że baza należy do profilu repozytorium (inaczej przerwanie, brak zmian).
+   */
+  const ownerGuarded = <T>(body: TxBody<T>): TxBody<T> => (tx, control) => {
+    let finalize: (() => T) | null = null;
+    const request = tx.objectStore('meta').get('owner');
+    request.onsuccess = control.guard(() => {
+      const found = request.result as OwnerMetaRecord | undefined;
+      if (found?.email !== owner) {
+        control.fail(ownerMismatch(owner as string, found?.email ?? null));
+        return;
+      }
+      finalize = body(tx, control);
+    });
+    return () => {
+      if (finalize === null) throw new Error('Transakcja bez sprawdzenia właściciela');
+      return finalize();
+    };
   };
 
   const readBackupData = (): Promise<PersistenceResult<BackupData>> =>
@@ -369,7 +441,7 @@ export function createIndexedDbRepository(options: InternalRepositoryOptions = {
         const t = transformToV15(data.value, input.now);
         const file = buildBackupFile(
           { ...data.value, sessions: t.sessions, attempts: t.attempts, questionStats: t.questionStats, blocks: t.blocks, events: t.events, packs: [] },
-          input,
+          { ...input, profileEmail: owner ?? input.profileEmail ?? null },
         );
         const { text, sizeBytes } = serializeBackupFile(file);
         return ok(toExportedFile(backupFileName('dme-kopia', input.now), text, sizeBytes));
@@ -407,6 +479,7 @@ export function createIndexedDbRepository(options: InternalRepositoryOptions = {
             now: input.now,
             appVersion: input.appVersion,
             bankVersions: input.bankVersions,
+            profileEmail: owner ?? null,
           });
           const { text, sizeBytes } = serializeBackupFile(safetyFile);
           const record: BackupRecord = {
@@ -440,6 +513,72 @@ export function createIndexedDbRepository(options: InternalRepositoryOptions = {
           return { safetyBackup: safetyInfo, summary: incomingSummary };
         };
       }, mapWriteError);
+    },
+
+    async mergeUnassignedHistory(source: UserState, input: MergeUnassignedInput): Promise<PersistenceResult<MergeInfo>> {
+      if (!isNonEmptyString(input.mergeId) || !isNonEmptyString(input.safetyBackupId) || !isIsoDateTime(input.now)) {
+        return fail(writeFailed(new Error('Niepoprawne dane przypisania historii')));
+      }
+      let info: MergeInfo | null = null;
+      return withTransaction([...BACKUP_DATA_STORES, 'backups', 'meta'], 'readwrite', (tx, control) => {
+        const meta = tx.objectStore('meta');
+        const marker = meta.get('merge:unassigned');
+        marker.onsuccess = control.guard(() => {
+          const done = marker.result as MergeMetaRecord | undefined;
+          if (done !== undefined) {
+            info = { alreadyMerged: true, counts: done.counts };
+            return;
+          }
+          readStores(tx, control, BACKUP_DATA_STORES, (current) => {
+            const plan = planUnassignedMerge(current as unknown as StoreRecords, source);
+            // Kopia bezpieczeństwa stanu profilu sprzed przypisania (tylko gdy profil ma już dane).
+            const hasData = USER_STORES.some((name) => name !== 'settings' && current[name].length > 0);
+            const backups = tx.objectStore('backups');
+            if (hasData) {
+              const safetyFile = buildBackupFile(toBackupData(current), {
+                now: input.now,
+                appVersion: input.appVersion,
+                bankVersions: input.bankVersions,
+                profileEmail: owner ?? null,
+              });
+              const { text, sizeBytes } = serializeBackupFile(safetyFile);
+              const record: BackupRecord = {
+                id: input.safetyBackupId,
+                createdAt: input.now,
+                reason: 'before_assign',
+                fileName: backupFileName('dme-przed-wczytaniem', input.now),
+                sizeBytes,
+                json: text,
+              };
+              backups.put(record);
+            }
+            for (const name of USER_STORES) {
+              const records = plan.puts[name];
+              if (!records || records.length === 0) continue;
+              const store = tx.objectStore(name);
+              for (const record of records) store.put(record);
+            }
+            const record: MergeMetaRecord = { key: 'merge:unassigned', mergeId: input.mergeId, mergedAt: input.now, sourceDb: input.sourceDb, counts: plan.counts };
+            meta.put(record);
+            info = { alreadyMerged: false, counts: plan.counts };
+          });
+        });
+        return () => {
+          if (info === null) throw new Error('Przypisanie bez wyniku');
+          return info;
+        };
+      }, mapWriteError);
+    },
+
+    async readOwner() {
+      return withTransaction(['meta'], 'readonly', (tx, control) => {
+        let email: string | null = null;
+        const request = tx.objectStore('meta').get('owner');
+        request.onsuccess = control.guard(() => {
+          email = (request.result as OwnerMetaRecord | undefined)?.email ?? null;
+        });
+        return () => email;
+      }, mapReadError);
     },
 
     async listBackups() {

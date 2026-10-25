@@ -6,12 +6,14 @@
  * i „Przywróć” — dostępna także po zamknięciu banera sukcesu i po wyjściu z ekranu.
  */
 import { useRef, type ChangeEvent } from 'react';
-import { useController } from '../../app/ControllerContext';
+import { useAppState, useController } from '../../app/ControllerContext';
 import type { BackupVM, PoolImportVM, SafetyBackupVM } from '../../app/viewModels';
 import type { BackupSummary } from '../../persistence/api';
 import { Banner } from '../components/Banner';
 import { Icon } from '../components/Icon';
 import { Screen, ScreenHeader } from '../components/Screen';
+import { RadioList } from '../components/Sheet';
+import { EmailText } from './ProfileScreens';
 import { backupErrorDetail, formatBytes, formatDateTime, pluralPl } from '../format';
 
 /**
@@ -93,12 +95,22 @@ function SafetyBackupList({ items }: { items: SafetyBackupVM[] }) {
 
 export function BackupScreen({ vm }: { vm: BackupVM }) {
   const controller = useController();
+  const profile = useAppState().profile;
   const flow = vm.flow;
   const pick = (file: File) => void controller.selectBackupFile(file, file.name);
   return (
     <Screen header={<ScreenHeader title="Kopia danych" onBack={() => controller.goBack()} />}>
       <section className="card card--pad section" style={{ gap: 10 }}>
         <h2 className="card__title">Zapisz kopię</h2>
+        {profile ? (
+          <p className="meta">
+            Kopia obejmuje wyłącznie profil{' '}
+            <b>
+              <EmailText email={profile.email} />
+            </b>{' '}
+            i zawiera jego adres.
+          </p>
+        ) : null}
         <p className="meta">{BACKUP_CONTENTS_TEXT}</p>
         <button
           type="button"
@@ -125,7 +137,11 @@ export function BackupScreen({ vm }: { vm: BackupVM }) {
 
       <section className="card card--pad section" style={{ gap: 10 }}>
         <h2 className="card__title">Wczytaj kopię</h2>
-        <p className="meta">Zastępuje dane na tym urządzeniu danymi z pliku kopii. Przed zastąpieniem bieżące dane zostaną zachowane jako kopia bezpieczeństwa.</p>
+        <p className="meta">
+          {profile
+            ? 'Zastępuje dane wskazanego profilu danymi z pliku kopii. Pozostałe profile pozostają bez zmian. Przed zastąpieniem bieżące dane tego profilu zostaną zachowane jako kopia bezpieczeństwa.'
+            : 'Zastępuje dane na tym urządzeniu danymi z pliku kopii. Przed zastąpieniem bieżące dane zostaną zachowane jako kopia bezpieczeństwa.'}
+        </p>
 
         {flow.step === 'idle' || flow.step === 'saving' ? <FilePicker label="Wybierz plik kopii" accept="application/json,.json" onFile={pick} /> : null}
 
@@ -154,13 +170,54 @@ export function BackupScreen({ vm }: { vm: BackupVM }) {
                 ))}
               </div>
             </div>
+            {flow.profiles.length > 0 ? (
+              <div className="section" style={{ gap: 8 }}>
+                <p>
+                  Profil w pliku: <b>{flow.sourceEmail ? <EmailText email={flow.sourceEmail} /> : 'brak (starsza kopia bez adresu)'}</b>
+                </p>
+                <p className="section__title" id="backup-target-label">
+                  {flow.sourceEmail ? 'Wczytaj do profilu' : 'Wskaż profil, do którego wczytać tę kopię'}
+                </p>
+                <RadioList
+                  label="Profil docelowy"
+                  options={flow.profiles.map((email) => ({ value: email, label: email === flow.activeEmail ? `${email} (aktywny)` : email }))}
+                  value={flow.targetEmail ?? ''}
+                  onSelect={(email) => controller.setBackupTarget(email)}
+                />
+                {flow.sourceEmail && flow.targetEmail && flow.sourceEmail !== flow.targetEmail ? (
+                  <p className="meta">
+                    Kopia pochodzi z profilu {flow.sourceEmail}, a zostanie wczytana do profilu {flow.targetEmail}.
+                  </p>
+                ) : null}
+              </div>
+            ) : null}
             <Banner tone="warn" role="alert">
-              <span>
-                Wczytanie <b>zastąpi wszystkie dane nauki</b> na tym urządzeniu. Bieżące dane zapiszemy najpierw jako kopię bezpieczeństwa.
-              </span>
+              {flow.profiles.length > 0 ? (
+                flow.targetEmail ? (
+                  <span>
+                    Wczytanie <b>zastąpi wszystkie dane nauki profilu</b>{' '}
+                    <b>
+                      <EmailText email={flow.targetEmail} />
+                    </b>
+                    . Pozostałe profile pozostaną bez zmian. Bieżące dane
+                    tego profilu zapiszemy najpierw jako kopię bezpieczeństwa.
+                  </span>
+                ) : (
+                  <span>Wskaż profil docelowy. Dane na urządzeniu nie są jeszcze zmieniane.</span>
+                )
+              ) : (
+                <span>
+                  Wczytanie <b>zastąpi wszystkie dane nauki</b> na tym urządzeniu. Bieżące dane zapiszemy najpierw jako kopię bezpieczeństwa.
+                </span>
+              )}
             </Banner>
             <div className="btn-stack" style={{ gap: 8 }}>
-              <button type="button" className="btn btn--primary btn--lg btn--block" onClick={() => void controller.confirmBackupReplace()}>
+              <button
+                type="button"
+                className="btn btn--primary btn--lg btn--block"
+                disabled={flow.profiles.length > 0 && flow.targetEmail === null}
+                onClick={() => void controller.confirmBackupReplace()}
+              >
                 Zabezpiecz bieżące dane i zastąp
               </button>
               <button type="button" className="btn btn--secondary btn--block" onClick={() => controller.cancelBackupReplace()}>
@@ -183,7 +240,7 @@ export function BackupScreen({ vm }: { vm: BackupVM }) {
           <Banner
             tone="success"
             role="status"
-            title="Dane wczytane z kopii."
+            title={flow.targetEmail && flow.targetEmail !== flow.activeEmail ? `Dane wczytane do profilu ${flow.targetEmail}.` : 'Dane wczytane z kopii.'}
             actions={
               <>
                 <button type="button" className="btn btn--secondary btn--sm" onClick={() => void controller.downloadSafetyBackup()}>
