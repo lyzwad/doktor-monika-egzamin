@@ -59,6 +59,7 @@ Commity: `6527930` (bank V15, katalog, migracja, profil, SW), `6462903` (e2e akt
 | Kontrola `dist` | `node scripts/check-dist.mjs --base /doktor-monika-egzamin/` | **72/72 PASS** (FAIL 0, WARN 0; 14:37:17) | szczegóły w §2 |
 | Build pod katalog główny domeny (25.10.2026) | `BASE_PATH=/ npm run build`, `node scripts/check-dist.mjs --base /` | **PASS**, **72/72 PASS** (24.10.2026, 22:06) | precache 25 wpisów; nowa kontrola: w kodzie `dist` brak `/doktor-monika-egzamin/` i `lyzwad.github.io` |
 | Testy po zmianie na `/` | `npx vitest run --maxWorkers=2 --testTimeout=60000`; `node scripts/check-offline.mjs --base /`; `BASE_PATH=/ E2E_SKIP_BUILD=1 npx playwright test --workers=1` | **621/621 PASS**; **54/54 PASS**; e2e **87 PASS, 1 SKIP, 0 FAIL** (22:07–22:10), potem nowy `przenosiny-domeny.spec.ts`: **2/2 PASS** | `przenosiny-domeny.spec.ts`: kopia zapisana na jednym originie i wczytana na drugim (czysty profil) — historia, wykres, wynik, runda błędów |
+| Profile lokalne (25.10.2026, `docs/PROFILE.md`) | `npm run typecheck`; `npx vitest run --maxWorkers=2 --testTimeout=60000`; `BASE_PATH=/ npm run build` i `node scripts/check-dist.mjs --base /`; `node scripts/check-offline.mjs --base /`; `BASE_PATH=/ E2E_SKIP_BUILD=1 npx playwright test --workers=1` | typecheck **PASS**; **640/640 PASS** (55 plików); `dist` **72/72 PASS**; offline **54 kontrole, 0 FAIL, 2 WARN** (WebKit: znane ponowienie pobierania po przerwaniu — obejście w aplikacji sprawdza scenariusz 6); e2e **95 PASS, 1 SKIP, 0 FAIL** (09:21–09:25) | nowe: `tests/app/profile.test.ts` (12: wybór i normalizacja, zapamiętanie, A→B→A, osobne sesje/powtórki/wykluczenia, zmiana profilu w trakcie zapisu, dwie karty, przypisanie historii, przerwane przypisanie, druga karta, kopia między profilami), `tests/persistence/profile.test.ts` (4), `tests/ui/ProfileScreens.test.tsx` (3), e2e `profile.spec.ts` (aktualizacja z wersji bez profili `b50eb19`, profile A/B i dwie karty, offline) |
 
 Testy e2e nie czytają klucza z interfejsu: klucz pochodzi z pliku banku V15 na dysku, a zapis sprawdzają przez odczyt IndexedDB w stronie. Zrzuty kluczowych stanów (WebKit 393×852, bank V15) są w `docs/zrzuty/`.
 
@@ -131,6 +132,13 @@ Najmniejszy koszyk domena × poziom to INJ/trudny z 45 rodzinami (test e2e E03 d
 ## 7. Wdrożenie
 
 Adres wdrożenia: **https://wiedza.doktormonika.pl/** (GitHub Pages z własną domeną, repozytorium https://github.com/lyzwad/doktor-monika-egzamin, publiczne). Aplikacja działa w katalogu głównym domeny (`BASE_PATH=/`), bez logowania, kont, Supabase, Cloudflare Workers i D1: jeden profil lokalny w przeglądarce (IndexedDB). Dawny adres https://lyzwad.github.io/doktor-monika-egzamin/ odpowiada `301` na nowy (przekierowanie GitHub Pages po ustawieniu własnej domeny).
+
+**Profile lokalne (25.10.2026).** Wdrożenie: przebieg Pages `40176763669` (commit `590857a`) — build i deploy success; poprzedzający przebieg `40176755031` (commit `c828682` bez `vite.config.ts`) zatrzymała kontrola `dist` (brak skryptu przejęcia z epoką danych) — nic nie opublikowano. Kontrola na adresie produkcyjnym:
+
+- aktualizacja PWA na żywo (WebKit „iPhone 15”, 08:27–08:30): w wersji bez profili (`0.1.0+b50eb19`) zapisano wynik 0 z 3 i rozpoczęty test (1/4); po wdrożeniu (`0.1.0+590857a`) nowy Service Worker **sam przeładował otwartą kartę**; ekran „Wybierz profil” pokazał historię bez profilu (1 ukończony test, 1 rozpoczęta sesja); po „Przypisz do tego profilu” (monika@) historia z wynikiem 0 z 3 i rozpoczęty test 1/4 zachowane, kontynuacja sesji działa; bank V15 z SHA-256 `37f3980a1129…`; 0 odpowiedzi ≥ 400; jeden komunikat konsoli WebKit o przerwanym pobraniu `dme-release.json` w chwili przeładowania karty przez nowy SW (żądanie anulowane nawigacją, nie błąd zasobu);
+- e2e na adresie produkcyjnym (`smoke`, `flow-a`, `flows`, `pwa`, `schematy`, `profile.spec.ts` „A → test → B…”, przebieg kontrolny 20 pytań; WebKit i Chromium): **35 PASS, 1 SKIP, 0 FAIL**; przebieg kontrolny: wynik zapisany w profilu, historia po ponownym otwarciu, 0 odpowiedzi ≥ 400, 0 błędów konsoli, jedyny host `wiedza.doktormonika.pl`.
+
+Fizyczny iPhone: G05 **NOT RUN**.
 
 Przełączenie 25.10.2026:
 

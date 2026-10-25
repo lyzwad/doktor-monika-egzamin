@@ -2,6 +2,8 @@
 
 Stan: 25.10.2026. Aplikacja jest opublikowana pod adresem https://wiedza.doktormonika.pl/ (GitHub Pages; dawny adres https://lyzwad.github.io/doktor-monika-egzamin/ przekierowuje na nowy — postępy przenieś plikiem kopii, `docs/PRZENIESIENIE_NA_WIEDZA.md`). Test na fizycznym iPhonie: NOT RUN — wyniki wpisuje użytkowniczka w §6.
 
+Po pierwszym otwarciu aplikacja pokazuje „Wybierz profil”. Dotknij swojego adresu @doktormonika.pl (bez hasła). Aplikacja zapamięta profil, a zmienić go można przyciskiem „Zmień profil” na ekranie startowym (`docs/PROFILE.md`).
+
 ## 1. Dodanie do ekranu głównego
 
 1. Otwórz **Safari** na iPhonie i przejdź pod adres aplikacji https://wiedza.doktormonika.pl/. Inna przeglądarka nie jest potrzebna.
