@@ -5,7 +5,7 @@ import { defineConfig, type Plugin } from 'vite';
 import react from '@vitejs/plugin-react';
 import { VitePWA } from 'vite-plugin-pwa';
 import { CONTENT_RELEASE } from './src/domain/contentRelease';
-import { takeoverScript } from './scripts/sw-takeover.mjs';
+import { takeoverFileName, takeoverScript } from './scripts/sw-takeover.mjs';
 
 /**
  * Ścieżka bazowa publikacji. Lokalnie `/`; dla GitHub Pages `/<repozytorium>/`
@@ -35,10 +35,10 @@ const PRECACHE_REQUIRED = ['index.html', CONTENT_RELEASE.bankFile, CONTENT_RELEA
 const RELEASE_INFO_FILE = 'dme-release.json';
 /**
  * Skrypt Service Workera (importScripts w wygenerowanym sw.js): przejęcie kart i okien z ikony, gdy zmienia
- * się wersja TREŚCI (docs/MIGRACJA_V15.md, docs/WDROZENIE.md). Nazwa zawiera skrót sumy banku — nowa wersja
+ * się wersja TREŚCI albo epoka danych lokalnych (profile, DECYZJE §16; docs/MIGRACJA_V15.md). Nazwa zawiera skrót sumy banku i epokę — nowa wersja
  * treści = nowy plik i inny bajtowo sw.js.
  */
-const TAKEOVER_FILE = `dme-sw-takeover-${CONTENT_RELEASE.bankSha256.slice(0, 12)}.js`;
+const TAKEOVER_FILE = takeoverFileName(CONTENT_RELEASE);
 
 /**
  * Plik wydania, skrypt przejęcia i kontrola katalogu `public/data` (wyłącznie trzy pliki V15 z poprawnymi
