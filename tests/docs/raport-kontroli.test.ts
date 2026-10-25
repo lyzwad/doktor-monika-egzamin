@@ -113,7 +113,7 @@ describe('G07 — raport kontroli: struktura', () => {
 
   it('sekcja testów podaje komendy i wyniki: typecheck, Vitest, e2e, build z BASE_PATH, check-dist, check-offline', () => {
     const tests = section('Stan testów') + section('Stan kodu i buildu');
-    for (const needle of ['npm run typecheck', 'vitest run', 'playwright test', 'BASE_PATH=/doktor-monika-egzamin/', 'check-dist.mjs', 'check-offline.mjs']) {
+    for (const needle of ['npm run typecheck', 'vitest run', 'playwright test', 'BASE_PATH=/ npm run build', 'check-dist.mjs', 'check-offline.mjs']) {
       expect(tests, needle).toContain(needle);
     }
   });

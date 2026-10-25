@@ -1,6 +1,6 @@
 # Przeniesienie postępów na https://wiedza.doktormonika.pl
 
-Stan: 24.10.2026. Aplikacja przechodzi z adresu https://lyzwad.github.io/doktor-monika-egzamin/ na https://wiedza.doktormonika.pl/ (ten sam hosting GitHub Pages, ta sama aplikacja z bankiem V15, bez logowania i bez serwera).
+Stan: 25.10.2026 — przełączenie wykonane (dawny adres przekierowuje na nowy). Aplikacja przeszła z adresu https://lyzwad.github.io/doktor-monika-egzamin/ na https://wiedza.doktormonika.pl/ (ten sam hosting GitHub Pages, ta sama aplikacja z bankiem V15, bez logowania i bez serwera).
 
 ## Dlaczego trzeba zapisać kopię
 

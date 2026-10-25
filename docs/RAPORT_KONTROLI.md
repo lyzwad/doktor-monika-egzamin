@@ -6,7 +6,7 @@ PASS testu albo kontroli oznacza, że aplikacja działa zgodnie z wymaganiami i 
 
 **Trzy osobne oceny:**
 
-- **Gotowość techniczna aplikacji: tak, w emulacji i lokalnie.** Typecheck, Vitest, build pod podścieżką, `check-dist`, `check-offline` i e2e w WebKit „iPhone 15” oraz w Chromium przeszły na banku V15 (§2–§3). W e2e jest też aktualizacja z prawdziwej starej aplikacji (tag `v0.1.0-pages`) pod tym samym adresem. Testu na fizycznym iPhonie 15 (G05) nie wykonano (§6). Wersję z V15 wdrożono na GitHub Pages 24.10.2026 i sprawdzono na żywym adresie (§7).
+- **Gotowość techniczna aplikacji: tak, w emulacji i lokalnie.** Typecheck, Vitest, build pod podścieżką, `check-dist`, `check-offline` i e2e w WebKit „iPhone 15” oraz w Chromium przeszły na banku V15 (§2–§3). W e2e jest też aktualizacja z prawdziwej starej aplikacji (tag `v0.1.0-pages`) pod tym samym adresem. Testu na fizycznym iPhonie 15 (G05) nie wykonano (§6). Od 25.10.2026 aplikacja działa pod https://wiedza.doktormonika.pl/ (GitHub Pages, katalog główny domeny, bez logowania i backendu); adres produkcyjny sprawdzono publicznie (§7).
 - **Liczebność puli.** Próg 2000 pytań jest spełniony (2987). **Minimum 1000 pytań na każdy poziom nie jest spełnione dla poziomu trudnego: advanced 573 < 1000** (§4, wiersz A03).
 - **Recenzja treści.** Żadne pytanie nie ma recenzji lekarskiej (§5).
 
@@ -57,6 +57,8 @@ Commity: `6527930` (bank V15, katalog, migracja, profil, SW), `6462903` (e2e akt
 | E2E | `npx playwright test --workers=1` (na buildzie z `BASE_PATH`; `E2E_SKIP_BUILD=1` po buildzie z §2) | **87 PASS, 1 SKIP, 0 FAIL** (88 testów w 12 plikach; przebieg końcowy 14:47:10–14:50:29, 3,3 min; WebKit: 43 PASS + 1 SKIP, Chromium: 44 PASS). Wcześniejsze przebiegi tego dnia: 14:37 — 85 PASS, 2 FAIL; 14:42 — 86 PASS, 1 FAIL — za każdym razem `schematy.spec.ts` „figury z banku działają offline”: kontrola testu `caches.match` (wszystkie cache) nie znajdowała figur zaraz po gotowości offline, choć aplikacja zweryfikowała komplet precache (od V15 istnieje też cache znacznika wersji treści). Test zmieniono na sprawdzanie wprost cache precache Workboxa; ×4 w obu przeglądarkach i przebieg końcowy: PASS. Kod aplikacji bez zmian | Zawiera `aktualizacja-v15.spec.ts` (2 testy w każdej przeglądarce). Pierwszy test: stara aplikacja z tagu `v0.1.0-pages` z danymi wpisanymi przez UI (ukończony test, Free Flow, otwarty test ze zgłoszeniem), potem podmiana `dist` pod tym samym adresem. Nowy SW przejmuje obie otwarte karty, bez ręcznego czyszczenia i bez przeładowania przez test. Pojawia się komunikat „Aktualizacja banku pytań…” i baza przechodzi v1 → v2. Test sprawdza też: historię z podsumowaniami bez treści, przerwany test niewznawialny, wynik i przegląd sesji sprzed V15 bez treści i bez rundy błędów, brak starej treści w IndexedDB, brak `data/bank.json` w Cache Storage (404 z SW i z serwera), nowy test wyłącznie z V15 z wyjaśnieniem i linkiem źródła po odpowiedzi, rundę „Uwzględnij błędy” oraz start offline na V15. Drugi test: zamknięcie karty w trakcie pobierania aktualizacji, a po ponownym otwarciu dokończona migracja. Pozostałe testy z poprzedniego przebiegu działają na V15 (schematy ANAT-Q001 i DEV-Q041, przepływy A–F, G02/G03, układ). Pominięcie opisuje §6 |
 | Service Worker w przeglądarkach | `node scripts/check-offline.mjs --base /doktor-monika-egzamin/` | **54/54 PASS** (Chromium 27, WebKit 27; 14:42:31). Pierwszy przebieg (14:37:18): 1 FAIL (Chromium) i 1 WARN (WebKit) w scenariuszu „ponowienie pobiera tylko brakujące pliki” — liczony był skrypt przejęcia `dme-sw-takeover-<sha12>.js`, który przeglądarka pobiera z `importScripts` przy każdej instalacji SW (część skryptu SW, nie precache). Skrypt kontrolny pomija teraz pliki z `importScripts` | Rejestracja i scope, komplet precache, start offline z banku V15 (wersjonowana ścieżka) i lokalnego fontu, trasa hash offline, `navigateFallback`, aktualizacja czekająca do `SKIP_WAITING` (ta sama wersja treści, bez przejęcia), nieudane pobranie aktualizacji (stara wersja działa dalej), przerwane pierwsze przygotowanie |
 | Kontrola `dist` | `node scripts/check-dist.mjs --base /doktor-monika-egzamin/` | **72/72 PASS** (FAIL 0, WARN 0; 14:37:17) | szczegóły w §2 |
+| Build pod katalog główny domeny (25.10.2026) | `BASE_PATH=/ npm run build`, `node scripts/check-dist.mjs --base /` | **PASS**, **72/72 PASS** (24.10.2026, 22:06) | precache 25 wpisów; nowa kontrola: w kodzie `dist` brak `/doktor-monika-egzamin/` i `lyzwad.github.io` |
+| Testy po zmianie na `/` | `npx vitest run --maxWorkers=2 --testTimeout=60000`; `node scripts/check-offline.mjs --base /`; `BASE_PATH=/ E2E_SKIP_BUILD=1 npx playwright test --workers=1` | **621/621 PASS**; **54/54 PASS**; e2e **87 PASS, 1 SKIP, 0 FAIL** (22:07–22:10), potem nowy `przenosiny-domeny.spec.ts`: **2/2 PASS** | `przenosiny-domeny.spec.ts`: kopia zapisana na jednym originie i wczytana na drugim (czysty profil) — historia, wykres, wynik, runda błędów |
 
 Testy e2e nie czytają klucza z interfejsu: klucz pochodzi z pliku banku V15 na dysku, a zapis sprawdzają przez odczyt IndexedDB w stronie. Zrzuty kluczowych stanów (WebKit 393×852, bank V15) są w `docs/zrzuty/`.
 
@@ -128,17 +130,27 @@ Najmniejszy koszyk domena × poziom to INJ/trudny z 45 rodzinami (test e2e E03 d
 
 ## 7. Wdrożenie
 
-Adres wdrożenia: https://lyzwad.github.io/doktor-monika-egzamin/ (GitHub Pages, repozytorium https://github.com/lyzwad/doktor-monika-egzamin). Działa tam **wersja z bankiem V15**: przebiegi workflow Pages `40095756942` (commit `51d7a4d`) i `40096528336` (commit `0af5b48`, tylko poprawka testu e2e), oba: build i deploy — success. Poprzednie wdrożenie (23.10.2026, commit `930ab22`, tag `v0.1.0-pages`, bank `release-2026-10-23c`) zastąpiono. Domena, adres i konfiguracja Pages bez zmian.
+Adres wdrożenia: **https://wiedza.doktormonika.pl/** (GitHub Pages z własną domeną, repozytorium https://github.com/lyzwad/doktor-monika-egzamin, publiczne). Aplikacja działa w katalogu głównym domeny (`BASE_PATH=/`), bez logowania, kont, Supabase, Cloudflare Workers i D1: jeden profil lokalny w przeglądarce (IndexedDB). Dawny adres https://lyzwad.github.io/doktor-monika-egzamin/ odpowiada `301` na nowy (przekierowanie GitHub Pages po ustawieniu własnej domeny).
 
-Kontrola na żywym adresie (24.10.2026, 15:00–15:09):
+Przełączenie 25.10.2026:
 
-- `data/bank-37f3980a1129.json`: SHA-256 `37f3980a1129f782213553360ba0221fbe9281f4710d31f86dfdea2a488f0770` (bajt w bajt z plikiem w repozytorium), `bank_version` `chatgpt-editorial-v15-2026-10-24-f020a0440df8`, 2987 pytań: 1048 / 1366 / 573;
-- `dme-release.json`: ta sama wersja i SHA-256, `appVersion` `0.1.0+0af5b48`;
-- dawna ścieżka `data/bank.json`: **404**; w `sw.js` brak odwołania do niej; `sw.js` importuje `dme-sw-takeover-37f3980a1129.js`;
-- precache z `sw.js`: 25 wpisów, każdy **200**;
-- e2e na żywym adresie (`smoke`, `schematy`, `flow-a`, `flows`, `pwa`; WebKit „iPhone 15” i Chromium, `--workers=1`): **31 PASS, 1 SKIP, 0 FAIL**. SKIP to `pwa.spec.ts` G02 + A04 w WebKit (§6). Test „figury z banku działają offline” uruchamia własny serwer z lokalnego `dist`. Wcześniejszy przebieg (15:00) miał 1 FAIL w WebKit: `schematy.spec.ts` ANAT-Q001, kliknięcie w arkuszu zakresu na elemencie odłączonym od DOM. Ten test powtórzony ×3: PASS. Skrypt przejęcia nie przeładowuje strony przy pierwszej instalacji ani przy tej samej wersji treści, więc uznano to za niestabilność testu. W tym samym powtórzeniu lokalny test figur offline miał 1 FAIL na 3 (jednorazowy odczyt cache w chwili, gdy WebKit ponawia niepełną pierwszą instalację). Test odpytuje teraz cache do 30 s: ×5 w WebKit oraz `schematy` i `aktualizacja-v15` w obu przeglądarkach: PASS (commit `0af5b48`). Kod aplikacji bez zmian.
+- DNS (Cloudflare, strefa `doktormonika.pl`): rekord `CNAME wiedza → lyzwad.github.io`, DNS only, TTL Auto — dodał właściciel; pozostałe rekordy bez zmian (apex i poczta po przełączeniu odpowiadają jak wcześniej). Serwery autorytatywne i publiczne resolwery (1.1.1.1, 8.8.8.8) zwracają CNAME na `lyzwad.github.io` i adresy GitHub Pages 185.199.108–111.153 (bez proxy Cloudflare).
+- GitHub Pages: Custom domain `wiedza.doktormonika.pl` (API `PUT /repos/lyzwad/doktor-monika-egzamin/pages`), certyfikat `approved` (ważny do 23.01.2027), **Enforce HTTPS włączone**.
+- Workflow Pages: build z `BASE_PATH=/`; krok „Własna domena i ścieżka bazowa” zatrzymuje wdrożenie, jeśli `configure-pages` nie zgłasza hosta `wiedza.doktormonika.pl` i pustego `base_path`. Przebieg `40172754879` (commit `985f7b9`): build i deploy — success, w logu `Host: wiedza.doktormonika.pl; BASE_PATH=/`.
 
-Po wdrożeniu nowy Service Worker przejmuje otwarte karty i aplikację z ikony, a migracja wykonuje się przy pierwszym uruchomieniu (`docs/MIGRACJA_V15.md` §3–§4). Na urządzeniach użytkowniczek tego nie obserwowano. G05 pozostaje **NOT RUN**.
+Kontrola publiczna adresu produkcyjnego (25.10.2026, 08:26–08:35):
+
+- `http://wiedza.doktormonika.pl/` → `301` na `https://`; `https://wiedza.doktormonika.pl/` → `200` z ważnym certyfikatem;
+- `data/bank-37f3980a1129.json`: SHA-256 `37f3980a1129f782213553360ba0221fbe9281f4710d31f86dfdea2a488f0770`, `bank_version` `chatgpt-editorial-v15-2026-10-24-f020a0440df8`, 2987 pytań: 1048 / 1366 / 573; `dme-release.json` — ta sama wersja, `appVersion` `0.1.0+985f7b9`;
+- `index.html`: skrypt, styl, manifest i ikony pod `/`; precache z `sw.js`: 25 wpisów, każdy `200`; w `sw.js` brak prefiksu `/doktor-monika-egzamin/`; `data/bank.json` i `/doktor-monika-egzamin/` → `404`;
+- e2e na adresie produkcyjnym (`smoke`, `flow-a`, `flows`, `pwa`, `schematy`; WebKit „iPhone 15” i Chromium, `--workers=1`): **31 PASS, 1 SKIP, 0 FAIL** (SKIP: §6). Obejmuje odpowiedzi z wyjaśnieniem i źródłem, ukończenie testu, rundę błędów, historię z wykresem, eksport i import kopii, Free Flow, schematy oraz start offline (Chromium);
+- jednorazowy przebieg kontrolny w obu przeglądarkach: test 20 pytań z wyjaśnieniem i źródłem, wynik 15 z 20, 20 prób zapisanych w IndexedDB wyłącznie z ID banku V15, ponowne otwarcie w nowej karcie — historia i wykres z tym samym wynikiem; Service Worker aktywny ze scope `https://wiedza.doktormonika.pl/`; **0 odpowiedzi ≥ 400, 0 nieudanych żądań, 0 błędów konsoli**, jedyny host: `wiedza.doktormonika.pl`.
+
+Uwaga o metodzie: lokalny resolver Maca wykonującego kontrolę pamiętał jeszcze odpowiedź NXDOMAIN sprzed dodania rekordu (SOA minimum 1800 s). Dlatego `curl` łączył się z adresem GitHub Pages z publicznego DNS (`--resolve`), a przeglądarki Playwright przez lokalny proxy CONNECT, który kierował wyłącznie `wiedza.doktormonika.pl` na ten adres. Połączenie TLS (SNI, certyfikat, nagłówek Host) szło bez zmian do GitHub Pages.
+
+Dane lokalne nie przechodzą między adresami (inny origin). Przeniesienie postępów: plik kopii — `docs/PRZENIESIENIE_NA_WIEDZA.md`; e2e `tests/e2e/przenosiny-domeny.spec.ts`. Fizyczny iPhone: G05 **NOT RUN**.
+
+Poprzednie wdrożenia: 24.10.2026 pod https://lyzwad.github.io/doktor-monika-egzamin/ (przebiegi `40095756942`, `40096528336`, `53805ec` — bank V15) i 23.10.2026 (commit `930ab22`, tag `v0.1.0-pages`, bank `release-2026-10-23c`); opis w historii git tego raportu.
 
 ## 8. Macierz kryteriów A01–G07
 
@@ -202,9 +214,9 @@ Wynik opiera się na przebiegach z §2–§3 (24.10.2026, 14:36–14:50, bank V1
 npm ci
 npm run typecheck
 npx vitest run --maxWorkers=2 --testTimeout=60000
-BASE_PATH=/doktor-monika-egzamin/ npm run build
-node scripts/check-dist.mjs --base /doktor-monika-egzamin/
-node scripts/check-offline.mjs --base /doktor-monika-egzamin/
+BASE_PATH=/ npm run build
+node scripts/check-dist.mjs --base /
+node scripts/check-offline.mjs --base /
 npx playwright test --workers=1                            # albo: E2E_SKIP_BUILD=1 npx playwright test --workers=1 (na istniejącym dist)
 ```
 

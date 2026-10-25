@@ -7,8 +7,8 @@ Co jest gotowe:
 - Silnik domeny (`src/domain`), repozytorium IndexedDB z kopią danych i migracją treści do V15 (`src/persistence`; import pul wyłączony od 24.10.2026), ekrany S01–S24 (`src/ui`), Service Worker z aktualizacją na żądanie i przejęciem przy zmianie wersji treści (`src/pwa`, `scripts/sw-takeover.mjs`).
 - **Rzeczywisty kontroler** `src/app/appController.ts` (`createAppController`) spinający domenę, IndexedDB i SW; platforma przeglądarki `src/app/platform.ts`; modele widoku `src/app/screenModels.ts`; punkt wejścia `src/main.tsx` uruchamia go w produkcji. Mock kontrolera działa wyłącznie w `npm run dev` z `?mock=1` i jest wycinany z buildu (kontrola: `scripts/check-dist.mjs`).
 - Bank V15 `public/data/bank-37f3980a1129.json` (`chatgpt-editorial-v15-2026-10-24-f020a0440df8`, bajt w bajt z paczki redakcji): 2987 pytań (1048 / 1366 / 573), 2501 rodzin, 133 ID wyłączone (`retired-question-ids-83b36ff80986.json`), profil treningowy 35/25/40 (`training-profile-c0edd4ca07c2.json`), 2 pytania ze schematem (ANAT-Q001, DEV-Q041; figury `public/figures/*.svg` z paczki V15). Wersja i sumy: `src/domain/contentRelease.ts`. Liczby w UI są liczone z katalogu i sprawdzane względem `bank.counts` (`docs/RAPORT_PULI.md`). Dawny bank `release-2026-10-23c` usunięto.
-- Testy: jednostkowe/integracyjne (Vitest: domain, persistence, app, pwa, ui, docs) i e2e (Playwright: WebKit „iPhone 15” 393×852 i Chromium mobile) na buildzie produkcyjnym pod podścieżką `/doktor-monika-egzamin/`. Wyniki ostatniego przebiegu, środowisko i macierz kryteriów A01–G07: `docs/RAPORT_KONTROLI.md`.
-- Nie wykonano: testu na fizycznym iPhonie 15 (G05 — NOT RUN). Publikacja wersji 0.1.0 na GitHub Pages: 23.10.2026; wersja z bankiem V15 wdrożona 24.10.2026 (`docs/RAPORT_KONTROLI.md` §7).
+- Testy: jednostkowe/integracyjne (Vitest: domain, persistence, app, pwa, ui, docs) i e2e (Playwright: WebKit „iPhone 15” 393×852 i Chromium mobile) na buildzie produkcyjnym pod katalogiem głównym `/` (jak na https://wiedza.doktormonika.pl/). Wyniki ostatniego przebiegu, środowisko i macierz kryteriów A01–G07: `docs/RAPORT_KONTROLI.md`.
+- Nie wykonano: testu na fizycznym iPhonie 15 (G05 — NOT RUN). Publikacja wersji 0.1.0 na GitHub Pages: 23.10.2026; wersja z bankiem V15 wdrożona 24.10.2026; od 25.10.2026 pod https://wiedza.doktormonika.pl/ (`docs/RAPORT_KONTROLI.md` §7).
 
 ## 1. Stos i wersje
 
@@ -172,9 +172,9 @@ Pliki kontraktów — `src/domain/types.ts`, sygnatury w `src/domain/api.ts`, `s
 | `npm run build` | typecheck + `vite build` (+ SW i manifest) do `dist/` |
 | `BASE_PATH=/<repo>/ npm run build` | build pod podścieżkę (GitHub Pages) |
 | `npm run preview` | podgląd `dist/` (narzędzie lokalne, nie serwer produkcyjny) |
-| `npm run test:e2e` | Playwright: build z `BASE_PATH=/doktor-monika-egzamin/` + `scripts/serve-dist.mjs` (jak GitHub Pages) + WebKit „iPhone 15” 393×852 i Chromium mobile; zrzuty kluczowych stanów → `docs/zrzuty/` (WebKit). `E2E_SKIP_BUILD=1` — użyj istniejącego `dist` |
-| `node scripts/check-dist.mjs --base /doktor-monika-egzamin/` | statyczna kontrola `dist` (precache — w tym każda figura z `bank.figures`, manifest, brak hostów zewnętrznych i mocka) |
-| `node scripts/check-offline.mjs --base /doktor-monika-egzamin/` | Service Worker w Chromium i WebKit: precache, start offline, aktualizacja, przerwane przygotowanie |
+| `npm run test:e2e` | Playwright: build z `BASE_PATH=/` + `scripts/serve-dist.mjs` (jak GitHub Pages) + WebKit „iPhone 15” 393×852 i Chromium mobile; zrzuty kluczowych stanów → `docs/zrzuty/` (WebKit). `E2E_SKIP_BUILD=1` — użyj istniejącego `dist` |
+| `node scripts/check-dist.mjs --base /` | statyczna kontrola `dist` (precache — w tym każda figura z `bank.figures`, manifest, brak hostów zewnętrznych i mocka) |
+| `node scripts/check-offline.mjs --base /` | Service Worker w Chromium i WebKit: precache, start offline, aktualizacja, przerwane przygotowanie |
 
 ## 7. Zasady testów
 

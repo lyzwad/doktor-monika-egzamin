@@ -1,6 +1,6 @@
 # Doktor Monika Egzamin — wdrożenie, PWA i praca offline
 
-Stan: 23.10.2026. **Opublikowano**: https://lyzwad.github.io/doktor-monika-egzamin/ (repozytorium https://github.com/lyzwad/doktor-monika-egzamin, run 39954751951). Wynik kontroli po wdrożeniu: `docs/RAPORT_KONTROLI.md` §7.
+Stan: 25.10.2026. **Adres produkcyjny: https://wiedza.doktormonika.pl/** — GitHub Pages z własną domeną, build pod `/`, Enforce HTTPS (§12 niżej; kontrola: `docs/RAPORT_KONTROLI.md` §7). Historia: 23.10.2026 **opublikowano** pod https://lyzwad.github.io/doktor-monika-egzamin/ (repozytorium https://github.com/lyzwad/doktor-monika-egzamin, run 39954751951). Wynik kontroli po wdrożeniu: `docs/RAPORT_KONTROLI.md` §7.
 
 ## 1. Co sprawdzono w dokumentacji i kiedy
 
@@ -43,7 +43,7 @@ Test na telefonie przez `http://<IP-komputera>:5173` **nie** sprawdzi pracy offl
 
 ```bash
 npm run build                                   # typecheck + vite build → dist/ (base = /)
-BASE_PATH=/doktor-monika-egzamin/ npm run build  # pod podścieżkę GitHub Pages
+BASE_PATH=/ npm run build  # katalog główny domeny wiedza.doktormonika.pl
 # opcjonalnie APP_BUILD_ID=<skrót commita> — wersja „0.1.0+<skrót>” w Ustawieniach i w kopii (ustawia workflow)
 ```
 
@@ -58,12 +58,12 @@ Konfiguracja PWA (`vite.config.ts`, sekcja PWA):
 
 Ikony: `node scripts/generate-icons.mjs` rasteryzuje autorski znak `scripts/icons/znak-dm.svg` (litery „DM” w `--primary` #3C5C7C na `--bg` #FAFBFC, akcent `--teal`; krój Hanken Grotesk 700 z `@fontsource`, OFL) do `public/icons/` przez Chromium z lokalnego cache Playwright. PNG są nieprzezroczyste (RGB), iOS sam zaokrągla rogi.
 
-## 5. Podgląd pod podścieżką (jak na GitHub Pages)
+## 5. Podgląd lokalny (jak na GitHub Pages)
 
 ```bash
-BASE_PATH=/doktor-monika-egzamin/ npm run build
-node scripts/serve-dist.mjs --dist dist --base /doktor-monika-egzamin/ --port 4174
-# → http://127.0.0.1:4174/doktor-monika-egzamin/
+BASE_PATH=/ npm run build
+node scripts/serve-dist.mjs --dist dist --base / --port 4174
+# → http://127.0.0.1:4174/
 ```
 
 `scripts/serve-dist.mjs` podaje pliki tylko pod podścieżką, z `Cache-Control: max-age=600` i 404 dla braków — tak jak Pages. Alternatywnie `BASE_PATH=/doktor-monika-egzamin/ npx vite preview` (też tylko podgląd lokalny).
@@ -72,9 +72,9 @@ node scripts/serve-dist.mjs --dist dist --base /doktor-monika-egzamin/ --port 41
 
 ```bash
 # 1. Statyczna kontrola dist (kod wyjścia 1 = błąd):
-node scripts/check-dist.mjs --dist dist --base /doktor-monika-egzamin/
+node scripts/check-dist.mjs --dist dist --base /
 # 2. Service Worker w przeglądarkach (Chromium i WebKit z cache Playwright):
-node scripts/check-offline.mjs --dist dist --base /doktor-monika-egzamin/
+node scripts/check-offline.mjs --dist dist --base /
 # 3. Testy logiki PWA (atrapy SW, bez przeglądarki) — także w `npm test` (projekt `pwa`):
 npx vitest run tests/pwa
 # 4. Testy e2e przepływów A–F, offline, aktualizacji i układu na buildzie pod podścieżką
@@ -168,3 +168,11 @@ Build do katalogu tymczasowego (nie do `dist`), z rejestracją SW wywoływaną p
 | Publikacja na GitHub Pages | **wykonano 23.10.2026** — https://lyzwad.github.io/doktor-monika-egzamin/ (run 39954751951; kontrola po wdrożeniu w `docs/RAPORT_KONTROLI.md` §7) |
 | Później, etap integracji: `npm run test:e2e` (build pod `/doktor-monika-egzamin/` + 26 scenariuszy × WebKit „iPhone 15” i Chromium mobile, w tym G03 na dwóch rzeczywistych buildach i błąd zapisu w IndexedDB) | 51 PASS, 1 SKIP (WebKit + `context.setOffline`); pełny zestaw ×3 (`--repeat-each=3`): 153 PASS, 3 SKIP; `check-offline.mjs`: 54 kontrole, 0 FAIL, 2 WARN (jak wyżej). Opis pokrycia: `docs/ARCHITEKTURA_APP.md` §7.1 |
 | Test na fizycznym iPhonie 15 (G05) | **NOT RUN** |
+
+## 12. Własna domena wiedza.doktormonika.pl (25.10.2026)
+
+1. DNS w Cloudflare (strefa `doktormonika.pl`), wyłącznie jeden rekord: Type `CNAME`, Name `wiedza`, Target `lyzwad.github.io` (bez `https://` i bez nazwy repozytorium), Proxy status **DNS only** (szara chmurka), TTL Auto. Pozostałe rekordy (strona główna, poczta) bez zmian.
+2. GitHub → repozytorium → Settings → Pages → Custom domain: `wiedza.doktormonika.pl` (albo `gh api -X PUT repos/lyzwad/doktor-monika-egzamin/pages -f cname=wiedza.doktormonika.pl`). Po wydaniu certyfikatu: **Enforce HTTPS** (`-F https_enforced=true`).
+3. Workflow `.github/workflows/pages.yml` buduje z `BASE_PATH=/` i zatrzymuje wdrożenie, gdy `configure-pages` nie zgłasza hosta `wiedza.doktormonika.pl` (zmienna `EXPECTED_HOST`) i pustego `base_path` — usunięcie domeny w ustawieniach nie opublikuje buildu pod `/` na adresie z prefiksem.
+4. Dawny adres https://lyzwad.github.io/doktor-monika-egzamin/ odpowiada 301 na nowy. Dane przeglądarki należą do originu: postępy przenosi plik kopii (`docs/PRZENIESIENIE_NA_WIEDZA.md`).
+5. Plik `CNAME` w `dist` nie jest potrzebny: przy publikacji przez GitHub Actions domenę przechowują ustawienia Pages.

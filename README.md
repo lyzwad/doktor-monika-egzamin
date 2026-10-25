@@ -9,7 +9,7 @@ Materiał pytań jest **autorskim materiałem treningowym w wersji roboczej**: k
 - **Od 24.10.2026 aplikacja udostępnia wyłącznie bank pytań V15** (`chatgpt-editorial-v15-2026-10-24-f020a0440df8`). Poprzednią pulę (`release-2026-10-23c`) usunięto i nie da się do niej wrócić. Dane na urządzeniu przechodzą migrację przy pierwszym uruchomieniu nowej wersji: dawne wyniki zostają jako podsumowania bez treści, a otwarta sesja zostaje „Przerwana aktualizacją banku pytań”. Opis i instrukcja aktualizacji: **`docs/MIGRACJA_V15.md`**.
 - Aplikacja zintegrowana: silnik domeny, IndexedDB z migracją treści, ekrany S01–S24 według Claude Design, Service Worker z przejęciem przy zmianie wersji treści i rzeczywisty kontroler. Przetestowano ją jednostkowo i e2e (WebKit „iPhone 15” i Chromium mobile) na buildzie pod podścieżką `/doktor-monika-egzamin/`, także na aktualizacji z prawdziwej starej aplikacji (tag `v0.1.0-pages`).
 - Ostatnia kontrola (24.10.2026, 14:36–14:50, bank V15; macOS 26.5.2, Node 24.18.1, Playwright 1.63.0): typecheck PASS, Vitest 621/621, e2e 87 PASS i 1 SKIP (WebKit `setOffline` — ograniczenie Playwright), `check-dist` 72/72, `check-offline` 54/54. Szczegóły: **`docs/RAPORT_KONTROLI.md`**.
-- **Wdrożono 24.10.2026 wersję z bankiem V15** (`chatgpt-editorial-v15-2026-10-24-f020a0440df8`): https://lyzwad.github.io/doktor-monika-egzamin/ (GitHub Pages, repozytorium https://github.com/lyzwad/doktor-monika-egzamin). Kontrola po wdrożeniu: `docs/RAPORT_KONTROLI.md` §7.
+- **Adres produkcyjny: https://wiedza.doktormonika.pl/** (od 25.10.2026; GitHub Pages z własną domeną, repozytorium https://github.com/lyzwad/doktor-monika-egzamin; bank V15 `chatgpt-editorial-v15-2026-10-24-f020a0440df8`). Bez logowania i backendu — jeden profil lokalny na urządzeniu. Dawny adres przekierowuje na nowy; postępy przenosi się plikiem kopii: `docs/PRZENIESIENIE_NA_WIEDZA.md`. Kontrola po wdrożeniu: `docs/RAPORT_KONTROLI.md` §7.
 - **Nie wykonano** testu na fizycznym iPhonie 15 (kryterium G05: NOT RUN), w tym aktualizacji do V15 z ikony w prawdziwym Safari iOS.
 
 ## Stan puli pytań
@@ -44,9 +44,9 @@ Web Crypto i Service Worker wymagają bezpiecznego kontekstu — na telefonie u�
 ```bash
 npm run typecheck                               # tsc: domain (bez DOM), app, testy, konfiguracje
 npx vitest run --maxWorkers=2                   # Vitest: domain, persistence (w tym migracja V15), app (rzeczywisty kontroler + fake-indexeddb), pwa, ui (jsdom), docs (raport kontroli vs bank V15)
-npm run test:e2e -- --workers=1                 # Playwright: build pod /doktor-monika-egzamin/ + WebKit „iPhone 15” i Chromium mobile (w tym aktualizacja ze starej aplikacji z tagu v0.1.0-pages)
+npm run test:e2e -- --workers=1                 # Playwright: build pod / + WebKit „iPhone 15” i Chromium mobile (w tym aktualizacja ze starej aplikacji z tagu v0.1.0-pages)
 E2E_SKIP_BUILD=1 npx playwright test --workers=1 tests/e2e/schematy.spec.ts   # pojedynczy zestaw na istniejącym dist
-node scripts/check-offline.mjs --base /doktor-monika-egzamin/                 # Service Worker w Chromium i WebKit (po buildzie)
+node scripts/check-offline.mjs --base /                 # Service Worker w Chromium i WebKit (po buildzie)
 ```
 
 Na obciążonej maszynie uruchamiaj testy sekwencyjnie (`--maxWorkers=2`, `--workers=1`). Testy e2e nie zastępują testu na fizycznym iPhonie.
@@ -54,8 +54,8 @@ Na obciążonej maszynie uruchamiaj testy sekwencyjnie (`--maxWorkers=2`, `--wor
 ## Build
 
 ```bash
-BASE_PATH=/doktor-monika-egzamin/ npm run build                 # typecheck + vite build → dist/ (SW, manifest, precache)
-node scripts/check-dist.mjs --base /doktor-monika-egzamin/      # kontrola dist: treść V15 (SHA-256, wersja, liczby, brak data/bank.json), precache, manifest, brak hostów zewnętrznych i mocka
+BASE_PATH=/ npm run build                 # typecheck + vite build → dist/ (SW, manifest, precache)
+node scripts/check-dist.mjs --base /      # kontrola dist: treść V15 (SHA-256, wersja, liczby, brak data/bank.json), precache, manifest, brak hostów zewnętrznych i mocka
 ```
 
 `BASE_PATH` musi odpowiadać nazwie repozytorium na GitHub Pages (`/<repozytorium>/`); workflow `.github/workflows/pages.yml` liczy go automatycznie.

@@ -1,10 +1,10 @@
 # Doktor Monika Egzamin — instalacja na iPhonie
 
-Stan: 23.10.2026. Aplikacja jest opublikowana pod adresem https://lyzwad.github.io/doktor-monika-egzamin/ (GitHub Pages). Test na fizycznym iPhonie: NOT RUN — wyniki wpisuje użytkowniczka w §6.
+Stan: 25.10.2026. Aplikacja jest opublikowana pod adresem https://wiedza.doktormonika.pl/ (GitHub Pages; dawny adres https://lyzwad.github.io/doktor-monika-egzamin/ przekierowuje na nowy — postępy przenieś plikiem kopii, `docs/PRZENIESIENIE_NA_WIEDZA.md`). Test na fizycznym iPhonie: NOT RUN — wyniki wpisuje użytkowniczka w §6.
 
 ## 1. Dodanie do ekranu głównego
 
-1. Otwórz **Safari** na iPhonie i przejdź pod adres aplikacji https://lyzwad.github.io/doktor-monika-egzamin/. Inna przeglądarka nie jest potrzebna.
+1. Otwórz **Safari** na iPhonie i przejdź pod adres aplikacji https://wiedza.doktormonika.pl/. Inna przeglądarka nie jest potrzebna.
 2. Stuknij **przycisk Menu strony** (tak nazywa go Apple; ikona bez podpisu na pasku Safari), a następnie **Udostępnij**. Jeśli w Safari używasz układu kart „Na dole” lub „Na górze”, stuknij od razu **przycisk udostępniania** (kwadrat ze strzałką w górę).
 3. Przewiń listę opcji w dół i stuknij **Do ekranu głównego**. Jeśli tej opcji nie ma: przewiń na dół listy, stuknij **Edytuj czynności** i dodaj **Do ekranu głównego**.
 4. Upewnij się, że jest włączone **Otwórz jako aplikację www**, i stuknij **Dodaj**.

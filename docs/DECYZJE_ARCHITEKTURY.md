@@ -112,3 +112,9 @@ Nowe sesje Free Flow na katalogu z profilem: `allocation.policy = 'FREE_FLOW_POL
 - Treść V15 bez zmian (klucze, poziomy, źródła, figury, metadane). Źródła i linki — wyłącznie po odpowiedzi (B04).
 - Asercje: build (SHA-256 plików w `public/data`), `check-dist` (SHA-256, wersja, liczby, wyłączone ID, brak `data/bank.json`), start aplikacji (SHA-256 bajtów, wersje trzech plików, liczby katalogu), katalog (`requiredBankVersion`). Brak awaryjnego ładowania innego banku (także mock w dev).
 - Polityki: §6a (TEST_POLICY_V3), §7a (FREE_FLOW_POLICY_V3); dane: §10a; PWA: §11.
+
+## 15. Adres https://wiedza.doktormonika.pl, bez kont i backendu (25.10.2026, polecenie właściciela — nadrzędne)
+- Produkcja: GitHub Pages repozytorium `lyzwad/doktor-monika-egzamin` (publiczne) z Custom domain `wiedza.doktormonika.pl` (DNS: `CNAME wiedza → lyzwad.github.io`, DNS only), Enforce HTTPS. Aplikacja w katalogu głównym domeny: `BASE_PATH=/`; workflow wdraża tylko przy potwierdzonej domenie (`EXPECTED_HOST`).
+- Bez logowania, kont, synchronizacji, Supabase, Cloudflare Workers i D1. Jeden profil lokalny na urządzeniu (IndexedDB), historia zapisywana lokalnie bez oczekiwania na API. Prace nad kontami (v0.2) zostają w osobnej gałęzi `v0.2-konta` — poza produkcją.
+- Dawny adres `https://lyzwad.github.io/doktor-monika-egzamin/` przekierowuje (301) na nowy. Dane lokalne należą do originu, więc postępy przenosi plik kopii (Ustawienia → Kopia danych) z zasadami V15 przy imporcie (§10a, §14): `docs/PRZENIESIENIE_NA_WIEDZA.md`.
+- Bank: wyłącznie V15 (§14); minimum 1000 pytań na poziom nie blokuje wdrożenia — braki podane jawnie (advanced 573).
