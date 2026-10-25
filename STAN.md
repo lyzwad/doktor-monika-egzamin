@@ -34,5 +34,6 @@ bez hasła — każdy profil ma osobne postępy na urządzeniu.
 | 2026-10-24 | Tylko bank V15, poprzednia pula usunięta | `docs/MIGRACJA_V15.md` |
 | 2026-10-25 | Produkcja pod wiedza.doktormonika.pl, bez Supabase/Workers/D1 | `docs/DECYZJE_ARCHITEKTURY.md` §15 |
 | 2026-10-25 | Projekt przeniesiony do warsztatu (`apps/doktor-monika-egzamin`) | jedna czysta kopia zamiast rozrzuconych folderów |
+| 2026-10-25 | BMAD Method 6.12.4 w projekcie (`_bmad/`, `.claude/skills/bmad-*`), praca w TDD | reguła warsztatu: `docs/metoda-pracy.md` |
 
 Szczegółowa historia wcześniejszych etapów: `README.md` (sekcja „Stan”) i `docs/RAPORT_KONTROLI.md`.
