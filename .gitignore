@@ -6,3 +6,6 @@ playwright-report
 *.local
 .DS_Store
 .vitest
+
+# Kopie zapasowe instalatora BMAD
+_bmad/*.bak

@@ -66,6 +66,7 @@ Dane nauki istnieją tylko na tym urządzeniu. Usunięcie danych witryny w Safar
 
 ## Dokumentacja
 
+- `STAN.md` — stan projektu w skrócie; `CLAUDE.md` — zasady pracy dla Claude Code.
 - `docs/INSTALACJA_IPHONE.md` — dodanie do ekranu głównego, pierwsze uruchomienie, praca offline, kopia danych.
 - `docs/WDROZENIE.md` — GitHub Pages, PWA i Service Worker, kroki publikacji (wykonanej 23.10.2026).
 - `docs/RAPORT_KONTROLI.md` — raport końcowy kontroli: build, wyniki testów ze środowiskiem, pula, status recenzji treści, testy niewykonane (G05), wdrożenie (adres i kontrola po wdrożeniu), macierz A01–G07.
