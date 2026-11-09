@@ -113,7 +113,16 @@ Liczby odczytano z pliku `public/data/bank-5db40505308f.json`. Test `tests/docs/
 
 Adres wdrożenia: **https://wiedza.doktormonika.pl/** (GitHub Pages z własną domeną, repozytorium https://github.com/lyzwad/doktor-monika-egzamin, publiczne; workflow „Publikacja na GitHub Pages” po scaleniu do `main`). Hosting rozpoznany 09.11.2026: odpowiedź `server: GitHub.com`, API Pages — `build_type: workflow`, `cname: wiedza.doktormonika.pl`, HTTPS wymuszony, certyfikat ważny do 23.01.2027; wdrożony był commit `b6f9201` (bank V15). VPS nie obsługuje tej domeny i nie był zmieniany; DNS bez zmian. Dawny adres https://lyzwad.github.io/doktor-monika-egzamin/ odpowiada `301` na nowy (przekierowanie GitHub Pages po ustawieniu własnej domeny).
 
-WDROZENIE_V18
+**Wdrożenie V18 (09.11.2026).** Pull Request https://github.com/lyzwad/doktor-monika-egzamin/pull/3 scalony (squash) jako commit `954194d`; przebieg workflow `42695955540` (20:45 UTC): testy Vitest, build, `check-dist` i deploy — **success**. Kopia sprzed wdrożenia i procedura cofnięcia: `docs/MIGRACJA_V18.md` §6.
+
+Kontrola publicznego adresu po wdrożeniu (09.11.2026, ok. 21:50 CET):
+
+- `dme-release.json`: `bankVersion` `chatgpt-combined-v18-2026-11-09-1fb7f7546332`, `bankSha256` `5db40505…66f6`, `appVersion` `0.1.0+954194d`;
+- `data/bank-5db40505308f.json` → `200`, SHA-256 `5db40505308f0183ed85d5be4b2e9f8c3871d091f6ec7413f5518c88b39966f6` (zgodny z paczką); **700 rekordów, 700 unikalnych ID, równe allowliście paczki: 600 V16 + 100 V17**; pliki towarzyszące V18 → `200` z sumami zgodnymi z `MANIFEST.json`;
+- dawne pliki → `404`: `data/bank.json`, `data/bank-37f3980a1129.json`, `data/retired-question-ids-83b36ff80986.json`, `data/training-profile-c0edd4ca07c2.json`, `figures/FIG-ANAT-01-p.svg` (strona 404 GitHub Pages, nie JSON ani aplikacja); `sw.js` wskazuje wyłącznie nowy bank;
+- przeglądarka na adresie produkcyjnym (świeży profil przeglądarki, Playwright): **WebKit „iPhone 15” — PASS**: wersja V18, „O bazie pytań” — 700 pytań, brak wyboru trudności, Test 20 (domyślnie 20) z 20 różnymi ID z allowlisty, wynik **13 z 20**, źródła po odpowiedzi, historia z wynikiem po otwarciu w nowej karcie, 20 prób w IndexedDB wyłącznie z ID V18, bank V18 w Cache Storage; **0 błędów konsoli, 0 odpowiedzi ≥ 400, jedyny host `wiedza.doktormonika.pl`**. **Chromium mobile — PASS** dla tych samych kroków online oraz offline: po pierwszym wczytaniu start i Free Flow bez sieci, wyłącznie pytania V18.
+
+Aktualizacji już zainstalowanej aplikacji nie da się sprawdzić na produkcji po wdrożeniu (stara wersja nie jest już serwowana) — sprawdza ją e2e `aktualizacja-v18.spec.ts` na tej samej wersji, która była na produkcji (`b6f9201`). Fizyczny iPhone: G05 **NOT RUN**.
 
 ## 8. Macierz kryteriów A01–G07
 
