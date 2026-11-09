@@ -180,7 +180,15 @@ export function createMigrationV4(options: MigrationV4Options = {}): Migration {
         let backupsRemoved = 0;
         const backups = tx.objectStore('backups');
         for (const record of values.backups ?? []) {
-          if (!isRecord(record) || typeof record.id !== 'string') continue;
+          if (!isRecord(record)) continue;
+          if (typeof record.id !== 'string') {
+            // Rekord bez tekstowego klucza (nie zapisuje go ta aplikacja) — usunięty, bo mógł zawierać dawną treść.
+            if (typeof record.id === 'number') {
+              backups.delete(record.id);
+              backupsRemoved++;
+            }
+            continue;
+          }
           let parsed: unknown = null;
           try {
             parsed = typeof record.json === 'string' ? JSON.parse(record.json) : null;

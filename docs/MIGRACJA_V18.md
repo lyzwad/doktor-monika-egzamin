@@ -33,9 +33,9 @@ Pytanie **zgodne** = ID z allowlisty V18, a każdy jego zapis w danych ma tę sa
 
 | Dane | Po migracji |
 |---|---|
-| Sesje w całości z pytań zgodnych (np. z samodzielnej paczki V16 albo V17) | **Zostają aktywne** — także otwarte, do dokończenia; wersja banku sesji = V18 |
+| Sesje w całości z pytań zgodnych (np. z samodzielnej paczki V16 albo V17; co najmniej jedno pytanie) | **Zostają aktywne** — także otwarte, do dokończenia; wersja banku sesji = V18, filtr trudności → cała pula |
 | Pozostałe sesje: V15, starsze, mieszane, z niezgodną treścią | **Zostaje podsumowanie**: daty, konfiguracja, wynik (poprawne, N, procent, zaliczenie), łańcuch rund. Treść pytań, opcje, klucz, wyjaśnienia i źródła usunięte. Otwarta sesja → „Przerwany aktualizacją banku pytań” (niewznawialna, poza wykresem), z komunikatem w aplikacji |
-| Odpowiedzi i stan powtórek („Moje błędy”, runda błędów) | Tylko dla pytań zgodnych; pozostałe usunięte z nauki, błędów i powtórek |
+| Odpowiedzi i stan powtórek („Moje błędy”, runda błędów) | Tylko dla pytań zgodnych, z dowodem zgodności (zgodna treść w sesji albo odpowiedź z tą samą rewizją) i tą samą rodziną oraz dziedziną co paczka; pozostałe usunięte z nauki, błędów i powtórek |
 | Zgłoszenia (wykluczone pytania) | Aktywne tylko dla pytań zgodnych; pozostałe nieaktywne, bez początku treści |
 | Automatyczne kopie bezpieczeństwa w bazie | Przekształcone tą samą funkcją (zostają liczby, znika treść spoza allowlisty) |
 | Zaimportowane pule | Usunięte |

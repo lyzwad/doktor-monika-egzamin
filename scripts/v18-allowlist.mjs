@@ -1,7 +1,8 @@
 #!/usr/bin/env node
 /**
  * Allowlista banku V18 do migracji danych lokalnych i kontroli katalogu (docs/MIGRACJA_V18.md).
- * Wynik: `src/persistence/v18Allowlist.ts` — WYŁĄCZNIE identyfikatory, rewizje, fingerprinty i klucze (bez treści).
+ * Wynik: `src/persistence/v18Allowlist.ts` — WYŁĄCZNIE identyfikatory, rewizje, fingerprinty, klucze, rodziny i dziedziny
+ * (bez treści).
  *
  * Wejście: allowlista paczki (`content/v18/allowed_question_ids.json`) i bank (`public/data/bank-<sha12>.json`).
  * Skrypt przerywa się, gdy allowlista i bank nie zawierają dokładnie tych samych ID albo wersje się różnią.
@@ -34,7 +35,7 @@ if (missing.length || extra.length) throw new Error(`Bank ≠ allowlista: brak $
 
 const rows = ids.map((id) => {
   const q = byId.get(id);
-  return [id, q.revision, q.fingerprint, q.correct_option_id];
+  return [id, q.revision, q.fingerprint, q.correct_option_id, q.family_id, q.domain_id];
 });
 
 const lines = [
@@ -42,7 +43,7 @@ const lines = [
   ' * WYGENEROWANE przez scripts/v18-allowlist.mjs — nie edytować ręcznie.',
   ' *',
   ' * Allowlista banku V18 (700 ID: 600 V16 + 100 V17) z paczki redakcji — jedyna wiążąca lista aktywnych pytań',
-  ' * (docs/MIGRACJA_V18.md). Tylko identyfikatory, rewizje, fingerprinty i klucze — bez treści pytań.',
+  ' * (docs/MIGRACJA_V18.md). Tylko identyfikatory, rewizje, fingerprinty, klucze, rodziny i dziedziny — bez treści pytań.',
   ' * Migracja danych lokalnych i wczytanie kopii zachowują postępy wyłącznie dla tych ID, gdy rewizja,',
   ' * fingerprint (treść + opcje) i klucz zgadzają się z bankiem; katalog aplikacji musi być równy tej liście.',
   ' */',
@@ -50,8 +51,8 @@ const lines = [
   `/** Wersja banku allowlisty (SHA-256 allowlisty: ${sha(allowedRaw)}; banku: ${sha(bankRaw)}). */`,
   `export const V18_ALLOWED_BANK_VERSION = ${JSON.stringify(bank.bank_version)};`,
   '',
-  '/** [id, rewizja, fingerprint, klucz] — posortowane po id. */',
-  'export const V18_ALLOWED: readonly (readonly [string, number, string, string])[] = [',
+  '/** [id, rewizja, fingerprint, klucz, rodzina, dziedzina] — posortowane po id. */',
+  'export const V18_ALLOWED: readonly (readonly [string, number, string, string, string, string])[] = [',
   ...rows.map((t) => `  ${JSON.stringify(t)},`),
   '];',
   '',

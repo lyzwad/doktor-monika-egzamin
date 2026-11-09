@@ -256,6 +256,50 @@ describe('D — transformacja profilu do banku V18 (allowlista paczki)', () => {
   });
 });
 
+describe('D — przypadki brzegowe (recenzja 09.11.2026)', () => {
+  it('pusta otwarta sesja z innego banku z filtrem trudności → nie jest wznawiana jako sesja V18', () => {
+    const empty = { ...v15Profile().sessions[2]!, id: 'sess-pusta', status: 'open', closedAt: null, plan: [], slots: {}, config: { scope: 'ALL', difficulty: 'advanced', targetN: null, myErrorsPriority: false }, freeFlow: { myErrorsExhaustedNotified: false, empty: true, picks: 0 } } as Session;
+    const t = transformToCurrentBank({ sessions: [empty], attempts: [], questionStats: [], blocks: [], events: [] }, MIGRATED_AT);
+    expect(t.sessions[0]).toMatchObject({ status: 'interrupted_by_update', legacy: { reason: 'bank_v18_update' } });
+    expect(t.report.sessionsRestamped).toBe(0);
+  });
+
+  it('przeniesiona sesja V16 z dawnym filtrem trudności → cała pula (`mixed`), także dla dalszych pytań i rundy błędów', () => {
+    const data = v16Profile();
+    data.sessions = data.sessions.map((x) => ({ ...x, config: { ...x.config, difficulty: 'advanced' } }));
+    const t = transform(data);
+    expect(t.sessions.every((x) => x.config.difficulty === 'mixed')).toBe(true);
+    const again = transformToCurrentBank({ sessions: t.sessions, attempts: t.attempts, questionStats: t.questionStats, blocks: t.blocks, events: t.events }, MIGRATED_AT);
+    expect(again.sessions).toEqual(t.sessions);
+  });
+
+  it('stan powtórek bez dowodu zgodności (brak zgodnego snapshotu i próby) albo z obcą rodziną/dziedziną → usunięty', () => {
+    const data = v16Profile();
+    const lone = { ...data.questionStats[0]!, questionId: 'V16-ANAT-050', familyId: 'V16-ANAT-050', domainId: 'ANAT' };
+    const alien = { ...data.questionStats[0]!, familyId: 'OBCA-RODZINA' };
+    const t = transformToCurrentBank({ sessions: [], attempts: [], questionStats: [lone], blocks: [], events: [] }, MIGRATED_AT);
+    expect(t.questionStats).toEqual([]);
+    const t2 = transformToCurrentBank({ sessions: data.sessions, attempts: data.attempts, questionStats: [alien], blocks: [], events: [] }, MIGRATED_AT);
+    expect(t2.questionStats).toEqual([]);
+    // Ten sam stan z dowodem (zgodna sesja i próby) — zostaje (jak w profilu V16).
+    expect(transform(data).questionStats).toEqual(data.questionStats);
+  });
+
+  it('zgłoszenie z poprawnym ID i fingerprintem, ale obcą rodziną → nieaktywne (nie wycina niezwiązanej rodziny)', () => {
+    const data = v16Profile();
+    const block = { ...data.blocks[0]!, familyId: 'CX-FAM-1' };
+    const t = transformToCurrentBank({ sessions: data.sessions, attempts: data.attempts, questionStats: [], blocks: [block], events: [] }, MIGRATED_AT);
+    expect(t.blocks[0]).toMatchObject({ inactiveReason: 'bank_version_changed', stemPreview: '' });
+  });
+
+  it('próba innej rewizji w zachowanej sesji nie zostaje (spójność dziennika prób ze stanem powtórek)', () => {
+    const data = v16Profile();
+    const bad = { ...data.attempts[0]!, id: 'a-zla-rewizja', commandId: 'a-zla-rewizja', questionRevision: 99 };
+    const t = transformToCurrentBank({ sessions: data.sessions, attempts: [...data.attempts, bad], questionStats: data.questionStats, blocks: [], events: [] }, MIGRATED_AT);
+    expect(t.attempts.some((a) => a.id === 'a-zla-rewizja')).toBe(false);
+  });
+});
+
 describe('D/E — migracja IndexedDB v3 → v4 (każdy profil osobno)', () => {
   it('profil V15: brak dawnej treści w CAŁEJ bazie (także w kopiach bezpieczeństwa); wyniki liczbowe zostają; meta = V18', async () => {
     const data = v15Profile();

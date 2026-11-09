@@ -91,14 +91,14 @@ describe('A — dokładnie 700 aktywnych ID z allowlisty', () => {
     expect(grouped).toEqual([...ALLOWED.ids].sort());
   });
 
-  it('allowlista migracji (src/persistence/v18Allowlist.ts) = 700 ID z revision i fingerprint banku', () => {
+  it('allowlista migracji (src/persistence/v18Allowlist.ts) = 700 ID z revision, fingerprint, kluczem, rodziną i dziedziną banku', () => {
     expect(V18_ALLOWED_BANK_VERSION).toBe(CONTENT_RELEASE.bankVersion);
     expect(V18_ALLOWED.map(([id]) => id).sort()).toEqual([...ALLOWED.ids].sort());
     const byId = new Map(BANK.questions.map((q) => [q.id, q]));
-    for (const [id, revision, fingerprint, correct] of V18_ALLOWED) {
+    for (const [id, revision, fingerprint, correct, family, domain] of V18_ALLOWED) {
       const q = byId.get(id);
       expect(q, id).toBeDefined();
-      expect([revision, fingerprint, correct]).toEqual([q!.revision, q!.fingerprint, q!.correct_option_id]);
+      expect([revision, fingerprint, correct, family, domain]).toEqual([q!.revision, q!.fingerprint, q!.correct_option_id, q!.family_id, q!.domain_id]);
     }
   });
 });

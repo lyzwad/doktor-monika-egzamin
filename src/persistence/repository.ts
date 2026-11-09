@@ -70,7 +70,7 @@ import { MIGRATIONS } from './schema';
 import type { Migration } from './schema';
 import { createStorageApi, defaultStorageManager } from './storage';
 import { isIsoDateTime, isNonEmptyString, isObject } from './validation';
-import { BANK_MIGRATION_ID, transformToCurrentBank } from './bankMigration';
+import { BANK_MIGRATION_ID, settingsForCurrentBank, transformToCurrentBank } from './bankMigration';
 import { planUnassignedMerge } from './merge';
 import type { StoreRecords } from './merge';
 
@@ -440,7 +440,7 @@ export function createIndexedDbRepository(options: InternalRepositoryOptions = {
         // (idempotentna — dane po migracji przechodzą bez zmian), bez paczek.
         const t = transformToCurrentBank(data.value, input.now);
         const file = buildBackupFile(
-          { ...data.value, sessions: t.sessions, attempts: t.attempts, questionStats: t.questionStats, blocks: t.blocks, events: t.events, packs: [] },
+          { ...data.value, settings: data.value.settings.map(settingsForCurrentBank), sessions: t.sessions, attempts: t.attempts, questionStats: t.questionStats, blocks: t.blocks, events: t.events, packs: [] },
           { ...input, profileEmail: owner ?? input.profileEmail ?? null },
         );
         const { text, sizeBytes } = serializeBackupFile(file);

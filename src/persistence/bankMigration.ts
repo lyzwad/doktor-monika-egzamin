@@ -75,9 +75,13 @@ interface AllowedRef {
   revision: number;
   fingerprint: string;
   correctOptionId: string;
+  familyId: string;
+  domainId: string;
 }
 
-const ALLOWED = new Map<string, AllowedRef>(V18_ALLOWED.map(([id, revision, fingerprint, correctOptionId]) => [id, { revision, fingerprint, correctOptionId }]));
+const ALLOWED = new Map<string, AllowedRef>(
+  V18_ALLOWED.map(([id, revision, fingerprint, correctOptionId, familyId, domainId]) => [id, { revision, fingerprint, correctOptionId, familyId, domainId }]),
+);
 
 function isObj(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null && !Array.isArray(value);
@@ -102,13 +106,34 @@ export function isCurrentBankSession(session: Session): boolean {
   return slotsOf(session).every((slot) => isObj(slot) && isObj(slot.snapshot) && slot.snapshot.bankVersion === CONTENT_RELEASE.bankVersion);
 }
 
-/** Sesja innej wersji banku, której każda pozycja jest zgodna z allowlistą (plan wskazuje istniejące pozycje). */
+/**
+ * Sesja innej wersji banku, której każda pozycja jest zgodna z allowlistą (plan wskazuje istniejące pozycje).
+ * Sesja bez żadnej pozycji nie dowodzi zgodności z V18 — nie jest przenoszona (zostaje podsumowaniem).
+ */
 function isTransferable(session: Session): boolean {
   if (session.legacy) return false;
   if (!Array.isArray(session.plan) || !isObj(session.slots)) return false;
   const slots = session.slots as Record<string, Slot>;
+  if (slotsOf(session).length === 0) return false;
   if (!session.plan.every((id) => isObj(slots[id]))) return false;
   return slotsOf(session).every(snapshotMatches);
+}
+
+/** Konfiguracja zachowanej sesji: cała pula V18 (dawny filtr trudności nie ogranicza dalszych pytań ani rund błędów). */
+function wholePool(config: Session['config']): Session['config'] {
+  return isObj(config) && config.difficulty !== 'mixed' ? { ...config, difficulty: 'mixed' } : config;
+}
+
+/** Sesja bieżącego banku: tylko wyrównanie konfiguracji do całej puli (bez zmiany, gdy już jest `mixed`). */
+function keepCurrent(session: Session): Session {
+  const config = wholePool(session.config);
+  if (config === session.config) return session;
+  return {
+    ...session,
+    config,
+    revision: (Number.isSafeInteger(session.revision) ? session.revision : 0) + 1,
+    mutationSeq: (Number.isSafeInteger(session.mutationSeq) ? session.mutationSeq : 0) + 1,
+  };
 }
 
 function restamp(session: Session): Session {
@@ -116,6 +141,7 @@ function restamp(session: Session): Session {
   for (const [key, slot] of Object.entries(session.slots)) slots[key] = { ...slot, snapshot: { ...slot.snapshot, bankVersion: CONTENT_RELEASE.bankVersion } };
   return {
     ...session,
+    config: wholePool(session.config),
     bankVersion: CONTENT_RELEASE.bankVersion,
     slots,
     revision: (Number.isSafeInteger(session.revision) ? session.revision : 0) + 1,
@@ -223,7 +249,7 @@ export function transformToCurrentBank(input: BankTransformInput, now: IsoDateTi
     }
     if (isCurrentBankSession(s) && slotsOf(s).every(snapshotMatches)) {
       current++;
-      return s;
+      return keepCurrent(s);
     }
     if (isTransferable(s)) {
       current++;
@@ -237,7 +263,7 @@ export function transformToCurrentBank(input: BankTransformInput, now: IsoDateTi
   const sessionIds = new Set(sessions.map((s) => s.id));
   const keptSessionIds = new Set(sessions.filter((s) => !s.legacy).map((s) => s.id));
 
-  // Próby: zachowane sesje — bez zmian; pozostałe — tylko pytania zgodne.
+  // Próby: tylko pytania z allowlisty z rewizją paczki; poza zachowanymi sesjami — tylko pytania zgodne.
   const attempts: Attempt[] = [];
   let attemptsRemoved = 0;
   for (const a of input.attempts) {
@@ -245,15 +271,27 @@ export function transformToCurrentBank(input: BankTransformInput, now: IsoDateTi
       attemptsRemoved++;
       continue;
     }
-    if (confirmed(a.questionId) || (keptSessionIds.has(a.sessionId) && ALLOWED.has(a.questionId as string))) attempts.push(a as unknown as Attempt);
+    const ref = typeof a.questionId === 'string' ? ALLOWED.get(a.questionId) : undefined;
+    const sameRevision = ref !== undefined && a.questionRevision === ref.revision;
+    if (sameRevision && (confirmed(a.questionId) || keptSessionIds.has(a.sessionId))) attempts.push(a as unknown as Attempt);
     else attemptsRemoved++;
   }
 
-  // Stan powtórek: tylko pytania zgodne.
+  // Dowód zgodności pytania: zgodny snapshot w niezmigrowanej treści albo zachowana próba z rewizją paczki.
+  const evidenced = new Set<string>();
+  for (const s of rawSessions) {
+    if (s.legacy) continue;
+    for (const slot of slotsOf(s)) if (snapshotMatches(slot)) evidenced.add(slot.questionId);
+  }
+  for (const a of attempts) evidenced.add(a.questionId);
+
+  // Stan powtórek: tylko pytania zgodne, z dowodem zgodności i tą samą rodziną oraz dziedziną co paczka.
   const questionStats: QuestionStat[] = [];
   let statsReset = 0;
   for (const st of input.questionStats) {
-    if (isObj(st) && confirmed(st.questionId)) questionStats.push(st as unknown as QuestionStat);
+    const ref = isObj(st) && typeof st.questionId === 'string' ? ALLOWED.get(st.questionId) : undefined;
+    const keep = ref !== undefined && isObj(st) && confirmed(st.questionId) && evidenced.has(st.questionId as string) && st.familyId === ref.familyId && st.domainId === ref.domainId;
+    if (keep) questionStats.push(st as unknown as QuestionStat);
     else statsReset++;
   }
 
@@ -268,7 +306,7 @@ export function transformToCurrentBank(input: BankTransformInput, now: IsoDateTi
     }
     const block = b as unknown as Block;
     const ref = ALLOWED.get(block.questionId);
-    const matches = ref !== undefined && confirmed(block.questionId) && block.fingerprint === ref.fingerprint;
+    const matches = ref !== undefined && confirmed(block.questionId) && block.fingerprint === ref.fingerprint && block.familyId === ref.familyId;
     if (block.inactiveReason === 'bank_version_changed') {
       blocks.push(block.stemPreview === '' ? block : { ...block, stemPreview: '' });
       blocksDeactivated++;
