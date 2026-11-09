@@ -24,7 +24,7 @@ import type {
   Settings,
   UserState,
 } from '../domain/types';
-import type { V15TransformReport } from './v15Migration';
+import type { BankTransformReport } from './bankMigration';
 
 /* ========================================================================== */
 /* Schemat bazy                                                               */
@@ -32,7 +32,7 @@ import type { V15TransformReport } from './v15Migration';
 
 export const DB_NAME = 'doktor-monika-egzamin';
 /** Wersja schematu IndexedDB (migracje wersjonowane, `onupgradeneeded`). */
-export const DB_SCHEMA_VERSION = 3;
+export const DB_SCHEMA_VERSION = 4;
 
 /** Magazyny (DECYZJE §10). */
 export const STORE_NAMES = [
@@ -103,7 +103,7 @@ export interface MetaRecord {
   appVersion: string;
 }
 
-/** Rekord `meta` z wersją treści (klucz `'content'`): bank pytań, do którego dostosowano dane (V15). */
+/** Rekord `meta` z wersją treści (klucz `'content'`): bank pytań, do którego dostosowano dane (V18). */
 export interface ContentMetaRecord {
   key: 'content';
   bankVersion: string;
@@ -119,7 +119,7 @@ export interface MigrationMetaRecord {
   fromSchemaVersion: number;
   toSchemaVersion: number;
   appVersion: string;
-  report: V15TransformReport;
+  report: BankTransformReport;
 }
 
 /* ========================================================================== */
@@ -144,7 +144,7 @@ export interface BackupData {
   events: DmeEvent[];
   /**
    * Zaimportowane pule — od V15 zawsze puste przy eksporcie; przy wczytaniu starszej kopii są odrzucane
-   * (aplikacja używa wyłącznie banku V15).
+   * (aplikacja używa wyłącznie wbudowanego banku V18).
    */
   packs: unknown[];
 }
@@ -356,7 +356,7 @@ export interface RepositoryOptions {
    */
   now?: () => IsoDateTime;
   /**
-   * Wersja treści, której sesje wolno zapisywać (domyślnie bank V15). Zapis sesji innej wersji, która
+   * Wersja treści, której sesje wolno zapisywać (domyślnie bieżący bank V18). Zapis sesji innej wersji, która
    * nie jest sesją `legacy`, jest odrzucany (ochrona przed opóźnionym zapisem starego kodu).
    */
   contentBankVersion?: string;
@@ -417,7 +417,7 @@ export interface Repository {
   /** Treść automatycznej kopii do pobrania („propozycja pobrania” po imporcie). */
   getBackupFile(id: string): Promise<PersistenceResult<ExportedFile>>;
 
-  /** Rekordy `meta`: wersja treści (V15) i rekord migracji (diagnostyka, testy). */
+  /** Rekordy `meta`: wersja treści (V18) i rekord migracji (diagnostyka, testy). */
   readContentMeta(): Promise<PersistenceResult<{ content: ContentMetaRecord | null; migration: MigrationMetaRecord | null }>>;
 
   /**

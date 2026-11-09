@@ -11,7 +11,7 @@ import { ListRow } from '../components/Controls';
 import { Icon } from '../components/Icon';
 import { Screen, ScreenHeader } from '../components/Screen';
 import { EmailText, unassignedText } from './ProfileScreens';
-import { DIFFICULTY_LABELS, familiesCount, formatBytes, formatDate, pluralPl, questionsCount } from '../format';
+import { familiesCount, formatBytes, formatDate, pluralPl, questionsCount } from '../format';
 
 /** Zdanie o charakterze wyniku (task: „wynik nie jest oceną komisji”) — wspólne dla ustawień i „O bazie”. */
 export const RESULT_DISCLAIMER =
@@ -85,7 +85,7 @@ export function SettingsScreen({ vm }: { vm: SettingsVM }) {
             <ListRow icon="save" title="Kopia danych" subtitle="Zapisz lub wczytaj plik kopii" onClick={() => controller.openBackup()} />
           </li>
           <li>
-            <ListRow icon="library_add" title="Pula pytań" subtitle="Wyłącznie bank V15 — import pul wyłączony" onClick={() => controller.openPoolImport()} />
+            <ListRow icon="library_add" title="Pula pytań" subtitle="Wyłącznie wbudowany bank V18 — import pul wyłączony" onClick={() => controller.openPoolImport()} />
           </li>
           <li>
             <ListRow
@@ -144,7 +144,7 @@ export function SettingsScreen({ vm }: { vm: SettingsVM }) {
   );
 }
 
-/** Nazwy grup profilu treningowego V15 (klucze z training_profile.json). */
+/** Nazwy grup profilu treningowego (klucze z training_profile.json). */
 const PROFILE_GROUP_LABELS: Readonly<Record<string, string>> = {
   skin: 'skóra i dermatologia',
   facial_anatomy: 'anatomia twarzy',
@@ -175,14 +175,7 @@ export function AboutScreen({ vm }: { vm: AboutVM }) {
           </li>
         ))}
       </ul>
-      <ul className="about-table" role="list" aria-label="Liczba pytań według poziomu trudności">
-        {bank.byDifficulty.map((d) => (
-          <li key={d.difficulty}>
-            <span>{DIFFICULTY_LABELS[d.difficulty]}</span>
-            <span className="about-table__count">{d.count}</span>
-          </li>
-        ))}
-      </ul>
+      <p className="meta">Jedna pula: Test i Free Flow losują ze wszystkich pytań, bez wyboru poziomu trudności.</p>
       {bank.profileShares ? (
         <p>
           Profil treningowy całego zakresu (Test i Free Flow):{' '}

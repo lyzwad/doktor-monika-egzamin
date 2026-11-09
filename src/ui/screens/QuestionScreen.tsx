@@ -22,7 +22,7 @@ import { Icon } from '../components/Icon';
 import { BottomActionBar, ProgressHeader, SaveErrorAlert, StatusToast } from '../components/QuestionChrome';
 import { Screen } from '../components/Screen';
 import { AlertDialog, Sheet } from '../components/Sheet';
-import { configLabel, difficultyLabel, formatDate, pluralPl, questionsCount, saveErrorText } from '../format';
+import { configLabel, formatDate, pluralPl, questionsCount, saveErrorText } from '../format';
 import { gentleScrollTo } from '../hooks';
 
 type Overlay = null | 'exit' | 'confirm-close';
@@ -249,7 +249,6 @@ export function QuestionScreen({ vm }: { vm: QuestionVM }) {
           <div className="stem-block">
             <div className="q-meta">
               <span className="q-meta__domain">{vm.domainTitle}</span>
-              <span className="q-meta__level">{difficultyLabel(vm.difficulty)}</span>
               {vm.retryRoundIndex !== null && !isReview ? <Tag retry>Powtórka · runda {vm.retryRoundIndex}</Tag> : null}
               {vm.originTag === 'repeated_wrong' && !isReview ? <Tag>Z poprzedniej rundy</Tag> : null}
               {vm.originTag === 'seen_filler' && !isReview ? <Tag>Z wcześniejszej nauki</Tag> : null}

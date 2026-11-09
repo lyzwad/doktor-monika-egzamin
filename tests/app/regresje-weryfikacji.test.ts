@@ -11,11 +11,11 @@ import { fingerprintRuntimeQuestion } from '../../src/domain/fingerprint';
 import type { RuntimeBank } from '../../src/domain/types';
 import { BANK, contentBundle, failingRepository, keyOf, openSession, question, settle, startHarness, userState, type Harness } from './harness';
 
-/** Test w najmniejszym koszyku banku z N = pojemność — zgłoszenie nie ma zastępstwa. */
+/** Test w najmniejszej dziedzinie banku (SAFE) z N = pojemność — zgłoszenie nie ma zastępstwa. */
 async function startFullCapacityTest(h: Harness): Promise<number> {
   const c = h.controller;
   c.openConfig('test');
-  c.updateConfigDraft({ scope: 'INJ', difficulty: 'advanced', nText: '1', myErrorsPriority: false });
+  c.updateConfigDraft({ scope: 'SAFE', nText: '1', myErrorsPriority: false });
   const cfg = c.getState().screen;
   if (cfg?.name !== 'config') throw new Error('oczekiwano konfiguracji');
   const n = cfg.capacity;

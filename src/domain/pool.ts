@@ -172,16 +172,19 @@ export function stepTestN(raw: string | number, delta: number, capacity: number)
   return next >= 1 && next <= cap ? next : null;
 }
 
-/** Konfiguracja startowa testu: ostatnia jawnie wybrana albo domyślna (pierwsze uruchomienie: 20/mixed/ALL). */
+/**
+ * Konfiguracja startowa testu: ostatnia jawnie wybrana albo domyślna (pierwsze uruchomienie: 20/mixed/ALL).
+ * Od banku V18 zawsze cała pula (`mixed`) — dawny filtr trudności nie ogranicza dostępu do części banku.
+ */
 export function initialTestConfig(settings: Settings): SessionConfig {
   const c = settings.lastTestConfig;
-  if (c && isValidConfigShape(c) && typeof c.targetN === 'number') return { ...c };
+  if (c && isValidConfigShape(c) && typeof c.targetN === 'number') return { ...c, difficulty: 'mixed' };
   return { ...DEFAULT_TEST_CONFIG };
 }
 
 /** Konfiguracja startowa Free Flow: ostatnia jawnie wybrana albo domyślna (ALL/mixed). */
 export function initialFreeFlowConfig(settings: Settings): SessionConfig {
   const c = settings.lastFreeFlowConfig;
-  if (c && isValidConfigShape(c)) return { ...c, targetN: null };
+  if (c && isValidConfigShape(c)) return { ...c, targetN: null, difficulty: 'mixed' };
   return { ...DEFAULT_FREE_FLOW_CONFIG };
 }

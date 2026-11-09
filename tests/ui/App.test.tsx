@@ -8,6 +8,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import type { AppController, AppState } from '../../src/app/controller';
 import { AppRoot } from '../../src/ui/App';
 import { render } from '@testing-library/react';
+import { familiesCount, questionsCount } from '../../src/ui/format';
 import { bank, correctOptionId, renderApp, startedMock } from './helpers';
 
 afterEach(() => {
@@ -42,7 +43,7 @@ describe('Start (S01–S02)', () => {
     const card = screen.getByRole('region', { name: 'Przerwana sesja' });
     expect(within(card).getByText('Kontynuuj test')).toBeTruthy();
     expect(within(card).getByText('1/20 pytań')).toBeTruthy();
-    expect(within(card).getByText('Cały zakres · Mieszany')).toBeTruthy();
+    expect(within(card).getByText('Cały zakres')).toBeTruthy();
     fireEvent.click(within(card).getByRole('button', { name: 'Więcej opcji sesji' }));
     const sheet = screen.getByRole('dialog', { name: 'Test · 1/20' });
     fireEvent.click(within(sheet).getByRole('button', { name: 'Zamknij test bez wyniku' }));
@@ -90,10 +91,10 @@ describe('Konfiguracja (S03–S05)', () => {
     // C01: pojemność = różne zadania (rodziny), obok liczba pytań (ta sama co w „O bazie”).
     expect(
       screen.getByText(
-        `Dostępne w tym zakresie: ${capacity} różnych zadań (rodzin), łącznie ${bank.questions.length} pytań — test bierze najwyżej jedno pytanie z rodziny. Kolejność pytań zostanie wylosowana.`,
+        `Dostępne w tym zakresie: ${familiesCount(capacity)}, łącznie ${questionsCount(bank.questions.length)} — test bierze najwyżej jedno pytanie z rodziny. Kolejność pytań zostanie wylosowana.`,
       ),
     ).toBeTruthy();
-    expect(screen.getByRole('button', { name: /Cały zakres/ }).textContent).toContain(`${capacity} różnych zadań (rodzin) · ${bank.questions.length} pytań`);
+    expect(screen.getByRole('button', { name: /Cały zakres/ }).textContent).toContain(`${familiesCount(capacity)} · ${questionsCount(bank.questions.length)}`);
     fireEvent.click(screen.getByRole('button', { name: 'Zwiększ o 10' }));
     expect(input.value).toBe('30');
 
@@ -114,24 +115,21 @@ describe('Konfiguracja (S03–S05)', () => {
     expect((screen.getByRole('button', { name: 'Zwiększ o 10' }) as HTMLButtonElement).disabled).toBe(true);
   });
 
-  it('zakres w arkuszu (radio) i trudność (Segmented) zmieniają pojemność', async () => {
+  it('zakres w arkuszu (radio) zmienia pojemność; przy N ponad pojemność — „Wybierz Cały zakres” (bez wyboru trudności)', async () => {
     const c = await startedMock();
     c.openConfig('test');
     await renderApp(c);
     fireEvent.click(screen.getByRole('button', { name: /Cały zakres/ }));
     const sheet = screen.getByRole('dialog', { name: 'Zakres' });
-    const anatomyCount = new Set(bank.questions.filter((q) => q.domain_id === 'ANAT').map((q) => q.family_id)).size;
-    fireEvent.click(within(sheet).getByRole('radio', { name: new RegExp(`Anatomia.*${anatomyCount}`) }));
+    const safeCount = new Set(bank.questions.filter((q) => q.domain_id === 'SAFE').map((q) => q.family_id)).size;
+    fireEvent.click(within(sheet).getByRole('radio', { name: new RegExp(`Bezpiecze.*${safeCount}`) }));
     expect(screen.queryByRole('dialog')).toBeNull();
-    expect(screen.getByRole('button', { name: /Anatomia/ }).textContent).toContain(`${anatomyCount} różnych zadań (rodzin)`);
-    fireEvent.click(screen.getByRole('radio', { name: 'Trudny' }));
-    expect(screen.getByRole('radio', { name: 'Trudny' }).getAttribute('aria-checked')).toBe('true');
-    const hard = new Set(bank.questions.filter((q) => q.domain_id === 'ANAT' && q.difficulty === 'advanced').map((q) => q.family_id)).size;
-    if (hard < 20) {
-      expect(screen.getByRole('alert').textContent).toContain(`W tym zakresie dostępnych jest mniej różnych zadań (${hard}).`);
-      expect(screen.getByRole('button', { name: 'Wybierz Cały zakres' })).toBeTruthy();
-      expect(screen.getByRole('button', { name: 'Poziom Mieszany' })).toBeTruthy();
-    }
+    expect(screen.getByRole('button', { name: /Bezpiecze/ }).textContent).toContain(familiesCount(safeCount));
+    expect(screen.queryByRole('radio', { name: 'Trudny' })).toBeNull();
+    fireEvent.change(screen.getByRole('textbox', { name: 'Liczba pytań' }), { target: { value: String(safeCount + 1) } });
+    expect(screen.getByRole('alert').textContent).toContain(`W tym zakresie dostępnych jest mniej różnych zadań (${safeCount}).`);
+    expect(screen.getByRole('button', { name: 'Wybierz Cały zakres' })).toBeTruthy();
+    expect(screen.queryByRole('button', { name: 'Poziom Mieszany' })).toBeNull();
   });
 
   it('„Moje błędy” bez błędów: komunikat i „Przejdź do zwykłego zakresu”', async () => {
@@ -199,7 +197,7 @@ describe('Ustawienia (S21–S23)', () => {
     const c = await startedMock({ appVersion: '0.1.0' });
     c.openSettings();
     await renderApp(c);
-    expect(screen.getByText(`${bank.counts.questions} pytań · ${bank.counts.families} różnych zadań (rodzin) · wersja ${bank.bank_version}`)).toBeTruthy();
+    expect(screen.getByText(`${questionsCount(bank.counts.questions)} · ${familiesCount(bank.counts.families)} · wersja ${bank.bank_version}`)).toBeTruthy();
     expect(screen.getByText('0.1.0')).toBeTruthy();
     await act(async () => {
       fireEvent.click(screen.getByRole('button', { name: /O bazie pytań/ }));

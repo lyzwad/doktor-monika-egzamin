@@ -1,21 +1,20 @@
 /**
  * S03–S05 Konfiguracja (Free Flow | Test): liczba pytań (NumberStepper, tylko Test), zakres (arkusz),
- * trudność (Segmented), „Moje błędy” (Switch), informacja o przerwanej sesji, przycisk startu w dolnym pasku.
+ * (od V18 bez wyboru trudności — jedna pula), „Moje błędy” (Switch), informacja o przerwanej sesji, przycisk startu w dolnym pasku.
  * Walidacja N i pojemność pochodzą z modelu widoku (domena); UI pokazuje komunikaty S05 z działaniami.
  */
 import { useState } from 'react';
 import { useController } from '../../app/ControllerContext';
 import type { ConfigVM } from '../../app/viewModels';
-import type { DifficultyChoice, Scope } from '../../domain/types';
+import type { Scope } from '../../domain/types';
 import { Banner } from '../components/Banner';
-import { Segmented, SwitchRow } from '../components/Controls';
+import { SwitchRow } from '../components/Controls';
 import { Icon } from '../components/Icon';
 import { NumberStepper } from '../components/NumberStepper';
 import { Screen, ScreenHeader } from '../components/Screen';
 import { RadioList, Sheet } from '../components/Sheet';
-import { capacityHelp, capacityLabel, DIFFICULTY_LABELS, emptyPoolFixes, nValidationMessage, questionsCount } from '../format';
+import { capacityHelp, capacityLabel, emptyPoolFixes, nValidationMessage, questionsCount } from '../format';
 
-const DIFFICULTY_ORDER: DifficultyChoice[] = ['mixed', 'basic', 'intermediate', 'advanced'];
 
 /**
  * UI-04: tekst pomocniczy Free Flow dosłownie z Design (DME-Aplikacja.dc.html, `cfg.ffHelp`). Zgodny
@@ -87,17 +86,6 @@ export function ConfigScreen({ vm }: { vm: ConfigVM }) {
             </span>
             <Icon name="chevron_right" size={22} className="select-row__chevron" />
           </button>
-        </section>
-
-        <section className="section">
-          <h2 className="section__title">Trudność</h2>
-          <Segmented
-            label="Trudność"
-            options={DIFFICULTY_ORDER.map((d) => ({ value: d, label: DIFFICULTY_LABELS[d] }))}
-            value={draft.difficulty}
-            onChange={(difficulty) => controller.updateConfigDraft({ difficulty })}
-          />
-          <p className="meta">Łatwy to autorski trening w stylu egzaminacyjnym. Wyższe poziomy wymagają więcej rozumowania w tym samym zakresie.</p>
         </section>
 
         <section className="section">

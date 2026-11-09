@@ -19,11 +19,11 @@ import { backupErrorDetail, formatBytes, formatDateTime, pluralPl } from '../for
 /**
  * Opis zawartości pliku kopii (F02). Kopia zawiera magazyny `BACKUP_DATA_STORES` (persistence/backup.ts):
  * ustawienia, sesje ZE SNAPSHOTAMI PYTAŃ (treść, warianty, klucz, wyjaśnienie — do przeglądu odpowiedzi),
- * próby, stan powtórek, blokady (z początkiem treści pytania), zdarzenia — wyłącznie treść banku V15.
+ * próby, stan powtórek, blokady (z początkiem treści pytania), zdarzenia — wyłącznie treść banku V18 (allowlista 700).
  * Nie zawiera wbudowanej puli, zaimportowanych pul ani danych pacjentów (aplikacja ich nie przetwarza).
  */
 export const BACKUP_CONTENTS_TEXT =
-  'Plik zawiera wyniki, przerwane sesje, ustawienia, stan powtórek i wykluczone pytania, a także treść pytań banku V15 z Twoich sesji (do przeglądu odpowiedzi). Sesje sprzed aktualizacji banku do V15 mają tylko podsumowanie, bez treści pytań. Nie zawiera wbudowanej puli pytań, zaimportowanych pul ani danych pacjentów.';
+  'Plik zawiera wyniki, przerwane sesje, ustawienia, stan powtórek i wykluczone pytania, a także treść pytań aktualnego banku (V18, 700 pytań) z Twoich sesji (do przeglądu odpowiedzi). Sesje z wcześniejszych wersji banku mają tylko podsumowanie, bez treści pytań. Nie zawiera wbudowanej puli pytań, zaimportowanych pul ani danych pacjentów.';
 
 function FilePicker({ label, accept, onFile, primary = false }: { label: string; accept: string; onFile: (file: File) => void; primary?: boolean }) {
   const inputRef = useRef<HTMLInputElement>(null);
@@ -295,16 +295,16 @@ export function BackupScreen({ vm }: { vm: BackupVM }) {
 
 /**
  * Import dodatkowych pul pytań — WYŁĄCZONY od banku V15 (docs/MIGRACJA_V15.md): aplikacja udostępnia
- * wyłącznie wbudowany bank V15. Ekran zostaje pod dotychczasowym adresem z wyjaśnieniem, bez wyboru pliku.
+ * wyłącznie wbudowany bank (od 09.11.2026 V18, docs/MIGRACJA_V18.md). Ekran zostaje pod dotychczasowym adresem z wyjaśnieniem, bez wyboru pliku.
  */
 export function PoolImportScreen({ vm }: { vm: PoolImportVM }) {
   const controller = useController();
   void vm;
   return (
     <Screen header={<ScreenHeader title="Pula pytań" onBack={() => controller.goBack()} />}>
-      <Banner tone="info" role="note" title="Aplikacja używa wyłącznie banku pytań V15">
+      <Banner tone="info" role="note" title="Aplikacja używa wyłącznie wbudowanego banku pytań (V18, 700 pytań)">
         <span className="banner__text">
-          Import dodatkowych pul pytań jest wyłączony. Wszystkie tryby (Test, Free Flow, runda błędów, „Moje błędy”) korzystają tylko z wbudowanego banku V15. Liczby
+          Import dodatkowych pul pytań jest wyłączony. Wszystkie tryby (Test, Free Flow, runda błędów, „Moje błędy”) korzystają tylko z wbudowanego banku 700 pytań. Liczby
           pytań i status materiału są w „O bazie pytań”.
         </span>
       </Banner>

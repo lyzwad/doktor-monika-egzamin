@@ -95,6 +95,22 @@ describe('uruchomienie', () => {
     const h = await startHarness({ loadBank: async () => contentBundle({ format: 'inny' }) });
     expect(h.controller.getState().boot).toMatchObject({ phase: 'fatal', code: 'BANK_INVALID' });
   });
+
+  it('bank z ID spoza allowlisty V18 (te same liczby, bez sprawdzenia SHA) → BANK_INVALID; aplikacja nie pokazuje pytań', async () => {
+    const swapped = structuredClone(BANK);
+    const first = swapped.questions[0]!;
+    // ID spoza allowlisty i spoza listy wycofanych — liczby i poziomy bez zmian, więc złapie to tylko kontrola allowlisty.
+    first.id = 'XX-NIEZNANE-1';
+    first.family_id = 'XX-NIEZNANE-1';
+    const profile = structuredClone(contentBundle().profile) as { groups: Record<string, string[]> };
+    for (const ids of Object.values(profile.groups)) {
+      const i = ids.indexOf('V16-ANAT-001');
+      if (i >= 0) ids[i] = 'XX-NIEZNANE-1';
+    }
+    const h = await startHarness({ loadBank: async () => ({ ...contentBundle(swapped), profile, bankSha256: null }) });
+    expect(h.controller.getState().boot).toMatchObject({ phase: 'fatal', code: 'BANK_INVALID' });
+    expect(h.controller.getState().catalog).toBeNull();
+  });
 });
 
 describe('test: komenda → domena → zapis → publikacja', () => {
@@ -515,8 +531,8 @@ describe('kopia danych (F02, F03)', () => {
   });
 });
 
-describe('import puli — wyłączony (wyłącznie bank V15)', () => {
-  it('poprawny plik puli jest odrzucony w logice: katalog = dokładnie bank V15, nic nie trafia do bazy', async () => {
+describe('import puli — wyłączony (wyłącznie wbudowany bank V18)', () => {
+  it('poprawny plik puli jest odrzucony w logice: katalog = dokładnie bank V18, nic nie trafia do bazy', async () => {
     const h = await startHarness();
     const src = BANK.questions[0]!;
     const fresh = { ...structuredClone(src), id: 'ANAT-Q900', family_id: 'FAM-ANAT-Q900', stem_pl: `${src.stem_pl} (wariant testowy importu)` };
@@ -526,7 +542,7 @@ describe('import puli — wyłączony (wyłącznie bank V15)', () => {
     h.controller.openSettings();
     h.controller.openPoolImport();
     expect(await h.controller.importPackFile(new Blob([JSON.stringify(pack)]), 'pula.json')).toMatchObject({ ok: false, code: 'PACKS_DISABLED' });
-    expect(h.controller.getState().screen).toMatchObject({ name: 'poolImport', flow: { step: 'error', messagePl: expect.stringContaining('wyłącznie banku pytań V15') } });
+    expect(h.controller.getState().screen).toMatchObject({ name: 'poolImport', flow: { step: 'error', messagePl: expect.stringContaining('wyłącznie wbudowanego banku pytań V18') } });
     expect(h.controller.getState().catalog?.questions.length).toBe(BANK.questions.length);
     expect(h.controller.getState().catalog?.questionsById['ANAT-Q900']).toBeUndefined();
     const h2 = await startHarness({ factory: h.factory, dbName: h.dbName });

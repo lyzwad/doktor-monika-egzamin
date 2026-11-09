@@ -6,7 +6,7 @@
  *   potem `put`/`delete`; sukces dopiero po `oncomplete`; błąd = brak jakiejkolwiek zmiany.
  * - kopia — eksport (./backup.ts), walidacja bez zmiany danych, zamiana wszystkich danych w jednej
  *   transakcji razem z zapisem automatycznej kopii bieżącego stanu do `backups`.
- * - od V15 brak importu paczek pytań; zapis sesji innej wersji treści (nie-`legacy`) jest odrzucany.
+ * - brak importu paczek pytań (od V15); zapis sesji innej wersji treści (nie-`legacy`) jest odrzucany.
  *
  * W transakcjach nie ma `await` na operacjach spoza IndexedDB: Web Crypto (fingerprinty) i odczyt
  * plików wykonują się PRZED transakcją, a JSON kopii bezpieczeństwa powstaje synchronicznie w callbacku.
@@ -70,7 +70,7 @@ import { MIGRATIONS } from './schema';
 import type { Migration } from './schema';
 import { createStorageApi, defaultStorageManager } from './storage';
 import { isIsoDateTime, isNonEmptyString, isObject } from './validation';
-import { transformToV15, V15_MIGRATION_ID } from './v15Migration';
+import { BANK_MIGRATION_ID, transformToCurrentBank } from './bankMigration';
 import { planUnassignedMerge } from './merge';
 import type { StoreRecords } from './merge';
 
@@ -91,7 +91,7 @@ const USER_STORES: readonly UserStoreName[] = USER_STORE_NAMES;
 
 /** Komunikat odrzuconego zapisu sesji innej wersji treści. */
 export const MSG_STALE_CONTENT_WRITE =
-  'Odrzucono zapis sesji z poprzedniej wersji banku pytań. Aplikacja używa wyłącznie banku V15 — uruchom ją ponownie.';
+  'Odrzucono zapis sesji z poprzedniej wersji banku pytań. Aplikacja używa wyłącznie bieżącego banku pytań — uruchom ją ponownie.';
 
 /**
  * (d) Ochrona przed opóźnionymi zapisami: sesja innej wersji treści (i nie-`legacy`) albo ze snapshotem
@@ -438,7 +438,7 @@ export function createIndexedDbRepository(options: InternalRepositoryOptions = {
       try {
         // (e) Eksport nigdy nie zawiera treści innej wersji banku: ta sama transformacja co migracja
         // (idempotentna — dane po migracji przechodzą bez zmian), bez paczek.
-        const t = transformToV15(data.value, input.now);
+        const t = transformToCurrentBank(data.value, input.now);
         const file = buildBackupFile(
           { ...data.value, sessions: t.sessions, attempts: t.attempts, questionStats: t.questionStats, blocks: t.blocks, events: t.events, packs: [] },
           { ...input, profileEmail: owner ?? input.profileEmail ?? null },
@@ -500,7 +500,7 @@ export function createIndexedDbRepository(options: InternalRepositoryOptions = {
             const excess = ordered.length - (SAFETY_BACKUPS_KEPT - 1);
             for (let i = 0; i < excess; i += 1) backups.delete(ordered[i] as IDBValidKey);
           });
-          // 2. Zamiana wszystkich danych użytkownika; paczki pytań nie są przywracane (wyłącznie bank V15).
+          // 2. Zamiana wszystkich danych użytkownika; paczki pytań nie są przywracane (wyłącznie wbudowany bank V18).
           for (const name of BACKUP_DATA_STORES) {
             const store = tx.objectStore(name);
             store.clear();
@@ -615,7 +615,7 @@ export function createIndexedDbRepository(options: InternalRepositoryOptions = {
         a.onsuccess = control.guard(() => {
           content = (a.result as ContentMetaRecord | undefined) ?? null;
         });
-        const b = store.get(`migration:${V15_MIGRATION_ID}`);
+        const b = store.get(`migration:${BANK_MIGRATION_ID}`);
         b.onsuccess = control.guard(() => {
           migration = (b.result as MigrationMetaRecord | undefined) ?? null;
         });

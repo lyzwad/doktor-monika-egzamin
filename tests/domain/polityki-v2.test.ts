@@ -19,7 +19,7 @@ import {
   type SessionConfig,
   type UserState,
 } from '../../src/domain/api';
-import { v15Catalog } from '../content';
+import { currentCatalog } from '../content';
 import { catalogOf, cell, Clock, grid, must, playTest, q, session, slotAt, wrongOptionOf } from './helpers';
 
 /** Liczba pozycji planu z rodzin wyświetlonych przed startem sesji. */
@@ -37,7 +37,7 @@ function start(state: UserState, catalog: Catalog, config: Partial<SessionConfig
 describe('TEST_POLICY_V2 — najpierw niewidziane w całym zakresie (D04)', () => {
   it('rzeczywisty bank: kolejne niezależne testy 20/mixed/ALL nie biorą widzianych rodzin, dopóki niewidzianych jest ≥ N', () => {
     // Bank V15 z profilem: cały zakres = TEST_POLICY_V3 (grupy profilu), reguła „najpierw niewidziane” bez zmian.
-    const catalog = v15Catalog();
+    const catalog = currentCatalog();
     const clock = new Clock();
     const n = 20;
     let state = emptyUserState();

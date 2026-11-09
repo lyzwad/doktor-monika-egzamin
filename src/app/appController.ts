@@ -71,6 +71,10 @@ import { MSG_NO_STORAGE_SUFFIX } from '../persistence/errors';
 import { knownProfile } from '../profiles/profiles';
 import type { ProfileEmail } from '../profiles/profiles';
 import { isUpdateSafe } from '../pwa/updateGuard';
+import { V18_ALLOWED } from '../persistence/v18Allowlist';
+
+/** Allowlista paczki V18: ID → [id, rewizja, fingerprint, klucz]. */
+const V18_ALLOWED_BY_ID = new Map(V18_ALLOWED.map((row) => [row[0], row]));
 import type { ActionResult, AppController, AppState, ControllerDeps, CreateAppController } from './controller';
 import { HOME_ROUTE, parseHash, routeToHash, sameRoute, type HistoryTab, type ResultOrigin, type Route } from './routes';
 import {
@@ -115,8 +119,8 @@ const MSG_CHOOSE_TARGET = 'Wybierz profil, do którego wczytać kopię. Dane na 
 
 const MSG_CLOSING = 'Sesja jest właśnie zamykana.';
 
-/** Import dodatkowych pul jest wyłączony (docs/MIGRACJA_V15.md). */
-export const MSG_PACKS_DISABLED = 'Aplikacja używa wyłącznie banku pytań V15 — import dodatkowych pul pytań jest wyłączony.';
+/** Import dodatkowych pul jest wyłączony (docs/MIGRACJA_V15.md, docs/MIGRACJA_V18.md). */
+export const MSG_PACKS_DISABLED = 'Aplikacja używa wyłącznie wbudowanego banku pytań V18 (700 pytań) — import dodatkowych pul pytań jest wyłączony.';
 const MSG_MIGRATION_FAILED =
   'Aktualizacja danych nie powiodła się. Dane na urządzeniu pozostały w poprzedniej wersji i nie zostały usunięte; pytania będą dostępne po udanej aktualizacji. Spróbuj ponownie.';
 const MSG_MIGRATION_BLOCKED =
@@ -568,7 +572,7 @@ export const createAppController: CreateAppController = (deps: ControllerDeps): 
     }
   }
 
-  /** Katalog WYŁĄCZNIE z banku V15 (bez paczek), z wyłączonymi ID i profilem; asercja wersji i liczb. */
+  /** Katalog WYŁĄCZNIE z banku V18 (bez paczek), z wyłączonymi ID i profilem; asercja wersji, liczb i allowlisty 700 ID. */
   function buildContentCatalog(): ReturnType<typeof buildCatalog> {
     if (!bank) return { ok: false, error: { code: 'INVALID_BANK', messagePl: 'Brak banku pytań.' } };
     const built = buildCatalog(bank, { retiredQuestionIds: retiredIds, profile, requiredBankVersion: CONTENT_RELEASE.bankVersion });
@@ -583,7 +587,15 @@ export const createAppController: CreateAppController = (deps: ControllerDeps): 
       (sum.byDifficulty.advanced ?? 0) !== c.advanced ||
       built.value.retiredQuestionIds.length !== c.retired
     ) {
-      return { ok: false, error: { code: 'INVALID_BANK', messagePl: 'Liczby pytań w pliku nie zgadzają się z bankiem V15.' } };
+      return { ok: false, error: { code: 'INVALID_BANK', messagePl: 'Liczby pytań w pliku nie zgadzają się z bankiem V18.' } };
+    }
+    // Allowlista paczki V18 (jedyne źródło aktywnej treści): katalog = dokładnie te ID, rewizje, fingerprinty i klucze.
+    const mismatch = built.value.questions.some((q) => {
+      const ref = V18_ALLOWED_BY_ID.get(q.id);
+      return !ref || ref[1] !== q.revision || ref[2] !== q.fingerprint || ref[3] !== q.correctOptionId;
+    });
+    if (mismatch || built.value.questions.length !== V18_ALLOWED_BY_ID.size) {
+      return { ok: false, error: { code: 'INVALID_BANK', messagePl: 'Pytania w pliku nie zgadzają się z listą dozwolonych pytań banku V18.' } };
     }
     return built;
   }
@@ -614,7 +626,7 @@ export const createAppController: CreateAppController = (deps: ControllerDeps): 
   }
 
   function storageFatal(error: PersistenceError): void {
-    // Migracja do V15 nieudana albo zablokowana: baza zostaje w poprzedniej wersji, pytań nie pokazujemy.
+    // Migracja treści (V18) nieudana albo zablokowana: baza zostaje w poprzedniej wersji, pytań nie pokazujemy.
     if (error.code === 'MigrationFailed') fatal('MIGRATION_FAILED', MSG_MIGRATION_FAILED);
     else if (error.code === 'Blocked') fatal('MIGRATION_BLOCKED', MSG_MIGRATION_BLOCKED);
     else if (error.code === 'Unavailable' || error.code === 'QuotaExceeded') fatal('STORAGE_UNAVAILABLE', error.messagePl + MSG_NO_STORAGE_SUFFIX);
@@ -624,7 +636,7 @@ export const createAppController: CreateAppController = (deps: ControllerDeps): 
   async function runBoot(): Promise<void> {
     boot = { phase: 'loading', stage: 'opening-storage' };
     publish();
-    // Migracja schematu (podmiana treści na V15) — komunikat „Aktualizacja banku pytań…”.
+    // Migracja schematu (podmiana treści na V18) — komunikat „Aktualizacja banku pytań…”.
     repository.setUpgradeListener((info) => {
       if (info.from > 0) {
         boot = { phase: 'loading', stage: 'migrating' };
@@ -655,7 +667,7 @@ export const createAppController: CreateAppController = (deps: ControllerDeps): 
       }
       const content = parseContent(raw);
       if (!content.ok) {
-        fatal('BANK_INVALID', `Plik pytań jest uszkodzony albo nie jest bankiem V15. ${content.messagePl}`);
+        fatal('BANK_INVALID', `Plik pytań jest uszkodzony albo nie jest bankiem V18. ${content.messagePl}`);
         return;
       }
       bank = content.bank;
@@ -676,7 +688,7 @@ export const createAppController: CreateAppController = (deps: ControllerDeps): 
       return;
     }
     // Nowsza wersja treści na serwerze (np. V16) — przeładowanie PRZED pokazaniem pytań (fallback, gdy
-    // nowy Service Worker nie przejął strony sam). Offline / brak pliku: start na bieżącym banku V15.
+    // nowy Service Worker nie przejął strony sam). Offline / brak pliku: start na bieżącym banku V18.
     if (await newerContentAvailable()) {
       void startContentUpdate();
       return;
@@ -701,12 +713,12 @@ export const createAppController: CreateAppController = (deps: ControllerDeps): 
 
   type ParsedContent = { ok: true; bank: RuntimeBank; retired: string[]; profile: TrainingProfile } | { ok: false; messagePl: string };
 
-  /** Asercja treści V15: SHA-256 pliku, `bank_version` wszystkich trzech plików, kształt. */
+  /** Asercja treści V18: SHA-256 pliku, `bank_version` wszystkich trzech plików, kształt. */
   function parseContent(raw: unknown): ParsedContent {
     if (typeof raw !== 'object' || raw === null || !('bank' in raw)) return { ok: false, messagePl: 'Brak pliku banku.' };
     const bundle = raw as { bank: unknown; retired: unknown; profile: unknown; bankSha256: string | null };
     if (bundle.bankSha256 !== null && bundle.bankSha256 !== CONTENT_RELEASE.bankSha256) {
-      return { ok: false, messagePl: 'Suma kontrolna pliku pytań nie zgadza się z bankiem V15.' };
+      return { ok: false, messagePl: 'Suma kontrolna pliku pytań nie zgadza się z bankiem V18.' };
     }
     const parsed = parseRuntimeBank(bundle.bank);
     if (!parsed.ok) return { ok: false, messagePl: parsed.error.messagePl };
@@ -1043,7 +1055,8 @@ export const createAppController: CreateAppController = (deps: ControllerDeps): 
     },
     updateConfigDraft(patch) {
       if (route.name !== 'config') return;
-      drafts = { ...drafts, [route.mode]: { ...drafts[route.mode], ...patch } };
+      // Bank V18: jedna pula bez poziomów — poziom trudności nie jest wybierany (zawsze `mixed`).
+      drafts = { ...drafts, [route.mode]: { ...drafts[route.mode], ...patch, difficulty: 'mixed' } };
       publish();
     },
     async startTest() {

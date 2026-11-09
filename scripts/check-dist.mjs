@@ -9,14 +9,16 @@
  *  1. pliki: obecność index.html / manifestu / sw.js; tylko dozwolone typy; brak map źródeł, plików roboczych;
  *  2. index.html: każde src/href względne albo pod `base`, istniejący plik, brak hostów zewnętrznych;
  *  3. manifest: start_url/scope/id rozwiązane do `base`, ikony 192/512/maskable (+ apple-touch-icon 180) z wymiarami;
- *  4. sw.js: precache obejmuje shell, JS/CSS, woff2, PNG, SVG, JSON (w tym bank V15 `data/bank-<sha12>.json`,
+ *  4. sw.js: precache obejmuje shell, JS/CSS, woff2, PNG, SVG, JSON (w tym bank V18 `data/bank-<sha12>.json`,
  *     listę wyłączonych ID, profil treningowy i każdą figurę z `bank.figures[*].file`); navigateFallback do
  *     index.html; w sw.js brak clientsClaim i samoczynnego skipWaiting (tylko obsługa SKIP_WAITING); skrypt
  *     przejęcia przy zmianie wersji treści (importScripts: warunkowy skipWaiting, clients.claim, navigate);
  *     rejestracja SW w JS z adresem `${base}sw.js`;
- *  4a. treść V15: SHA-256 pliku banku, `bank_version` trzech plików, liczby 2987 / 1048 / 1366 / 573,
- *     133 wyłączone ID (żadne nie w banku), w `data/` wyłącznie trzy pliki V15, BRAK `data/bank.json`
- *     i brak tej ścieżki w kodzie JS; `dme-release.json` poza precache z wersją V15;
+ *  4a. treść V18: SHA-256 pliku banku, `bank_version` trzech plików, liczby z contentRelease.ts (700 / 400 / 200 / 100),
+ *     ID banku = allowlista paczki (`content/v18/allowed_question_ids.json`, 700: 600 V16 + 100 V17), 3120 wyłączonych
+ *     ID (żadne nie w banku), w `data/` wyłącznie trzy pliki V18; BRAK dawnych plików banków (`data/bank.json`, V15
+ *     `data/bank-37f3980a1129.json` i pliki towarzyszące) w dist, w precache i w kodzie JS; skrypt przejęcia
+ *     odpowiada 404 na każdy inny plik w `data/`; `dme-release.json` poza precache z wersją V18;
  *  5. brak http(s):// do hostów zewnętrznych (poza URL źródeł w pliku banku i nazwami przestrzeni XML),
  *     brak support.js, fonts.googleapis/gstatic, sekretów (sk-, api_key, Bearer…), słów anthropic/openai/claude.ai
  *     w JS/HTML, mocka kontrolera; SVG bez skryptów i zasobów zewnętrznych.
@@ -86,6 +88,8 @@ const RELEASE = {
   profileFile: releaseField('profileFile'),
   /** Dawna ścieżka banku (do v0.1.0) — nie może istnieć w buildzie ani w kodzie. */
   legacyBankFile: 'data/bank.json',
+  /** Wszystkie zastąpione pliki treści (do v0.1.0 i V15) — nie mogą istnieć w buildzie, precache ani w kodzie. */
+  legacyDataFiles: ['data/bank.json', 'data/bank-37f3980a1129.json', 'data/retired-question-ids-83b36ff80986.json', 'data/training-profile-c0edd4ca07c2.json'],
   counts: { questions: releaseCount('questions'), basic: releaseCount('basic'), intermediate: releaseCount('intermediate'), advanced: releaseCount('advanced'), retired: releaseCount('retired') },
 };
 const BANK = RELEASE.bankFile;
@@ -99,15 +103,16 @@ for (const required of ['index.html', 'manifest.webmanifest', 'sw.js', BANK, REL
   check(fileSet.has(required), `jest ${required}`, `brak ${required}`);
 }
 
-/* ---------------- treść: wyłącznie bank V15 ---------------- */
+/* ---------------- treść: wyłącznie bank V18 (komplet 700) ---------------- */
 
 const sha256 = (rel) => createHash('sha256').update(readFileSync(join(distDir, rel))).digest('hex');
-check(!fileSet.has(RELEASE.legacyBankFile), `brak dawnej ścieżki ${RELEASE.legacyBankFile}`, `dist zawiera dawną ścieżkę ${RELEASE.legacyBankFile}`);
+for (const legacy of RELEASE.legacyDataFiles) check(!fileSet.has(legacy), `brak dawnego pliku ${legacy}`, `dist zawiera dawny plik ${legacy}`);
+check(![...fileSet].some((f) => f.startsWith('figures/')), 'brak figur dawnych banków (bank V18 nie ma schematów)', 'dist zawiera katalog figures/');
 const dataFiles = [...fileSet].filter((f) => f.startsWith('data/')).sort();
 const expectedData = [RELEASE.bankFile, RELEASE.retiredFile, RELEASE.profileFile].sort();
 check(
   JSON.stringify(dataFiles) === JSON.stringify(expectedData),
-  `data/: wyłącznie pliki V15 (${dataFiles.join(', ')})`,
+  `data/: wyłącznie pliki V18 (${dataFiles.join(', ')})`,
   `data/: ${dataFiles.join(', ')} — oczekiwano ${expectedData.join(', ')}`,
 );
 if (fileSet.has(BANK)) {
@@ -133,6 +138,21 @@ if (fileSet.has(BANK)) {
       `${BANK}: ${(bank.questions ?? []).length} pytań (${by.basic} basic / ${by.intermediate} intermediate / ${by.advanced} advanced), zgodne z counts`,
       `${BANK}: liczby ${(bank.questions ?? []).length} / ${by.basic} / ${by.intermediate} / ${by.advanced} ≠ ${c.questions} / ${c.basic} / ${c.intermediate} / ${c.advanced}`,
     );
+    // Allowlista paczki V18: ID banku = dokładnie lista 700 ID (600 V16 + 100 V17).
+    try {
+      const allowed = JSON.parse(readFileSync(resolve('content/v18/allowed_question_ids.json'), 'utf8'));
+      const ids = (bank.questions ?? []).map((q) => q.id).sort();
+      const list = [...(allowed.ids ?? [])].sort();
+      const v16 = list.filter((id) => id.startsWith('V16-')).length;
+      const v17 = list.filter((id) => id.startsWith('V17-')).length;
+      check(
+        allowed.bank_version === RELEASE.bankVersion && JSON.stringify(ids) === JSON.stringify(list) && list.length === c.questions && v16 === 600 && v17 === 100,
+        `${BANK}: ID = allowlista paczki (${list.length}: ${v16} V16 + ${v17} V17)`,
+        `${BANK}: ID ≠ allowlista paczki (bank ${ids.length}, allowlista ${list.length}, V16 ${v16}, V17 ${v17})`,
+      );
+    } catch (e) {
+      fail(`allowlista content/v18/allowed_question_ids.json: ${e.message}`);
+    }
     if (fileSet.has(RELEASE.retiredFile)) {
       const retired = JSON.parse(read(RELEASE.retiredFile));
       const ids = Array.isArray(retired.ids) ? retired.ids : [];
@@ -140,7 +160,7 @@ if (fileSet.has(BANK)) {
       const leaked = ids.filter((id) => inBank.has(id));
       check(
         retired.bank_version === RELEASE.bankVersion && ids.length === c.retired && new Set(ids).size === ids.length && leaked.length === 0 && sha256(RELEASE.retiredFile) === RELEASE.retiredSha256,
-        `${RELEASE.retiredFile}: ${ids.length} wyłączonych ID, wersja V15, żadne nie występuje w banku`,
+        `${RELEASE.retiredFile}: ${ids.length} wyłączonych ID, wersja V18, żadne nie występuje w banku`,
         `${RELEASE.retiredFile}: ${ids.length} ID (oczekiwano ${c.retired}), wersja ${retired.bank_version}, w banku: ${leaked.join(', ') || '—'}`,
       );
     }
@@ -150,8 +170,8 @@ if (fileSet.has(BANK)) {
       const bankIds = (bank.questions ?? []).map((q) => q.id);
       check(
         profile.bank_version === RELEASE.bankVersion && sha256(RELEASE.profileFile) === RELEASE.profileSha256 && grouped.length === bankIds.length && new Set(grouped).size === grouped.length && bankIds.every((id) => grouped.includes(id)),
-        `${RELEASE.profileFile}: wersja V15, ${grouped.length} ID w grupach (każde pytanie banku dokładnie raz)`,
-        `${RELEASE.profileFile}: niezgodny z bankiem V15`,
+        `${RELEASE.profileFile}: wersja V18, ${grouped.length} ID w grupach (każde pytanie banku dokładnie raz)`,
+        `${RELEASE.profileFile}: niezgodny z bankiem V18`,
       );
     }
   } catch (e) {
@@ -288,13 +308,13 @@ if (fileSet.has('sw.js')) {
   const notCached = shouldBeCached.filter((rel) => !precacheSet.has(rel));
   check(notCached.length === 0, `sw.js: precache obejmuje wszystkie ${shouldBeCached.length} pliki aplikacji (shell, JS/CSS, woff2, PNG, SVG, JSON)`, `sw.js: poza precache (nie zadziałają offline): ${notCached.join(', ')}`);
   check(!precacheSet.has(RELEASE_INFO), `${RELEASE_INFO} poza precache (wersja z serwera)`, `${RELEASE_INFO} w precache`);
-  check(!precacheSet.has(RELEASE.legacyBankFile), `precache bez ${RELEASE.legacyBankFile}`, `precache zawiera ${RELEASE.legacyBankFile}`);
+  for (const legacy of RELEASE.legacyDataFiles) check(!precacheSet.has(legacy), `precache bez ${legacy}`, `precache zawiera ${legacy}`);
   check(sw.includes(`importScripts("${TAKEOVER}")`), `sw.js: importScripts(${TAKEOVER})`, `sw.js: brak importScripts skryptu przejęcia ${TAKEOVER}`);
   if (fileSet.has(TAKEOVER)) {
     const t = read(TAKEOVER);
     check(
-      t.includes(`${RELEASE.bankVersion}#${DATA_EPOCH}`) && /self\.registration\.active && previous !== CONTENT\.marker/.test(t) && /self\.skipWaiting\(\)/.test(t) && /self\.clients\.claim\(\)/.test(t) && /client\.navigate\(client\.url\)/.test(t) && /DME_CONTENT_UPDATE/.test(t) && /LEGACY_BANK = new URL\('data\/bank\.json', scope\)/.test(t) && /status: 404/.test(t),
-      `${TAKEOVER}: przejęcie tylko przy zmianie wersji treści albo epoki danych ${DATA_EPOCH} (warunkowy skipWaiting, clients.claim, navigate, wiadomość DME_CONTENT_UPDATE); dawna ścieżka banku → 404`,
+      t.includes(`${RELEASE.bankVersion}#${DATA_EPOCH}`) && /self\.registration\.active && previous !== CONTENT\.marker/.test(t) && /self\.skipWaiting\(\)/.test(t) && /self\.clients\.claim\(\)/.test(t) && /client\.navigate\(client\.url\)/.test(t) && /DME_CONTENT_UPDATE/.test(t) && /DATA_PREFIX = new URL\('data\/', scope\)/.test(t) && /!CURRENT_DATA\.has\(url\)/.test(t) && /status: 404/.test(t) && t.includes(JSON.stringify([RELEASE.bankFile, RELEASE.retiredFile, RELEASE.profileFile])),
+      `${TAKEOVER}: przejęcie tylko przy zmianie wersji treści albo epoki danych ${DATA_EPOCH} (warunkowy skipWaiting, clients.claim, navigate, wiadomość DME_CONTENT_UPDATE); każdy plik w data/ poza trzema bieżącymi → 404`,
       `${TAKEOVER}: niekompletny skrypt przejęcia`,
     );
   }
@@ -429,8 +449,12 @@ scan('klucz prywatny / tokeny (AKIA, ghp_, PRIVATE KEY)', /AKIA[0-9A-Z]{16}|\bgh
 scan('anthropic / openai / claude.ai w kodzie', /anthropic|openai|claude\.ai/i, codeFiles);
 scan('mock kontrolera w buildzie (__dmeMock, createMockController)', /__dmeMock|createMockController/, codeFiles);
 scan('mapy źródeł (sourceMappingURL)', /sourceMappingURL=/, codeFiles);
-// Wyjątek: skrypt przejęcia SW zawiera tę ścieżkę wyłącznie po to, by odpowiadać na nią 404.
-scan(`dawna ścieżka banku (${RELEASE.legacyBankFile}) w kodzie`, new RegExp(RELEASE.legacyBankFile.replace(/[.*+?^${}()|[\]\\/]/g, '\\$&')), codeFiles.filter((f) => f.rel !== TAKEOVER));
+// Dawne pliki banków (do v0.1.0 i V15) nie mogą być nigdzie wskazane w kodzie ani w JSON (żadnego fallbacku).
+scan(
+  `dawne pliki banków (${RELEASE.legacyDataFiles.join(', ')}, wersja V15) w kodzie i danych`,
+  /data\/bank\.json|37f3980a1129|83b36ff80986|c0edd4ca07c2|chatgpt-editorial-v15/,
+  textFiles.filter((f) => f.rel !== TAKEOVER),
+);
 
 // Dawny prefiks GitHub Pages (do 24.10.2026: https://lyzwad.github.io/doktor-monika-egzamin/) — build pod inny base go nie zawiera.
 if (base !== '/doktor-monika-egzamin/') scan('dawny prefiks /doktor-monika-egzamin/ i adres lyzwad.github.io', /\/doktor-monika-egzamin\/|lyzwad\.github\.io/, codeFiles);

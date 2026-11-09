@@ -48,10 +48,11 @@ export function difficultyLabel(d: DifficultyChoice | Difficulty): string {
 }
 
 /**
- * Etykieta konfiguracji: „Cały zakres · Mieszany”, opcjonalnie „· 20 pytań” i „· Moje błędy”.
+ * Etykieta konfiguracji: „Cały zakres”, opcjonalnie „· 20 pytań” i „· Moje błędy”. Od banku V18 aplikacja ma jedną
+ * pulę bez poziomów (`mixed` nie jest opisywany); poziom pokazujemy tylko dla dawnych sesji z filtrem trudności.
  */
 export function configLabel(c: ConfigLabelVM, opts: { withN?: boolean; withMyErrors?: boolean } = {}): string {
-  const parts = [c.scopeTitle, difficultyLabel(c.difficulty)];
+  const parts = c.difficulty === 'mixed' ? [c.scopeTitle] : [c.scopeTitle, difficultyLabel(c.difficulty)];
   if (opts.withN && c.targetN !== null) parts.push(questionsCount(c.targetN));
   if ((opts.withMyErrors ?? true) && c.myErrorsPriority) parts.push('Moje błędy');
   return parts.join(' · ');

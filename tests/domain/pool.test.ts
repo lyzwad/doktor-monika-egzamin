@@ -90,14 +90,14 @@ describe('C01 — walidacja N (1…pojemność)', () => {
     }
   });
 
-  it('pierwsze uruchomienie: 20 / mieszany / cały zakres; potem ostatnia jawna konfiguracja', () => {
+  it('pierwsze uruchomienie: 20 / mieszany / cały zakres; potem ostatnia jawna konfiguracja (od V18 zawsze cała pula — bez filtra trudności)', () => {
     const st = emptyUserState();
     expect(initialTestConfig(st.settings)).toEqual({ scope: 'ALL', difficulty: 'mixed', targetN: 20, myErrorsPriority: false });
     expect(initialFreeFlowConfig(st.settings)).toEqual({ scope: 'ALL', difficulty: 'mixed', targetN: null, myErrorsPriority: false });
     const catalog = catalogOf(grid(3));
     const clock = new Clock();
     const out = must(startTest(st, catalog, { config: { scope: 'INJ', difficulty: 'basic', targetN: 2, myErrorsPriority: true }, seed: 1 }, clock.ctx()));
-    expect(initialTestConfig(out.state.settings)).toEqual({ scope: 'INJ', difficulty: 'basic', targetN: 2, myErrorsPriority: true });
+    expect(initialTestConfig(out.state.settings)).toEqual({ scope: 'INJ', difficulty: 'mixed', targetN: 2, myErrorsPriority: true });
     expect(out.changeset.stores.settings?.put).toHaveLength(1);
   });
 

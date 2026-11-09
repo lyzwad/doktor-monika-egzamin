@@ -75,7 +75,9 @@ describe('wydajność na finalnym banku', () => {
     expect(ok).toBe(true);
     report.push(`zimny start: katalog ${fmt(cold)}, startTest 60 ${fmt(coldStart)}`);
     expect(cold.cpu).toBeLessThan(HARD_LIMIT_MS);
-    expect(RAW.length).toBeGreaterThan(5_000_000);
+    // Bank V18: plik ~1,4 MB, 700 pytań (bieżący plik z CONTENT_RELEASE, nie dawny bank 5,8 MB).
+    expect(RAW.length).toBeGreaterThan(1_000_000);
+    expect(c.questions).toHaveLength(700);
     expect(c.questions).toHaveLength((JSON.parse(RAW) as { counts: { questions: number } }).counts.questions);
     expect(c.issues).toEqual([]);
   });
