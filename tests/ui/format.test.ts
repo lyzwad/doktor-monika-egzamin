@@ -45,8 +45,9 @@ describe('format', () => {
 
   it('etykieta konfiguracji', () => {
     const c = { scope: 'ALL' as const, scopeTitle: 'Cały zakres', difficulty: 'mixed' as const, targetN: 20, myErrorsPriority: true };
-    expect(configLabel(c)).toBe('Cały zakres · Mieszany · Moje błędy');
-    expect(configLabel(c, { withN: true })).toBe('Cały zakres · Mieszany · 20 pytań · Moje błędy');
+    // Od V18 jedna pula: `mixed` nie jest opisywany (bez słowa „Mieszany”); poziom tylko dla dawnych sesji.
+    expect(configLabel(c)).toBe('Cały zakres · Moje błędy');
+    expect(configLabel(c, { withN: true })).toBe('Cały zakres · 20 pytań · Moje błędy');
     expect(configLabel({ ...c, myErrorsPriority: false, difficulty: 'basic' })).toBe('Cały zakres · Łatwy');
   });
 

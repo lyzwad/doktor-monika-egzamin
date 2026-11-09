@@ -11,7 +11,8 @@
 import { CONTENT_RELEASE } from '../domain/contentRelease';
 import { DB_SCHEMA_VERSION, STORE_KEY_PATHS, STORE_NAMES } from './api';
 import type { ContentMetaRecord, MigrationMetaRecord, StoreName } from './api';
-import { transformToV15, V15_MIGRATION_ID } from './v15Migration';
+import type { Settings } from '../domain/types';
+import { BANK_MIGRATION_ID, settingsForCurrentBank, transformToCurrentBank } from './bankMigration';
 
 /** Definicja indeksu: nazwa = ścieżka pola (nieunikalny, bez multiEntry). */
 export interface IndexDefinition {
@@ -97,28 +98,45 @@ const MIGRATION_V1: Migration = {
   },
 };
 
-/** Opcje migracji v2 (testy: wymuszone przerwanie w środku transformacji). */
-export interface MigrationV2Options {
+/**
+ * v2 (historyczna): podmiana treści na bank V15 (24.10.2026, docs/MIGRACJA_V15.md). Od banku V18 przekształcenie
+ * danych wykonuje WYŁĄCZNIE migracja v4 (allowlista V18) — w tej samej transakcji `versionchange`, więc baza
+ * sprzed V15 (v1) przechodzi v1 → v4 jednym krokiem z punktu widzenia danych. Ten krok nie zmienia danych.
+ */
+const MIGRATION_V2: Migration = {
+  version: 2,
+  description: 'Historyczna (bank V15) — bez zmian danych; przekształcenie treści wykonuje v4',
+  up() {
+    /* brak zmian magazynów */
+  },
+};
+
+/** Opcje migracji v4 (testy: wymuszone przerwanie w środku transformacji). */
+export interface MigrationV4Options {
   /** Test: wyjątek po zapisie wskazanego magazynu (dane częściowo nadpisane w transakcji → abort). */
   faultAfterStore?: 'sessions' | 'attempts' | 'questionStats' | 'blocks';
 }
 
-const V2_STORES = ['sessions', 'attempts', 'questionStats', 'blocks', 'events', 'packs'] as const;
+const V4_STORES = ['settings', 'sessions', 'attempts', 'questionStats', 'blocks', 'events', 'packs', 'backups'] as const;
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null && !Array.isArray(value);
+}
 
 /**
- * v2: pełna podmiana treści na bank V15 (docs/MIGRACJA_V15.md). W JEDNEJ transakcji `versionchange`:
- * odczyt sesji, prób, statystyk, blokad, zdarzeń i paczek → `transformToV15` (synchronicznie) →
- * zapis wyniku, wyczyszczenie paczek i automatycznych kopii bezpieczeństwa (zawierały starą treść),
- * rekordy `meta`: wersja treści = V15 i rekord migracji. Ustawienia bez zmian. Błąd = abort = baza
- * zostaje w wersji 1 (aplikacja nie startuje na starej puli — ekran „Aktualizacja danych nie powiodła się”).
+ * v4: bank V18 — komplet 700 pytań (docs/MIGRACJA_V18.md). W JEDNEJ transakcji `versionchange` bazy profilu:
+ * odczyt wszystkich magazynów → `transformToCurrentBank` (allowlista V18, synchronicznie) → zapis wyniku;
+ * ustawienia bez filtra trudności; paczki pytań usunięte; automatyczne kopie bezpieczeństwa przekształcone tą
+ * samą funkcją (nieczytelne — usunięte); `meta`: wersja treści V18 i rekord migracji. Błąd = abort = baza
+ * zostaje w poprzedniej wersji z nietkniętymi danymi (aplikacja nie pokazuje pytań).
  */
-export function createMigrationV2(options: MigrationV2Options = {}): Migration {
+export function createMigrationV4(options: MigrationV4Options = {}): Migration {
   return {
-    version: 2,
-    description: 'Bank pytań V15: sesje poprzedniej wersji bez treści (legacy / interrupted_by_update), powtórki i blokady tylko niezmienionych pytań, bez paczek i kopii bezpieczeństwa',
+    version: 4,
+    description: 'Bank pytań V18 (700): postępy zgodne z allowlistą zostają, pozostałe sesje bez treści (legacy / interrupted_by_update), bez paczek; kopie bezpieczeństwa przekształcone',
     up(_db, tx, ctx) {
-      const values: Partial<Record<(typeof V2_STORES)[number], unknown[]>> = {};
-      let pending = V2_STORES.length;
+      const values: Partial<Record<(typeof V4_STORES)[number], unknown[]>> = {};
+      let pending = V4_STORES.length;
       const guard =
         <A extends unknown[]>(fn: (...args: A) => void) =>
         (...args: A): void => {
@@ -129,7 +147,7 @@ export function createMigrationV2(options: MigrationV2Options = {}): Migration {
           }
         };
       const writeAll = (): void => {
-        const result = transformToV15(
+        const result = transformToCurrentBank(
           {
             sessions: values.sessions ?? [],
             attempts: values.attempts ?? [],
@@ -151,7 +169,45 @@ export function createMigrationV2(options: MigrationV2Options = {}): Migration {
         replace('questionStats', result.questionStats);
         replace('blocks', result.blocks);
         tx.objectStore('packs').clear();
-        tx.objectStore('backups').clear();
+        const settingsStore = tx.objectStore('settings');
+        for (const st of values.settings ?? []) {
+          if (!isRecord(st)) continue;
+          const fixed = settingsForCurrentBank(st as unknown as Settings);
+          if (fixed !== (st as unknown)) settingsStore.put(fixed);
+        }
+        // Kopie bezpieczeństwa w bazie: ta sama transformacja (zostają liczby, znika treść spoza allowlisty).
+        let backupsTransformed = 0;
+        let backupsRemoved = 0;
+        const backups = tx.objectStore('backups');
+        for (const record of values.backups ?? []) {
+          if (!isRecord(record)) continue;
+          if (typeof record.id !== 'string') {
+            // Rekord bez tekstowego klucza (nie zapisuje go ta aplikacja) — usunięty, bo mógł zawierać dawną treść.
+            if (typeof record.id === 'number') {
+              backups.delete(record.id);
+              backupsRemoved++;
+            }
+            continue;
+          }
+          let parsed: unknown = null;
+          try {
+            parsed = typeof record.json === 'string' ? JSON.parse(record.json) : null;
+          } catch {
+            parsed = null;
+          }
+          const data = isRecord(parsed) && isRecord(parsed.data) ? parsed.data : null;
+          if (!isRecord(parsed) || !data) {
+            backups.delete(record.id);
+            backupsRemoved++;
+            continue;
+          }
+          const arr = (key: string): unknown[] => (Array.isArray(data[key]) ? (data[key] as unknown[]) : []);
+          const t = transformToCurrentBank({ sessions: arr('sessions'), attempts: arr('attempts'), questionStats: arr('questionStats'), blocks: arr('blocks'), events: arr('events'), packs: arr('packs') }, ctx.now);
+          const settings = arr('settings').map((st) => (isRecord(st) ? settingsForCurrentBank(st as unknown as Settings) : st));
+          const json = JSON.stringify({ ...parsed, data: { ...data, settings, sessions: t.sessions, attempts: t.attempts, questionStats: t.questionStats, blocks: t.blocks, events: t.events, packs: [] } });
+          backups.put({ ...record, json, sizeBytes: new TextEncoder().encode(json).length });
+          backupsTransformed++;
+        }
         const meta = tx.objectStore('meta');
         const content: ContentMetaRecord = {
           key: 'content',
@@ -161,17 +217,17 @@ export function createMigrationV2(options: MigrationV2Options = {}): Migration {
           appVersion: ctx.appVersion,
         };
         const migration: MigrationMetaRecord = {
-          key: `migration:${V15_MIGRATION_ID}`,
-          migrationId: V15_MIGRATION_ID,
+          key: `migration:${BANK_MIGRATION_ID}`,
+          migrationId: BANK_MIGRATION_ID,
           fromSchemaVersion: ctx.oldVersion,
-          toSchemaVersion: 2,
+          toSchemaVersion: 4,
           appVersion: ctx.appVersion,
-          report: result.report,
+          report: { ...result.report, backupsTransformed, backupsRemoved },
         };
         meta.put(content);
         meta.put(migration);
       };
-      for (const name of V2_STORES) {
+      for (const name of V4_STORES) {
         const request = tx.objectStore(name).getAll();
         request.onsuccess = guard(() => {
           values[name] = request.result as unknown[];
@@ -198,7 +254,7 @@ const MIGRATION_V3: Migration = {
 };
 
 /** Lista migracji aplikacji (rosnąco po wersji). */
-export const MIGRATIONS: readonly Migration[] = Object.freeze([MIGRATION_V1, createMigrationV2(), MIGRATION_V3]);
+export const MIGRATIONS: readonly Migration[] = Object.freeze([MIGRATION_V1, MIGRATION_V2, MIGRATION_V3, createMigrationV4()]);
 
 /**
  * Migracje do wykonania przy przejściu `oldVersion → newVersion`. Rzuca, jeśli brakuje którejś

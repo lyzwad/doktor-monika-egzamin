@@ -15,6 +15,7 @@ import type { BackupVM, ToastVM } from '../../src/app/viewModels';
 import { StatusToast } from '../../src/ui/components/QuestionChrome';
 import { FREE_FLOW_HELP } from '../../src/ui/screens/ConfigScreen';
 import { BACKUP_CONTENTS_TEXT, BackupScreen } from '../../src/ui/screens/DataScreens';
+import { familiesCount, questionsCount } from '../../src/ui/format';
 import { RESULT_DISCLAIMER } from '../../src/ui/screens/SettingsScreens';
 import { bank, correctOptionId, renderApp, startedMock } from './helpers';
 
@@ -84,10 +85,10 @@ describe('F02 / LOG-08 — ekran kopii danych', () => {
     });
   }
 
-  it('F02: opis zawartości mówi o treści pytań banku V15 z sesji, bez zaimportowanych pul (bez „Nie zawiera pytań”)', async () => {
+  it('F02: opis zawartości mówi o treści pytań aktualnego banku z sesji, bez zaimportowanych pul (bez „Nie zawiera pytań”)', async () => {
     await renderBackup({ name: 'backup', flow: { step: 'idle', lastSavedFileName: null }, safetyBackups: [] });
     expect(screen.getByText(BACKUP_CONTENTS_TEXT)).toBeTruthy();
-    expect(BACKUP_CONTENTS_TEXT).toContain('treść pytań banku V15 z Twoich sesji');
+    expect(BACKUP_CONTENTS_TEXT).toContain('treść pytań aktualnego banku (V18, 700 pytań) z Twoich sesji');
     expect(BACKUP_CONTENTS_TEXT).toContain('Nie zawiera wbudowanej puli pytań, zaimportowanych pul');
     expect(document.body.textContent).not.toContain('Nie zawiera pytań');
   });
@@ -124,7 +125,7 @@ describe('Stan puli — „O bazie” i ustawienia', () => {
     c.openSettings();
     await renderApp(c);
     const counts = bank.counts;
-    expect(screen.getByText(`${counts.questions} pytań · ${counts.families} różnych zadań (rodzin) · wersja ${bank.bank_version}`)).toBeTruthy();
+    expect(screen.getByText(`${questionsCount(counts.questions)} · ${familiesCount(counts.families)} · wersja ${bank.bank_version}`)).toBeTruthy();
     const note = screen.getByRole('note', { name: 'Stan puli pytań' });
     expect(note.textContent).toContain(`${counts.independently_checked_draft} z ${counts.questions} pytań sprawdzono odrębnym przeglądem AI (to nie jest recenzja lekarska).`);
     expect(note.textContent).toContain((bank as unknown as { pool_note_pl: string }).pool_note_pl);
@@ -132,7 +133,7 @@ describe('Stan puli — „O bazie” i ustawienia', () => {
     expect(note.textContent).toContain(RESULT_DISCLAIMER);
   });
 
-  it('„O bazie”: pytania, rodziny, domeny, poziomy, przegląd AI, schematy, stan puli i status — z bank.counts', async () => {
+  it('„O bazie”: pytania, rodziny, domeny, przegląd AI, schematy, stan puli i status — z bank.counts (bez listy poziomów: jedna pula)', async () => {
     const c = await startedMock();
     c.openSettings();
     c.openAbout();
@@ -140,17 +141,14 @@ describe('Stan puli — „O bazie” i ustawienia', () => {
     const counts = bank.counts;
     const body = document.body.textContent ?? '';
     expect(body).toContain(`Wbudowana pula zawiera ${counts.questions} pytań jednokrotnego wyboru w 6 dziedzinach.`);
-    expect(body).toContain(`w puli jest ${counts.families} różnych zadań (rodzin)`);
-    const levels = screen.getByRole('list', { name: 'Liczba pytań według poziomu trudności' });
-    expect(within(levels).getByText('Łatwy').nextSibling?.textContent).toBe(String(counts.by_difficulty.basic));
-    expect(within(levels).getByText('Średni').nextSibling?.textContent).toBe(String(counts.by_difficulty.intermediate));
-    expect(within(levels).getByText('Trudny').nextSibling?.textContent).toBe(String(counts.by_difficulty.advanced));
+    expect(body).toContain(`w puli jest ${familiesCount(counts.families)}`);
+    expect(screen.queryByRole('list', { name: 'Liczba pytań według poziomu trudności' })).toBeNull();
     const checks = screen.getByRole('list', { name: 'Kontrola treści' });
     expect(within(checks).getByText(/Sprawdzone odrębnym przeglądem AI/).nextSibling?.textContent).toBe(String(counts.independently_checked_draft));
     expect(within(checks).getByText('Pytania ze schematem').nextSibling?.textContent).toBe(String(counts.schematic));
     const poolNote = (bank as unknown as { pool_note_pl: string }).pool_note_pl;
     expect(screen.getByText(poolNote)).toBeTruthy();
-    expect(poolNote).toMatch(/Bank zamknięty/);
+    expect(poolNote).toMatch(/700/);
     expect(screen.getByText(bank.status_pl)).toBeTruthy();
     expect(screen.getByText(RESULT_DISCLAIMER)).toBeTruthy();
     expect(body).toContain('Nie jest oficjalnym bankiem pytań PTMEiAA.');

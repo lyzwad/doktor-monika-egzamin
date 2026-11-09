@@ -8,7 +8,7 @@
  * Scenariusze dla każdej przeglądarki:
  *  1. pierwsze uruchomienie: rejestracja SW w scope `base`, komplet precache, strona NIE przejęta bez
  *     ponownego otwarcia (brak clientsClaim);
- *  2. offline po pierwszym pobraniu: start aplikacji, bank V15 (wersjonowana ścieżka), fonty, trasa hash,
+ *  2. offline po pierwszym pobraniu: start aplikacji, bank V18 (wersjonowana ścieżka), fonty, trasa hash,
  *     nawigacja w scope → index.html;
  *  3. aktualizacja: nowa wersja SW czeka (`waiting`), strona nie jest przeładowana; aktywacja dopiero
  *     po komunikacie SKIP_WAITING (to wysyła src/pwa na żądanie użytkowniczki);
@@ -44,7 +44,7 @@ if (precache.length === 0) throw new Error('Brak listy precache w sw.js');
 /** Pliki ładowane przez `importScripts` w sw.js (część skryptu SW, pobierane przy każdej instalacji). */
 const SW_IMPORTS = [...swSource.matchAll(/importScripts\(([^)]*)\)/g)].flatMap((m) => [...m[1].matchAll(/"([^"]+)"/g)].map((x) => x[1]));
 const APP_TITLE = 'Doktor Monika Egzamin';
-/** Bank V15 pod wersjonowaną ścieżką (src/domain/contentRelease.ts). */
+/** Bieżący bank (V18) pod wersjonowaną ścieżką (src/domain/contentRelease.ts). */
 const BANK_FILE = readFileSync(resolve('src/domain/contentRelease.ts'), 'utf8').match(/\bbankFile:\s*'([^']+)'/)?.[1];
 if (!BANK_FILE) throw new Error('contentRelease.ts: brak bankFile');
 

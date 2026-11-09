@@ -25,7 +25,7 @@ import type {
   ValidatedBackup,
 } from './api';
 import { backupTooLarge, fail, invalidBackup, ok, unsupportedBackupVersion } from './errors';
-import { transformToV15, type V15TransformReport } from './v15Migration';
+import { settingsForCurrentBank, transformToCurrentBank, type BankTransformReport } from './bankMigration';
 import {
   ReasonList,
   compareKeys,
@@ -292,7 +292,7 @@ const ALLOCATION_SPEC: Spec = {
 };
 
 const LEGACY_SPEC: Spec = {
-  reason: oneOf(['bank_v15_update']),
+  reason: oneOf(['bank_v15_update', 'bank_v18_update']),
   previousBankVersion: C.text,
   contentBankVersion: C.text,
   migratedAt: C.iso,
@@ -828,21 +828,22 @@ export async function validateBackupJson(json: unknown, fileName: string, now: I
   if (!checkBackupStructure(json, reasons) || !reasons.empty) return fail(invalidBackup(fileName, reasons.toArray()));
   const original = json as unknown as BackupFileV1;
   const profileEmail = original.formatVersion >= 2 ? (knownProfile(original.profileEmail) ?? null) : null;
-  return ok(toV15Backup({ ...original, profileEmail }, now).backup);
+  return ok(toCurrentBankBackup({ ...original, profileEmail }, now).backup);
 }
 
 /**
- * (c) Kopia sprzed migracji albo ze starej aplikacji przechodzi TĘ SAMĄ transformację co baza (./v15Migration.ts):
+ * (c) Kopia sprzed migracji albo ze starej aplikacji przechodzi TĘ SAMĄ transformację co baza (./bankMigration.ts,
+ * allowlista V18): zgodne V16/V17 zostają, ustawienia bez filtra trudności,
  * zostają ustawienia i podsumowania sesji (bez treści), sesje otwarte → przerwane, paczki odrzucone.
  * Nigdy nie przywraca treści innej wersji banku. Idempotentna dla kopii zapisanej po migracji.
  */
-export function toV15Backup(file: BackupFileV1, now: IsoDateTime): { backup: BackupFileV1; report: V15TransformReport } {
-  const t = transformToV15(file.data, now);
+export function toCurrentBankBackup(file: BackupFileV1, now: IsoDateTime): { backup: BackupFileV1; report: BankTransformReport } {
+  const t = transformToCurrentBank(file.data, now);
   return {
     backup: {
       ...file,
       data: {
-        settings: file.data.settings,
+        settings: file.data.settings.map(settingsForCurrentBank),
         sessions: t.sessions,
         attempts: t.attempts,
         questionStats: t.questionStats,

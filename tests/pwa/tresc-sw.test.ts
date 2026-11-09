@@ -1,9 +1,9 @@
 /**
- * Ochrona przed powrotem starej puli po stronie Service Workera i okna (docs/MIGRACJA_V15.md):
+ * Ochrona przed powrotem starej puli po stronie Service Workera i okna (docs/MIGRACJA_V18.md):
  * - skrypt przejęcia (scripts/sw-takeover.mjs, importScripts w sw.js) w atrapie zakresu SW:
  *   aktualizacja ze zmianą wersji treści → skipWaiting, clients.claim, DME_CONTENT_UPDATE, navigate;
  *   pierwsza instalacja i aktualizacja bez zmiany treści → bez przejęcia; navigate niedostępne (Safari < 16)
- *   → bez wyjątku (fallback: wiadomość + sprawdzenie przy starcie/powrocie);
+ *   → bez wyjątku (fallback: wiadomość + sprawdzenie przy starcie/powrocie); dawne pliki banków w `data/` → 404;
  * - okno (src/pwa/swController.ts): wiadomość SW / plik wydania z inną wersją → onContentUpdate,
  *   reloadForContentUpdate → update + przeładowanie, controllerchange po wykryciu → przeładowanie.
  */
@@ -67,7 +67,7 @@ function swScope(opts: { active: boolean; navigateSupported?: boolean; caches?: 
     await Promise.all(pending);
     await new Promise((r) => setTimeout(r, 0));
   };
-  return { fire, calls, client, caches };
+  return { fire, calls, client, caches, listeners };
 }
 
 describe('skrypt przejęcia Service Workera (zmiana wersji treści)', () => {
@@ -100,6 +100,32 @@ describe('skrypt przejęcia Service Workera (zmiana wersji treści)', () => {
     await expect(sw.fire('activate')).resolves.toBeUndefined();
     expect(sw.calls.claim).toBe(1);
     expect(sw.client.messages).toHaveLength(1);
+  });
+
+  it('dawne pliki banków w scope (V15, sprzed V15, nieznane wersje w data/) → 404 bez sieci; bieżące pliki V18 przechodzą', async () => {
+    const sw = swScope({ active: true });
+    const fetchListeners = sw.listeners.get('fetch') ?? [];
+    expect(fetchListeners.length).toBeGreaterThan(0);
+    const request = async (url: string): Promise<number | null> => {
+      const holder: { response: Response | null } = { response: null };
+      for (const l of fetchListeners) l({ request: { url }, respondWith: (r: Response) => void (holder.response = r), waitUntil: () => undefined } as never);
+      return holder.response ? holder.response.status : null;
+    };
+    for (const old of [
+      'data/bank.json',
+      'data/bank-37f3980a1129.json',
+      'data/retired-question-ids-83b36ff80986.json',
+      'data/training-profile-c0edd4ca07c2.json',
+      'data/bank-ffffffffffff.json?v=1',
+      'data/allowed-question-ids.json',
+    ]) {
+      expect(await request(`${SCOPE}${old}`), old).toBe(404);
+    }
+    for (const current of [CONTENT_RELEASE.bankFile, CONTENT_RELEASE.retiredFile, CONTENT_RELEASE.profileFile, 'index.html', 'assets/index.js', 'icons/icon-192.png']) {
+      expect(await request(`${SCOPE}${current}`), current).toBeNull();
+    }
+    // Poza scope aplikacji — bez ingerencji.
+    expect(await request('https://dm.example/inna-aplikacja/data/bank.json')).toBeNull();
   });
 });
 

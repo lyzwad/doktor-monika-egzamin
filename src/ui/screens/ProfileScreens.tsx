@@ -127,7 +127,7 @@ export function AssignUnassignedScreen({
         </p>
         <p className="meta">
           Przypisanie jest jednorazowe: historia dołączy do tego profilu (z wykresem, błędami do powtórki i wykluczonymi pytaniami). Jeśli profil ma już
-          własne wyniki, zostaną zachowane, a ich kopia bezpieczeństwa trafi do „Kopii danych”. Rozpoczęte sesje z banku V15 będzie można kontynuować.
+          własne wyniki, zostaną zachowane, a ich kopia bezpieczeństwa trafi do „Kopii danych”. Rozpoczęte sesje z aktualnego banku pytań będzie można kontynuować.
         </p>
         {messagePl ? (
           <Banner tone="danger" role="alert">

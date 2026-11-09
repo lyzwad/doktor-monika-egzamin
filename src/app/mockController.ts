@@ -73,7 +73,7 @@ import type {
 } from './viewModels';
 
 export interface MockControllerOptions {
-  /** Prawdziwy bank V15 (`public/data/bank-<sha12>.json`) — mock nie ma własnych danych i nie przyjmuje innej wersji. */
+  /** Prawdziwy bank V18 (`public/data/bank-<sha12>.json`) — mock nie ma własnych danych i nie przyjmuje innej wersji. */
   bank: RuntimeBank;
   /** ID wyłączone z aktywnej puli (retired_question_ids.json) — pomijane w każdym trybie mocka. */
   retiredIds?: readonly string[];
@@ -125,7 +125,7 @@ interface UndoState {
 /* -------------------------------------------------------------------------- */
 
 function mockCatalog(bank: RuntimeBank, retiredIds: readonly string[]): Catalog {
-  // Mock (dev/testy UI) działa wyłącznie na banku V15 — bez awaryjnego ładowania innego banku.
+  // Mock (dev/testy UI) działa wyłącznie na bieżącym banku (V18) — bez awaryjnego ładowania innego banku.
   if (bank.bank_version !== CONTENT_RELEASE.bankVersion) throw new Error(`Mock: oczekiwano banku ${CONTENT_RELEASE.bankVersion}, jest ${bank.bank_version}`);
   const retired = new Set(retiredIds);
   const questions: CatalogQuestion[] = bank.questions.filter((q) => !retired.has(q.id)).map((q) => ({
@@ -1147,13 +1147,14 @@ export function createMockController(options: MockControllerOptions): MockContro
 
     openConfig(mode) {
       const last = mode === 'test' ? user.settings.lastTestConfig : user.settings.lastFreeFlowConfig;
-      drafts = { ...drafts, [mode]: draftFrom(last ?? (mode === 'test' ? DEFAULT_TEST_CONFIG : DEFAULT_FREE_FLOW_CONFIG)) };
+      drafts = { ...drafts, [mode]: { ...draftFrom(last ?? (mode === 'test' ? DEFAULT_TEST_CONFIG : DEFAULT_FREE_FLOW_CONFIG)), difficulty: 'mixed' } };
       route = { name: 'config', mode };
       publish();
     },
     updateConfigDraft(patch) {
       if (route.name !== 'config') return;
-      drafts = { ...drafts, [route.mode]: { ...drafts[route.mode], ...patch } };
+      // Jak w rzeczywistym kontrolerze: jedna pula V18 bez poziomów (zawsze `mixed`).
+      drafts = { ...drafts, [route.mode]: { ...drafts[route.mode], ...patch, difficulty: 'mixed' } };
       publish();
     },
     async startTest() {
@@ -1644,8 +1645,8 @@ export function createMockController(options: MockControllerOptions): MockContro
       publish();
     },
     async importPackFile(_file, fileName) {
-      // Jak w rzeczywistym kontrolerze: import dodatkowych pul wyłączony (wyłącznie bank V15).
-      poolFlow = { step: 'error', fileName, issues: [], messagePl: 'Aplikacja używa wyłącznie banku pytań V15 — import dodatkowych pul pytań jest wyłączony.' };
+      // Jak w rzeczywistym kontrolerze: import dodatkowych pul wyłączony (wyłącznie bank V18).
+      poolFlow = { step: 'error', fileName, issues: [], messagePl: 'Aplikacja używa wyłącznie wbudowanego banku pytań V18 (700 pytań) — import dodatkowych pul pytań jest wyłączony.' };
       publish();
       return failResult('PACKS_DISABLED', 'Import dodatkowych pul pytań jest wyłączony.');
     },

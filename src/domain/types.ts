@@ -732,18 +732,19 @@ export interface Session {
   result: SessionResult | null;
   freeFlow: FreeFlowState | null;
   /**
-   * Sesja z poprzedniej wersji banku (migracja do V15, docs/MIGRACJA_V15.md): treść pytań usunięta
-   * (`slots = {}`, `plan = []`), zostaje wyłącznie podsumowanie. Brak/`null` = sesja banku V15.
+   * Sesja z poprzedniej wersji banku (migracja, docs/MIGRACJA_V18.md): treść pytań usunięta
+   * (`slots = {}`, `plan = []`), zostaje wyłącznie podsumowanie. Brak/`null` = sesja bieżącego banku.
    */
   legacy?: LegacySessionInfo | null;
 }
 
 /** Podsumowanie sesji poprzedniej wersji banku (bez treści pytań). */
 export interface LegacySessionInfo {
-  reason: 'bank_v15_update';
+  /** `bank_v15_update` — migracja do V15 (sprzed V18); `bank_v18_update` — migracja do V18 (allowlista 700). */
+  reason: 'bank_v15_update' | 'bank_v18_update';
   /** `bankVersion` sesji sprzed migracji. */
   previousBankVersion: BankVersion;
-  /** Wersja treści aplikacji po migracji (V15). */
+  /** Wersja treści aplikacji po migracji. */
   contentBankVersion: BankVersion;
   migratedAt: IsoDateTime;
   /** Status sprzed migracji (dla `interrupted_by_update` — `open`). */

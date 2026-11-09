@@ -1,0 +1,40 @@
+{
+  "bank_version": "chatgpt-combined-v18-2026-11-09-1fb7f7546332",
+  "release_label": "V18 — komplet 700 pytań (V16 + V17)",
+  "date": "2026-11-09",
+  "replacement_mode": "replace_all_with_combined_700",
+  "active_question_count": 700,
+  "component_counts": {
+    "V16": 600,
+    "V17": 100
+  },
+  "difficulty_mode": "ungraded_ui_preserve_source_metadata",
+  "counts": {
+    "questions": 700,
+    "families": 692,
+    "by_domain": {
+      "ANAT": 141,
+      "SKIN": 160,
+      "DEV": 145,
+      "INJ": 160,
+      "THER": 58,
+      "SAFE": 36
+    },
+    "by_difficulty": {
+      "basic": 400,
+      "intermediate": 200,
+      "advanced": 100
+    },
+    "schematic": 0,
+    "independently_checked_draft": 600,
+    "author_checked_draft": 100
+  },
+  "clinical_signoff": false,
+  "official_exam_question_bank": false,
+  "files": {
+    "runtime/allowed_question_ids.json": "982cf1cf97b14c711b864833153f26a79866a036208b97f50e90f00bfce8a64b",
+    "runtime/bank.json": "5db40505308f0183ed85d5be4b2e9f8c3871d091f6ec7413f5518c88b39966f6",
+    "runtime/retired_question_ids.json": "54a05ea912817442599f73691efaf83b259df3383ea0e9b6d4fdd1148f26905e",
+    "runtime/training_profile.json": "2bdad504f50ec265c203e440c72aeebc06f5f94c9eba7f65198dae85594738e9"
+  }
+}

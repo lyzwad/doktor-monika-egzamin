@@ -187,9 +187,9 @@ export function createProfileShell(deps: ProfileShellDeps): ProfileShell {
     let summary: UnassignedSummary | null = null;
     if (exists !== false) {
       const legacy = deps.createRepository({ dbName: LEGACY_DB_NAME, appVersion: deps.appVersion, now: deps.now });
-      // Dane sprzed V15 (schemat 1): migracja treści przy tym odczycie — ten sam komunikat co w aplikacji.
+      // Dane sprzed V18 (schemat 1–3): migracja treści przy tym odczycie — ten sam komunikat co w aplikacji.
       legacy.setUpgradeListener((info) => {
-        if (info.from > 0 && info.from < 2) publish({ phase: 'loading', messagePl: MSG_CONTENT_UPDATE });
+        if (info.from > 0 && info.from < 4) publish({ phase: 'loading', messagePl: MSG_CONTENT_UPDATE });
       });
       try {
         summary = summarize(await legacy.loadUserState());

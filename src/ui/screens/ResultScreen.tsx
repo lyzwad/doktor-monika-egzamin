@@ -137,7 +137,7 @@ export function ResultScreen({ vm }: { vm: ResultVM }) {
   );
 }
 
-/** Sesja z poprzedniej wersji banku: tylko podsumowanie (docs/MIGRACJA_V15.md). */
+/** Sesja z poprzedniej wersji banku: tylko podsumowanie (docs/MIGRACJA_V18.md). */
 export function LegacyNotice() {
   return (
     <div className="banner banner--info" role="note">
@@ -146,7 +146,7 @@ export function LegacyNotice() {
         <span className="banner__lead">Treść pytań poprzedniej wersji banku nie jest dostępna</span>
       </div>
       <span className="banner__text">
-        Ta sesja pochodzi sprzed aktualizacji banku pytań do wersji V15. Zachowano podsumowanie wyniku; przegląd odpowiedzi i runda błędów nie są dostępne.
+        Ta sesja pochodzi z wcześniejszej wersji banku pytań. Zachowano datę i wynik; treść pytań, przegląd odpowiedzi i runda błędów nie są już dostępne.
       </span>
     </div>
   );

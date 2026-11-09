@@ -18,10 +18,10 @@ import {
   type UserState,
 } from '../../src/domain/api';
 import { emptyStat } from '../../src/domain/review';
-import { BANK, RETIRED_IDS, v15Catalog } from '../content';
+import { BANK, RETIRED_IDS, currentCatalog } from '../content';
 import { Clock, must, playTest, session, slotAt } from './helpers';
 
-const catalog = v15Catalog();
+const catalog = currentCatalog();
 const retired = new Set(RETIRED_IDS);
 
 /** Stan z aktywnymi błędami WSZYSTKICH wyłączonych ID i kilku zwykłych (jak po wczytaniu starej kopii). */
