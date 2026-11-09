@@ -1,8 +1,9 @@
 /**
  * Profile lokalne (DECYZJE §16) w przeglądarce, na buildzie produkcyjnym:
- *  1. aktualizacja z wersji bez profili (commit `b50eb19` — wdrożona 25.10.2026 na wiedza.doktormonika.pl) pod tym
- *     samym adresem: nowy SW przejmuje karty, ekran wyboru z historią bez profilu, przypisanie przez UI, wznowienie
- *     rozpoczętej sesji V15, druga karta widzi, że historia jest już przypisana; dane źródłowe nietknięte;
+ *  1. aktualizacja z wersji bez profili (commit `b50eb19`, bank V15 — urządzenie nieotwierane od 25.10.2026) od razu
+ *     do banku V18 pod tym samym adresem: nowy SW przejmuje karty, ekran wyboru z historią bez profilu (po migracji:
+ *     wynik zostaje, rozpoczęta sesja V15 przerwana aktualizacją), przypisanie przez UI, historia w profilu bez treści
+ *     V15, druga karta widzi, że historia jest już przypisana; dane źródłowe nietknięte;
  *  2. profil A → test → profil B pusty → A z wynikiem; zapamiętanie profilu; dwie karty z różnymi profilami;
  *  3. profile offline (serwer niedostępny): zmiana profilu i nauka bez sieci.
  * To nie zastępuje testu na fizycznym iPhonie (G05).
@@ -64,7 +65,13 @@ async function historyRows(page: Page): Promise<number> {
 
 test.use({ presetProfile: null });
 
-test('aktualizacja z wersji bez profili: przejęcie kart, historia bez profilu, przypisanie, wznowienie sesji V15', async ({ context }, testInfo) => {
+/** Odpowiedź w STAREJ aplikacji (treść V15 spoza banku V18 na dysku): pierwsza opcja. */
+async function tapFirstOption(page: Page): Promise<void> {
+  await page.locator('ul.answers > li').first().locator('button').tap();
+  await expect(page.locator('section.expl')).toBeVisible();
+}
+
+test('aktualizacja z wersji bez profili (V15) do V18: przejęcie kart, historia bez profilu, przypisanie, sesja V15 przerwana', async ({ context }, testInfo) => {
   test.setTimeout(400_000);
   ensurePreProfilesDist();
   const server: DistServer = await startDistServer({ dist: OLD_DIST, base: BASE_PATH, port: 0 });
@@ -73,16 +80,20 @@ test('aktualizacja z wersji bez profili: przejęcie kart, historia bez profilu, 
     await page.goto(server.url);
     await waitOfflineReady(page);
     await reloadUntilControlled(page);
-    // Wersja bez profili: od razu ekran startowy; wynik 2 z 3 i rozpoczęty test (1 odpowiedź).
+    // Wersja bez profili: od razu ekran startowy; ukończony test 3 i rozpoczęty test (1 odpowiedź).
     await expect(page.getByRole('heading', { level: 1, name: 'Doktor Monika Egzamin' })).toBeVisible();
     await expect(page.getByLabel('Aktywny profil')).toHaveCount(0);
     await startTest(page, 3);
-    await finishTest(page, (i) => i !== 0);
+    for (let i = 0; i < 3; i++) {
+      await tapFirstOption(page);
+      if (i < 2) await page.getByRole('button', { name: 'Dalej' }).click();
+    }
     await page.getByRole('button', { name: 'Pokaż wynik' }).click();
-    await expect(page.locator('.score')).toHaveText('2 z 3');
+    const score = ((await page.locator('.score').textContent()) ?? '').trim();
+    expect(score).toMatch(/^\d z 3$/);
     await page.getByRole('button', { name: 'Zamknij i wróć do startu' }).click();
     await startTest(page, 4);
-    await answer(page, true);
+    await tapFirstOption(page);
     await page.getByRole('button', { name: 'Przerwij test' }).click();
     await page.getByRole('dialog').getByRole('button', { name: 'Kontynuuj później' }).click();
     await expect(page.locator('.resume')).toContainText('1/4');
@@ -103,7 +114,9 @@ test('aktualizacja z wersji bez profili: przejęcie kart, historia bez profilu, 
     for (const p of [page, page2]) {
       await expect(p.getByRole('heading', { level: 1, name: 'Wybierz profil' })).toBeVisible({ timeout: 60_000 });
       await expect(p.getByRole('note')).toContainText('1 ukończony test');
-      await expect(p.getByRole('note')).toContainText('1 rozpoczęta sesja');
+      // Bank V18: rozpoczęta sesja V15 nie jest wznawialna — w podsumowaniu jako test niedokończony.
+      await expect(p.getByRole('note')).toContainText('1 test niedokończony');
+      await expect(p.getByRole('note')).not.toContainText('rozpoczęta sesja');
     }
     await screenshot(page, testInfo, '10-wybierz-profil');
 
@@ -113,13 +126,15 @@ test('aktualizacja z wersji bez profili: przejęcie kart, historia bez profilu, 
     await screenshot(page, testInfo, '11-historia-bez-profilu');
     await page.getByRole('button', { name: 'Przypisz do tego profilu' }).click();
     await expectProfileHome(page, IZA);
-    await expect(page.locator('.resume')).toContainText('1/4');
-    expect(await historyRows(page)).toBe(1);
-    // Rozpoczęta sesja V15 wznawialna w profilu.
-    await page.locator('.resume').getByRole('button', { name: 'Kontynuuj' }).click();
-    await expect(page.locator('p.stem')).toBeVisible();
-    await page.getByRole('button', { name: 'Przerwij test' }).click();
-    await page.getByRole('dialog').getByRole('button', { name: 'Kontynuuj później' }).click();
+    // Sesja V15 przerwana aktualizacją banku: bez „Kontynuuj”, w historii wynik i wpis przerwanego testu.
+    await expect(page.locator('.resume')).toHaveCount(0);
+    expect(await historyRows(page)).toBe(2);
+    await page.getByRole('button', { name: 'Historia' }).click();
+    await expect(page.locator('ul[aria-label="Lista testów"]')).toContainText(score);
+    await expect(page.locator('ul[aria-label="Lista testów"]')).toContainText('Przerwany aktualizacją banku pytań');
+    await page.getByRole('button', { name: 'Wstecz' }).click();
+    const izaSessions = await readStore<{ slots: object; legacy?: { reason: string } }>(page, 'sessions', profileDb(IZA));
+    expect(izaSessions.every((x) => Object.keys(x.slots).length === 0 && x.legacy?.reason === 'bank_v18_update')).toBe(true);
     // Dane źródłowe nietknięte (zabezpieczenie), bez duplikatów w profilu.
     expect((await readStore<{ id: string }>(page, 'sessions', LEGACY_DB)).map((s) => s.id).sort()).toEqual(before.map((s) => s.id).sort());
     expect((await readStore<{ id: string }>(page, 'sessions', profileDb(IZA))).map((s) => s.id).sort()).toEqual(before.map((s) => s.id).sort());

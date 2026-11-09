@@ -3,6 +3,7 @@
  * i C01 (walidacja liczby pytań w UI: puste, 0, ujemne, ułamki, tekst, ponad pojemność; ±10, szybkie wartości).
  */
 import { expect, test } from './fixtures';
+import { familiesCount, questionsCount } from '../../src/ui/format';
 import { BANK, answer, next, openFresh, optionIndex, progressText, readStore, startTest } from './helpers';
 
 test('B03: drugi szybki tap innej opcji i dwuklik tej samej nie zmieniają wyboru ani licznika', async ({ page }) => {
@@ -57,8 +58,10 @@ test('C01: walidacja liczby pytań w konfiguracji testu', async ({ page }) => {
   await expect(input).toHaveValue('20');
   await expect(start).toBeEnabled();
   // C01: pojemność = różne zadania (rodziny), obok liczba pytań — spójnie z „O bazie”.
-  await expect(page.getByText(`Dostępne w tym zakresie: ${capacity} różnych zadań (rodzin), łącznie ${BANK.questions.length} pytań`, { exact: false })).toBeVisible();
-  await expect(page.locator('.select-row__meta')).toHaveText(`${capacity} różnych zadań (rodzin) · ${BANK.questions.length} pytań`);
+  await expect(page.getByText(`Dostępne w tym zakresie: ${familiesCount(capacity)}, łącznie ${questionsCount(BANK.questions.length)}`, { exact: false })).toBeVisible();
+  await expect(page.locator('.select-row__meta')).toHaveText(`${familiesCount(capacity)} · ${questionsCount(BANK.questions.length)}`);
+  // Bank V18: jedna pula bez wyboru trudności.
+  await expect(page.getByRole('radio', { name: 'Trudny' })).toHaveCount(0);
 
   const cases: Array<[string, string]> = [
     ['', 'Wpisz liczbę pytań.'],
