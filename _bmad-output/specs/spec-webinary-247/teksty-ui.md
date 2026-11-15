@@ -22,3 +22,6 @@ Nie dodawać innych tekstów. Brak pasującego tekstu = pytanie do lidera.
 ## Dotychczasowe teksty z „V18, 700 pytań” (DataScreens)
 
 - `CONTENT_RELEASE_LABEL` = `V18 + webinary`; w tekstach `(V18, 700 pytań)` → `(V18 + webinary, 947 pytań)`, `banku 700 pytań` → `banku 947 pytań` — liczby z `CONTENT_RELEASE.counts`, nie wpisane na sztywno.
+- Ta sama zasada dla pozostałych istniejących tekstów z wersją lub liczbą banku (decyzja lidera 15.11): `MSG_PACKS_DISABLED` (appController.ts i kopia w mockController.ts) `V18 (700 pytań)` → `V18 + webinary (947 pytań)`; podtytuł w SettingsScreens `Wyłącznie wbudowany bank V18 — …` → `Wyłącznie wbudowany bank V18 + webinary — …`. Etykieta i liczba z `CONTENT_RELEASE`, reszta zdania bez zmian.
+- Wiersz `Pytania z webinarów` stoi w liście „Kontrola treści”, zaraz po wierszu przeglądu AI.
+- Pytanie z kilkoma źródłami webinaru: jeden `evidence_quote` na pytanie, pokazany w panelu każdego źródła; plik i fragmenty — właściwe dla danego źródła.
