@@ -1,6 +1,7 @@
 /**
- * Treść banku V18 dla testów (Node): te same pliki i ścieżki co aplikacja (`CONTENT_RELEASE`).
- * Stara ścieżka `public/data/bank.json` nie istnieje — testy nie mają dostępu do innego banku.
+ * Treść bieżącego wydania („V18 + webinary”: 700 V18 + 247 WB) dla testów (Node): te same pliki i ścieżki co aplikacja
+ * (`CONTENT_RELEASE`). Stare ścieżki (`public/data/bank.json`, pliki V15 i V18) nie istnieją — testy nie mają dostępu do
+ * innego banku. Wejścia wydania (paczka V18, dodatek webinarowy) są w `content/` (tests/domain/bank-webinary.test.ts).
  */
 import { createHash } from 'node:crypto';
 import { readFileSync } from 'node:fs';
@@ -38,7 +39,7 @@ export function contentBundle(bank: unknown = structuredClone(BANK)): ContentBun
   return { bank, retired: structuredClone(RETIRED_RAW), profile: structuredClone(PROFILE_RAW), bankSha256: BANK_SHA256 };
 }
 
-/** Katalog bieżącego banku (V18) dokładnie jak w aplikacji (wyłączone ID, profil, asercja wersji). */
+/** Katalog bieżącego wydania dokładnie jak w aplikacji (wyłączone ID, profil, asercja wersji). */
 export function currentCatalog(): Catalog {
   const r = buildCatalog(structuredClone(BANK), { retiredQuestionIds: RETIRED_IDS, profile: PROFILE, requiredBankVersion: CONTENT_RELEASE.bankVersion });
   if (!r.ok) throw new Error(r.error.messagePl);

@@ -40,7 +40,9 @@ import type {
   SessionKind,
   Slot,
   SlotId,
+  SnapshotSource,
   UserState,
+  WebinarEvidence,
 } from '../domain/types';
 import type { ResultOrigin, ReviewFilter, Route } from './routes';
 import type {
@@ -71,6 +73,8 @@ import type {
   SafetyBackupVM,
   ScreenVM,
   SettingsVM,
+  SourceVM,
+  WebinarEvidenceVM,
 } from './viewModels';
 
 const LETTERS: readonly AnswerLetter[] = ['A', 'B', 'C', 'D'];
@@ -139,6 +143,42 @@ export function draftFromConfig(config: Readonly<SessionConfig>, fallbackN: numb
 
 function figureVM(f: QuestionSnapshot['figure']): FigureVM | null {
   return f ? { figureId: f.id, src: f.file, alt: f.alt, caption: f.caption } : null;
+}
+
+/** Dowód pytania z webinaru ze snapshotu (stare snapshoty bez pola → `null`); tablice kopiowane. */
+function webinarEvidenceVM(evidence: WebinarEvidence | null | undefined): WebinarEvidenceVM | null {
+  return evidence ? { quote: evidence.quote, unitIds: [...evidence.unitIds], note: evidence.note } : null;
+}
+
+/** Wiersz źródła ze snapshotu; stare snapshoty bez pól webinaru → `webinar: false`, `fileName: null`. */
+function sourceVM(s: SnapshotSource): SourceVM {
+  return {
+    id: s.id,
+    title: s.title,
+    kindPl: s.kindPl,
+    accessPl: s.accessPl,
+    url: s.url,
+    doi: s.doi,
+    pmid: s.pmid,
+    webinar: s.webinar === true,
+    fileName: s.fileName ? s.fileName : null,
+  };
+}
+
+/**
+ * Panel wyjaśnienia WYŁĄCZNIE ze snapshotu slotu (pytanie, historia, przegląd) — nigdy z bieżącego katalogu.
+ * Kopiuje tablice, żeby VM nie współdzielił danych z zapisanym stanem.
+ */
+export function explanationOf(snap: QuestionSnapshot): ExplanationVM {
+  const topic = snap.topics[0];
+  return {
+    text: snap.explanation,
+    figure: figureVM(snap.explanationFigure),
+    context: topic ? { topicTitle: topic.title, learningObjective: topic.learningObjective, pearls: [...topic.pearls] } : null,
+    sources: snap.sources.map(sourceVM),
+    sourceLocator: snap.sourceLocator,
+    webinarEvidence: webinarEvidenceVM(snap.webinarEvidence),
+  };
 }
 
 function slotAt(session: Session, position: number): Slot | null {
@@ -297,17 +337,7 @@ export function questionVMOf(
   });
 
   // Wyjaśnienie, źródła i figura objaśnienia — WYŁĄCZNIE po zapisanej odpowiedzi (B04).
-  let explanation: ExplanationVM | null = null;
-  if (attempt) {
-    const topic = snap.topics[0];
-    explanation = {
-      text: snap.explanation,
-      figure: figureVM(snap.explanationFigure),
-      context: topic ? { topicTitle: topic.title, learningObjective: topic.learningObjective, pearls: [...topic.pearls] } : null,
-      sources: snap.sources.map((s) => ({ id: s.id, title: s.title, kindPl: s.kindPl, accessPl: s.accessPl, url: s.url, doi: s.doi, pmid: s.pmid })),
-      sourceLocator: snap.sourceLocator,
-    };
-  }
+  const explanation: ExplanationVM | null = attempt ? explanationOf(snap) : null;
 
   const progress = sessionProgress(session);
   const isTest = session.kind === 'test';
@@ -555,6 +585,7 @@ export function bankInfoOf(catalog: Catalog): BankInfoVM {
     familyCount: sum.families,
     byDifficulty: DIFFICULTY_ORDER.map((difficulty) => ({ difficulty, count: sum.byDifficulty[difficulty] ?? 0 })),
     independentlyCheckedCount: sum.independentlyChecked,
+    webinarQuestionCount: catalog.questions.filter((q) => q.webinarEvidence !== null).length,
     schematicCount: sum.schematic,
     poolNotePl: sum.poolNotePl,
     catalogQuestionCount: catalog.questions.length,

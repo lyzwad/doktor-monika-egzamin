@@ -77,7 +77,7 @@ describe('fingerprint', () => {
     await expect(sha256Hex('')).resolves.toBe('e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855');
   });
 
-  it(`zgadza się z fingerprintem pytań banku V15 (${bank.questions.length})`, async () => {
+  it(`zgadza się z fingerprintem wszystkich pytań bieżącego wydania (${bank.questions.length})`, async () => {
     expect(bank.questions.length).toBeGreaterThan(0);
     const unexplained: string[] = [];
     for (const q of bank.questions) {

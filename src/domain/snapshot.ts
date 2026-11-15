@@ -1,6 +1,7 @@
 /**
  * Snapshot pytania zamrażany w slocie (03_ARCHITEKTURA §3; kryteria B02, F04).
- * Historia i przegląd czytają wyłącznie snapshot — nigdy bieżący katalog.
+ * Historia i przegląd czytają wyłącznie snapshot — nigdy bieżący katalog. Pytanie z webinaru przenosi do snapshotu
+ * dowód (`webinarEvidence`), a źródła — nazwę pliku transkrypcji i znacznik webinaru.
  */
 import { domainTitle } from './catalog';
 import { rngFor, shuffle } from './rng';
@@ -17,6 +18,7 @@ import type {
   SnapshotFigure,
   SnapshotSource,
   SnapshotTopic,
+  WebinarEvidence,
 } from './types';
 
 function figureSnapshot(figure: CatalogFigure | undefined): SnapshotFigure | null {
@@ -36,7 +38,7 @@ export function buildSnapshot(catalog: Catalog, question: CatalogQuestion, optio
   });
   const sources: SnapshotSource[] = question.sourceIds.flatMap((id) => {
     const s = catalog.sources[id];
-    return s ? [{ id: s.id, title: s.title, url: s.url, doi: s.doi, pmid: s.pmid, kindPl: s.kindPl, accessPl: s.accessPl }] : [];
+    return s ? [{ id: s.id, title: s.title, url: s.url, doi: s.doi, pmid: s.pmid, kindPl: s.kindPl, accessPl: s.accessPl, fileName: s.fileName, webinar: s.webinar }] : [];
   });
   return {
     questionId: question.id,
@@ -59,7 +61,12 @@ export function buildSnapshot(catalog: Catalog, question: CatalogQuestion, optio
     explanationFigure: figureSnapshot(question.explanationFigureId ? catalog.figures[question.explanationFigureId] : undefined),
     reviewStatus: question.reviewStatus,
     approvedForQuestionKey: question.approvedForQuestionKey,
+    webinarEvidence: copyEvidence(question.webinarEvidence),
   };
+}
+
+function copyEvidence(evidence: WebinarEvidence | null): WebinarEvidence | null {
+  return evidence ? { quote: evidence.quote, unitIds: [...evidence.unitIds], note: evidence.note } : null;
 }
 
 /** Ten sam snapshot (np. rodzica, gdy pytania nie ma już w katalogu) z nową kolejnością opcji. */
@@ -67,6 +74,8 @@ export function reorderSnapshot(snapshot: QuestionSnapshot, optionOrder: readonl
   const byId = new Map(snapshot.options.map((o) => [o.id, o]));
   return {
     ...snapshot,
+    // Stary snapshot bez pola zostaje bez pola (odczyt = brak dowodu).
+    ...(snapshot.webinarEvidence !== undefined ? { webinarEvidence: copyEvidence(snapshot.webinarEvidence) } : {}),
     topicIds: [...snapshot.topicIds],
     topics: snapshot.topics.map((t) => ({ ...t, pearls: [...t.pearls] })),
     sources: snapshot.sources.map((s) => ({ ...s })),

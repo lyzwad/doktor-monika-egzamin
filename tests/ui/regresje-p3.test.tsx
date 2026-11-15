@@ -17,6 +17,7 @@ import { FREE_FLOW_HELP } from '../../src/ui/screens/ConfigScreen';
 import { BACKUP_CONTENTS_TEXT, BackupScreen } from '../../src/ui/screens/DataScreens';
 import { familiesCount, questionsCount } from '../../src/ui/format';
 import { RESULT_DISCLAIMER } from '../../src/ui/screens/SettingsScreens';
+import { CONTENT_RELEASE, CONTENT_RELEASE_LABEL } from '../../src/domain/contentRelease';
 import { bank, correctOptionId, renderApp, startedMock } from './helpers';
 
 afterEach(cleanup);
@@ -88,7 +89,7 @@ describe('F02 / LOG-08 — ekran kopii danych', () => {
   it('F02: opis zawartości mówi o treści pytań aktualnego banku z sesji, bez zaimportowanych pul (bez „Nie zawiera pytań”)', async () => {
     await renderBackup({ name: 'backup', flow: { step: 'idle', lastSavedFileName: null }, safetyBackups: [] });
     expect(screen.getByText(BACKUP_CONTENTS_TEXT)).toBeTruthy();
-    expect(BACKUP_CONTENTS_TEXT).toContain('treść pytań aktualnego banku (V18, 700 pytań) z Twoich sesji');
+    expect(BACKUP_CONTENTS_TEXT).toContain(`treść pytań aktualnego banku (${CONTENT_RELEASE_LABEL}, ${questionsCount(CONTENT_RELEASE.counts.questions)}) z Twoich sesji`);
     expect(BACKUP_CONTENTS_TEXT).toContain('Nie zawiera wbudowanej puli pytań, zaimportowanych pul');
     expect(document.body.textContent).not.toContain('Nie zawiera pytań');
   });
@@ -148,7 +149,9 @@ describe('Stan puli — „O bazie” i ustawienia', () => {
     expect(within(checks).getByText('Pytania ze schematem').nextSibling?.textContent).toBe(String(counts.schematic));
     const poolNote = (bank as unknown as { pool_note_pl: string }).pool_note_pl;
     expect(screen.getByText(poolNote)).toBeTruthy();
+    // Stan puli z pliku banku (historia 1): część V18 (700) i dodatek z webinarów (247) nazwane wprost.
     expect(poolNote).toMatch(/700/);
+    expect(poolNote).toContain(`${CONTENT_RELEASE.counts.webinar} pytań z transkrypcji webinarów`);
     expect(screen.getByText(bank.status_pl)).toBeTruthy();
     expect(screen.getByText(RESULT_DISCLAIMER)).toBeTruthy();
     expect(body).toContain('Nie jest oficjalnym bankiem pytań PTMEiAA.');

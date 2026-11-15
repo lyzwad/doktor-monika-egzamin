@@ -1694,6 +1694,26 @@ button.answer-card:active {
   color: var(--text-2);
 }
 
+/* SourceRow — panel „Źródło webinaru” (lokalny, bez linku) */
+.source-row__webinar {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 12px;
+  background: var(--surface-2);
+  border-radius: var(--radius-ctl);
+}
+
+.source-row__caveat {
+  color: var(--text-2);
+}
+
+.source-row__quote {
+  padding-left: 12px;
+  border-left: 3px solid var(--border-strong);
+  color: var(--text);
+}
+
 /* FigureBlock */
 .figure {
   margin: 0;

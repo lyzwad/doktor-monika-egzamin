@@ -6,7 +6,9 @@
  *   wykluczenie ID z `retired_question_ids.json`, przypisanie grup profilu treningowego.
  *   Niepoprawne rekordy trafiają do `catalog.issues` i poza pulę.
  * - `parseRetiredIds`, `parseTrainingProfile` — kontrola plików towarzyszących bankowi V15.
- * - `checkRuntimeQuestion` — wspólna walidacja rekordu (katalog i import paczek).
+ * - `checkRuntimeQuestion` — wspólna walidacja rekordu (katalog i import paczek); pytanie z webinaru
+ *   (`origin: 'webinar'`, wydanie „V18 + webinary”) wymaga dowodu: cytatu, fragmentów `Wxx-Unnnn` ze źródeł pytania,
+ *   oznaczenia `[webinar]` i wyłącznie źródeł webinarowych (spec-webinary-247).
  */
 import { normalizeText } from './fingerprint';
 import {
@@ -57,6 +59,15 @@ export function isSafeRelativePath(path: unknown): path is string {
   return path.split('/').every((seg) => seg !== '' && seg !== '.' && seg !== '..');
 }
 
+/** Rodzaj źródła: transkrypcja webinaru (bez linku, DOI i PMID — dowód to cytat z automatycznych napisów). */
+export const WEBINAR_SOURCE_KIND = 'user_supplied_webinar_transcript';
+
+/** Identyfikator fragmentu napisów webinaru: `<źródło Wxx>-U<4 cyfry>`. */
+const WEBINAR_UNIT_ID = /^W\d\d-U\d{4}$/;
+
+/** Oznaczenie końca treści pytania z webinaru (wyświetlane dosłownie). */
+const WEBINAR_STEM_MARKER = '[webinar]';
+
 /** Pola niedozwolone w runtime (ustne, uzasadnienia błędnych opcji). */
 export const FORBIDDEN_QUESTION_KEYS = ['option_rationales_pl', 'oral_case', 'expected_reasoning_pl'] as const;
 export const FORBIDDEN_TOP_LEVEL_KEYS = ['oral_cases', 'oral_questions', 'option_rationales_pl'] as const;
@@ -74,6 +85,8 @@ export interface QuestionRegistries {
   /** Czy źródło istnieje w rejestrze (bank/paczka). */
   hasSource(id: SourceId): boolean;
   hasFigure(id: FigureId): boolean;
+  /** Czy źródło z rejestru jest transkrypcją webinaru (brak metody = żadne). */
+  isWebinarSource?(id: SourceId): boolean;
 }
 
 function label(raw: Record<string, unknown>, index: number | null): string {
@@ -143,6 +156,26 @@ export function checkRuntimeQuestion(raw: unknown, registries: QuestionRegistrie
     }
   }
 
+  // Pochodzenie: brak pola (bank V18) albo pytanie z webinaru z dowodem.
+  if (raw.origin !== undefined && raw.origin !== 'webinar') add('ORIGIN', 'nieznane pochodzenie pytania');
+  if (raw.origin === 'webinar') {
+    const sourceIds = Array.isArray(raw.source_ids) ? raw.source_ids.filter(isNonEmptyString) : [];
+    if (!isNonEmptyString(raw.evidence_quote) || raw.evidence_quote.trim() === '') add('WEBINAR_EVIDENCE', 'pytanie z webinaru wymaga cytatu dowodowego');
+    const units = raw.evidence_unit_ids;
+    if (!Array.isArray(units) || units.length === 0) {
+      add('WEBINAR_EVIDENCE', 'pytanie z webinaru wymaga co najmniej jednego fragmentu napisów');
+    } else if (!units.every((u) => typeof u === 'string' && WEBINAR_UNIT_ID.test(u) && sourceIds.includes(u.slice(0, 3)))) {
+      add('WEBINAR_EVIDENCE', 'fragmenty napisów muszą mieć format Wxx-Unnnn i należeć do źródeł pytania');
+    }
+    if (raw.source_note_pl !== undefined && typeof raw.source_note_pl !== 'string') add('WEBINAR_EVIDENCE', 'nieprawidłowa notatka o źródle');
+    if (typeof raw.stem_pl === 'string' && !raw.stem_pl.endsWith(WEBINAR_STEM_MARKER)) {
+      add('WEBINAR_MARKER', `treść pytania z webinaru musi kończyć się oznaczeniem ${WEBINAR_STEM_MARKER}`);
+    }
+    if (sourceIds.some((sid) => registries.hasSource(sid) && registries.isWebinarSource?.(sid) !== true)) {
+      add('WEBINAR_SOURCE', 'pytanie z webinaru może wskazywać wyłącznie transkrypcje webinarów');
+    }
+  }
+
   // Typ i figury
   if (raw.question_type !== 'text' && raw.question_type !== 'schematic') add('QUESTION_TYPE', 'nieznany typ pytania');
   if (raw.question_type === 'schematic' && !isNonEmptyString(raw.figure_id)) add('FIGURE_REFERENCE', 'pytanie ze schematem wymaga figury');
@@ -154,7 +187,7 @@ export function checkRuntimeQuestion(raw: unknown, registries: QuestionRegistrie
 
   // Zakres i bezpieczeństwo treści
   if (FORBIDDEN_QUESTION_KEYS.some((k) => k in raw)) add('OUT_OF_SCOPE', 'rekord zawiera część ustną albo uzasadnienia błędnych opcji');
-  const visible = [raw.stem_pl, raw.correct_explanation_pl, raw.source_locator_pl, ...optionTexts].filter(
+  const visible = [raw.stem_pl, raw.correct_explanation_pl, raw.source_locator_pl, raw.evidence_quote, raw.source_note_pl, ...optionTexts].filter(
     (t): t is string => typeof t === 'string',
   );
   if (visible.some(hasUnsafeMarkup)) add('UNSAFE_CONTENT', 'treść zawiera znaczniki HTML, skrypt albo niedozwolony adres');
@@ -189,6 +222,10 @@ export function toCatalogQuestion(raw: RuntimeQuestion, origin: QuestionOrigin):
     contentCheckStatus: raw.content_check_status,
     cognitiveLevel: raw.cognitive_level ?? null,
     origin,
+    webinarEvidence:
+      raw.origin === 'webinar'
+        ? { quote: raw.evidence_quote ?? '', unitIds: [...(raw.evidence_unit_ids ?? [])], note: raw.source_note_pl ?? '' }
+        : null,
   };
 }
 
@@ -200,9 +237,16 @@ function strOr(value: unknown, fallback: string): string {
   return typeof value === 'string' ? value : fallback;
 }
 
-/** Źródło do katalogu; niebezpieczny URL → `null` (+ zgłoszenie przez `onUnsafeUrl`). */
+/**
+ * Źródło do katalogu; niebezpieczny URL → `null` (+ zgłoszenie przez `onUnsafeUrl`). Źródło webinaru z niepustym
+ * url/doi/pmid albo z niebezpieczną nazwą pliku → nieprawidłowy rekord (`null`).
+ */
 export function toCatalogSource(id: SourceId, raw: unknown, onUnsafeUrl?: () => void): CatalogSource | null {
   if (!isRecord(raw) || !isNonEmptyString(raw.title)) return null;
+  const webinar = raw.kind === WEBINAR_SOURCE_KIND;
+  if (webinar && [raw.url, raw.doi, raw.pmid].some((v) => v !== null && v !== undefined && v !== '')) return null;
+  const fileName = strOrNull(raw.filename);
+  if (fileName !== null && hasUnsafeMarkup(fileName)) return null;
   let url: string | null = null;
   if (raw.url !== null && raw.url !== undefined) {
     if (isSafeHttpsUrl(raw.url)) url = raw.url;
@@ -217,6 +261,8 @@ export function toCatalogSource(id: SourceId, raw: unknown, onUnsafeUrl?: () => 
     kindPl: strOr(raw.kind_pl, strOr(raw.kind, '')),
     accessPl: strOr(raw.access_pl, strOr(raw.access, '')),
     checkedOn: strOrNull(raw.checked_on),
+    fileName,
+    webinar,
   };
 }
 
@@ -436,6 +482,7 @@ export function buildCatalog(bank: RuntimeBank, content: CatalogContent = {}): C
   const registries: QuestionRegistries = {
     hasSource: (id) => sources[id] !== undefined,
     hasFigure: (id) => figures[id] !== undefined,
+    isWebinarSource: (id) => sources[id]?.webinar === true,
   };
 
   const byFingerprint = new Map<string, QuestionId>();

@@ -1,7 +1,8 @@
 /**
  * Migracja danych lokalnych do banku V18 (docs/MIGRACJA_V18.md): allowlista paczki (700 ID: 600 V16 + 100 V17)
- * jest jedyną podstawą decyzji. Każdy profil ma własną bazę IndexedDB; migracja v3 → v4 w jednej transakcji
- * `versionchange` (także v1 → v4 dla danych sprzed V15).
+ * jest jedyną podstawą decyzji. Każdy profil ma własną bazę IndexedDB; migracja v3 → v5 w jednej transakcji
+ * `versionchange` (także v1 → v5 dla danych sprzed V15; v4 jest krokiem historycznym bez zmian danych, a
+ * przekształcenie do bieżącego wydania wykonuje v5 — tests/persistence/migracja-webinary.test.ts).
  *
  * D — profile z V15/starszymi ID, z V16, z V17 i dane mieszane: V16/V17 zgodne z paczką zostają aktywne,
  *     dawne treści nie wracają; E — rozdzielenie profili, import kopii, zachowanie wyników liczbowych.
@@ -14,7 +15,7 @@ import { APP_ID, BACKUP_FORMAT, DB_SCHEMA_VERSION } from '../../src/persistence/
 import type { BackupData, Repository } from '../../src/persistence/api';
 import { BANK_MIGRATION_ID, transformToCurrentBank } from '../../src/persistence/bankMigration';
 import { MSG_STALE_CONTENT_WRITE } from '../../src/persistence/repository';
-import { createMigrationV4, MIGRATIONS } from '../../src/persistence/schema';
+import { createMigrationV5, MIGRATIONS } from '../../src/persistence/schema';
 import { RETIRED_IDS } from '../content';
 import {
   alteredQuestion,
@@ -33,7 +34,8 @@ import {
 } from './fixtures';
 
 const MIGRATED_AT = '2026-11-09T21:00:00.000Z';
-const V18 = CONTENT_RELEASE.bankVersion;
+/** Bieżące wydanie treści (w tej gałęzi V18; po historii 1 — „V18 + webinary”). */
+const CURRENT = CONTENT_RELEASE.bankVersion;
 
 function expectNoOldContent(value: unknown): void {
   const text = JSON.stringify(value);
@@ -149,7 +151,7 @@ describe('D — transformacja profilu do banku V18 (allowlista paczki)', () => {
     expect(s['sess-1']!.legacy).toEqual({
       reason: 'bank_v18_update',
       previousBankVersion: V15_BANK_VERSION,
-      contentBankVersion: V18,
+      contentBankVersion: CURRENT,
       migratedAt: MIGRATED_AT,
       previousStatus: 'completed',
       answeredValid: 3,
@@ -170,7 +172,7 @@ describe('D — transformacja profilu do banku V18 (allowlista paczki)', () => {
     expect(chartPoints(after, { kind: 'all' })).toEqual(chartPoints(before, { kind: 'all' }));
     const rows = (st: UserState) => [...summarizeHistory(st).tests, ...summarizeHistory(st).freeFlow].filter((r) => r.sessionId !== 'sess-2').map((r) => [r.sessionId, r.answeredValid, r.correct, r.percent, r.passed]);
     expect(rows(after)).toEqual(rows(before));
-    expect(t.report).toMatchObject({ migrationId: BANK_MIGRATION_ID, contentBankVersion: V18, sessionsCurrent: 0, sessionsLegacy: 3, sessionsInterrupted: 1, attemptsKept: 0, questionStatsKept: 0, blocksKept: 0, packsRemoved: 1 });
+    expect(t.report).toMatchObject({ migrationId: BANK_MIGRATION_ID, contentBankVersion: CURRENT, sessionsCurrent: 0, sessionsLegacy: 3, sessionsInterrupted: 1, attemptsKept: 0, questionStatsKept: 0, blocksKept: 0, packsRemoved: 1 });
   });
 
   it.each([
@@ -185,9 +187,9 @@ describe('D — transformacja profilu do banku V18 (allowlista paczki)', () => {
       const migrated = s[original.id]!;
       expect(migrated.legacy ?? null).toBeNull();
       expect(migrated.status).toBe(original.status);
-      expect(migrated.bankVersion).toBe(V18);
+      expect(migrated.bankVersion).toBe(CURRENT);
       expect(migrated.plan).toEqual(original.plan);
-      expect(Object.values(migrated.slots).every((slot) => slot.snapshot.bankVersion === V18)).toBe(true);
+      expect(Object.values(migrated.slots).every((slot) => slot.snapshot.bankVersion === CURRENT)).toBe(true);
       // Treść snapshotów bez zmian (tylko wersja banku).
       const strip = (x: Session) => Object.values(x.slots).map((slot) => ({ ...slot, snapshot: { ...slot.snapshot, bankVersion: '' } }));
       expect(strip(migrated)).toEqual(strip(original));
@@ -227,7 +229,7 @@ describe('D — transformacja profilu do banku V18 (allowlista paczki)', () => {
     expect(t.attempts.some((a) => a.questionId === 'V16-ANAT-001')).toBe(false);
     // Sesja Free Flow bez zmienionego pytania zostaje aktywna.
     expect(s['sess-3']!.legacy ?? null).toBeNull();
-    expect(s['sess-3']!.bankVersion).toBe(V18);
+    expect(s['sess-3']!.bankVersion).toBe(CURRENT);
     expectNoOldContent(t);
   });
 
@@ -300,8 +302,8 @@ describe('D — przypadki brzegowe (recenzja 09.11.2026)', () => {
   });
 });
 
-describe('D/E — migracja IndexedDB v3 → v4 (każdy profil osobno)', () => {
-  it('profil V15: brak dawnej treści w CAŁEJ bazie (także w kopiach bezpieczeństwa); wyniki liczbowe zostają; meta = V18', async () => {
+describe('D/E — migracja IndexedDB v3 → v5 (każdy profil osobno)', () => {
+  it('profil V15: brak dawnej treści w CAŁEJ bazie (także w kopiach bezpieczeństwa); wyniki liczbowe zostają; meta = bieżące wydanie', async () => {
     const data = v15Profile();
     data.settings = [{ ...data.settings[0]!, lastTestConfig: { scope: 'SKIN', difficulty: 'advanced', targetN: 30, myErrorsPriority: false }, lastFreeFlowConfig: { scope: 'ALL', difficulty: 'basic', targetN: null, myErrorsPriority: true } }];
     const { factory, dbName } = await profileDb(data);
@@ -310,10 +312,10 @@ describe('D/E — migracja IndexedDB v3 → v4 (każdy profil osobno)', () => {
     expect(await repo.open()).toEqual({ ok: true, value: { schemaVersion: DB_SCHEMA_VERSION, migratedFrom: 3, created: false } });
     const state = await load(repo);
     repo.close();
-    expect(DB_SCHEMA_VERSION).toBe(4);
+    expect(DB_SCHEMA_VERSION).toBe(5);
     expect(state.sessions['sess-1']).toMatchObject({ status: 'completed', result: { correct: 2, targetN: 3, passed: true } });
     const dump = await dumpAll(factory, dbName);
-    expect(dump.version).toBe(4);
+    expect(dump.version).toBe(5);
     expectNoOldContent(dump.stores);
     expect(dump.stores.packs).toEqual([]);
     // Kopia bezpieczeństwa zostaje, ale jej dane przeszły tę samą transformację (liczby bez treści).
@@ -324,28 +326,28 @@ describe('D/E — migracja IndexedDB v3 → v4 (każdy profil osobno)', () => {
     // Stare filtry trudności wyczyszczone (cała pula); zakres i pozostałe ustawienia bez zmian.
     expect(dump.stores.settings).toEqual([{ ...data.settings[0]!, lastTestConfig: { scope: 'SKIN', difficulty: 'mixed', targetN: 30, myErrorsPriority: false }, lastFreeFlowConfig: { scope: 'ALL', difficulty: 'mixed', targetN: null, myErrorsPriority: true } }]);
     const meta = dump.stores.meta as { key: string }[];
-    expect(meta.find((m) => m.key === 'content')).toEqual({ key: 'content', bankVersion: V18, bankSha256: CONTENT_RELEASE.bankSha256, updatedAt: MIGRATED_AT, appVersion: '0.2.0' });
-    expect(meta.find((m) => m.key === `migration:${BANK_MIGRATION_ID}`)).toMatchObject({ migrationId: 'bank-v18', fromSchemaVersion: 3, toSchemaVersion: 4, report: { sessionsLegacy: 3, backupsTransformed: 1 } });
+    expect(meta.find((m) => m.key === 'content')).toEqual({ key: 'content', bankVersion: CURRENT, bankSha256: CONTENT_RELEASE.bankSha256, updatedAt: MIGRATED_AT, appVersion: '0.2.0' });
+    expect(meta.find((m) => m.key === `migration:${BANK_MIGRATION_ID}`)).toMatchObject({ migrationId: BANK_MIGRATION_ID, fromSchemaVersion: 3, toSchemaVersion: 5, report: { sessionsLegacy: 3, backupsTransformed: 1 } });
   });
 
-  it('dane sprzed V15 (schemat 1) → v4 w jednej aktualizacji, bez dawnej treści', async () => {
+  it('dane sprzed V15 (schemat 1) → v5 w jednej aktualizacji, bez dawnej treści', async () => {
     const data = profileData(PRE_V15_BANK_VERSION, (i) => retiredQuestion(`ANAT-Q00${i + 1}`));
     const { factory, dbName } = await profileDb({ ...data, packs: [] }, { schemaVersion: 1, contentBankVersion: PRE_V15_BANK_VERSION });
     const { repo } = freshRepository({ indexedDB: factory, dbName, now: () => MIGRATED_AT });
-    expect(await repo.open()).toEqual({ ok: true, value: { schemaVersion: 4, migratedFrom: 1, created: false } });
+    expect(await repo.open()).toEqual({ ok: true, value: { schemaVersion: 5, migratedFrom: 1, created: false } });
     const state = await load(repo);
     repo.close();
     expect(state.sessions['sess-1']).toMatchObject({ result: { correct: 2, targetN: 3 }, legacy: { previousBankVersion: PRE_V15_BANK_VERSION } });
     expectNoOldContent((await dumpAll(factory, dbName)).stores);
   });
 
-  it('profil V16 i V17: po migracji można dokończyć otwartą sesję i zapisać nowy postęp (wersja V18)', async () => {
+  it('profil V16 i V17: po migracji można dokończyć otwartą sesję i zapisać nowy postęp (wersja bieżącego wydania)', async () => {
     for (const make of [v16Profile, v17Profile]) {
       const { factory, dbName } = await profileDb(make());
       const { repo } = freshRepository({ indexedDB: factory, dbName, now: () => MIGRATED_AT });
       const state = await load(repo);
       const open = state.sessions['sess-2']!;
-      expect(open).toMatchObject({ status: 'open', bankVersion: V18 });
+      expect(open).toMatchObject({ status: 'open', bankVersion: CURRENT });
       expect(Object.keys(state.questionStats)).toHaveLength(5);
       const write = await repo.commit({ commandId: 'after', guards: [], stores: { sessions: { put: [{ ...open, revision: open.revision + 1, updatedAt: MIGRATED_AT }], delete: [] } } });
       expect(write.ok).toBe(true);
@@ -356,7 +358,7 @@ describe('D/E — migracja IndexedDB v3 → v4 (każdy profil osobno)', () => {
   it.each(['sessions', 'attempts', 'questionStats', 'blocks'] as const)('przerwanie migracji (po magazynie %s) → baza zostaje w v3 bez zmian; ponowienie działa', async (store) => {
     const { factory, dbName } = await profileDb(v15Profile());
     const before = await dumpAll(factory, dbName);
-    const { repo: failing } = freshRepository({ indexedDB: factory, dbName, migrations: [...MIGRATIONS.slice(0, 3), createMigrationV4({ faultAfterStore: store })] });
+    const { repo: failing } = freshRepository({ indexedDB: factory, dbName, migrations: [...MIGRATIONS.slice(0, 4), createMigrationV5({ faultAfterStore: store })] });
     const info = await failing.open();
     expect(info.ok).toBe(false);
     if (!info.ok) expect(info.error.code).toBe('MigrationFailed');
@@ -408,11 +410,11 @@ describe('E — import kopii stosuje tę samą allowlistę', () => {
     if (!parsed.ok) throw new Error(JSON.stringify(parsed.error));
     expectNoOldContent(parsed.value.backup);
     expect(parsed.value.summary).toMatchObject({ completedTests: 1, legacySessions: 3, interruptedSessions: 1, packsDropped: 1 });
-    expect((await repo.replaceAllFromBackup(parsed.value, { now: MIGRATED_AT, safetyBackupId: 'safety-1', appVersion: 'test', bankVersions: [V18] })).ok).toBe(true);
+    expect((await repo.replaceAllFromBackup(parsed.value, { now: MIGRATED_AT, safetyBackupId: 'safety-1', appVersion: 'test', bankVersions: [CURRENT] })).ok).toBe(true);
     const state = await load(repo);
     expect(state.sessions['sess-1']).toMatchObject({ result: { correct: 2, targetN: 3, passed: true } });
     expectNoOldContent(state);
-    const exported = await repo.exportBackup({ now: MIGRATED_AT, appVersion: 'test', bankVersions: [V18] });
+    const exported = await repo.exportBackup({ now: MIGRATED_AT, appVersion: 'test', bankVersions: [CURRENT] });
     if (!exported.ok) throw new Error(exported.error.code);
     expectNoOldContent(JSON.parse(exported.value.text));
     repo.close();
@@ -427,14 +429,14 @@ describe('E — import kopii stosuje tę samą allowlistę', () => {
     repo.close();
   });
 
-  it('kopia V17 zgodna z paczką: sesje aktywne w wersji V18; ponowne wczytanie eksportu bez zmian', async () => {
+  it('kopia V17 zgodna z paczką: sesje aktywne w wersji bieżącego wydania; ponowne wczytanie eksportu bez zmian', async () => {
     const { repo } = freshRepository({ now: () => MIGRATED_AT });
     const parsed = await repo.parseAndValidateBackup(backupText(v17Profile()), 'dme-kopia.json');
     if (!parsed.ok) throw new Error(JSON.stringify(parsed.error));
-    expect(parsed.value.backup.data.sessions.every((s) => s.bankVersion === V18 && !s.legacy)).toBe(true);
-    expect((await repo.replaceAllFromBackup(parsed.value, { now: MIGRATED_AT, safetyBackupId: 's1', appVersion: 't', bankVersions: [V18] })).ok).toBe(true);
+    expect(parsed.value.backup.data.sessions.every((s) => s.bankVersion === CURRENT && !s.legacy)).toBe(true);
+    expect((await repo.replaceAllFromBackup(parsed.value, { now: MIGRATED_AT, safetyBackupId: 's1', appVersion: 't', bankVersions: [CURRENT] })).ok).toBe(true);
     const state = await load(repo);
-    const exported = await repo.exportBackup({ now: MIGRATED_AT, appVersion: 't', bankVersions: [V18] });
+    const exported = await repo.exportBackup({ now: MIGRATED_AT, appVersion: 't', bankVersions: [CURRENT] });
     if (!exported.ok) throw new Error(exported.error.code);
     const { repo: other } = freshRepository({ now: () => '2026-12-01T00:00:00.000Z' });
     const again = await other.parseAndValidateBackup(exported.value.text, 'kopia.json');

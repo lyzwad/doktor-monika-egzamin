@@ -64,8 +64,10 @@ test('UI-02: arkusz „Przerwać test?” na ekranie pytania — fokus zostaje w
  * ma zastępstwa — ostatnia pozycja nie zostaje bez akcji: „Przejdź do pytania 1” i baner z wyjaśnieniem;
  * pozycja oczekująca ma baner S24g z akcjami; karta „Kontynuuj” podaje liczbę oczekujących.
  * Dziedzina o najmniejszej liczbie rodzin wybierana z banku na dysku — bez założeń o jej wielkości (od V18 bez wyboru
- * poziomu trudności). W banku V18 najmniejsza dziedzina to SAFE z 36 rodzinami.
- * Próg pominięcia podniesiono do 60 (test odpowiada na N pytań — czas rośnie liniowo), aby test nie znikał po cichu.
+ * poziomu trudności). W banku V18 najmniejsza dziedzina to była SAFE z 36 rodzinami; w wydaniu „V18 + webinary” (947)
+ * najmniejsza jest THER z 72 rodzinami (SAFE ma ich 83).
+ * Próg pominięcia: 80 rodzin (wcześniej 60; test odpowiada na N pytań — czas rośnie liniowo), aby test nie znikał po
+ * cichu po dodaniu pytań z webinarów.
  */
 test('E03: brak zastępstwa dla wcześniejszej pozycji — na ostatniej przycisk do pozycji oczekującej, bez martwego ekranu', async ({ page }) => {
   test.setTimeout(300_000);
@@ -78,7 +80,7 @@ test('E03: brak zastępstwa dla wcześniejszej pozycji — na ostatniej przycisk
   const [cellKey, fams] = [...families.entries()].filter(([, f]) => f.size >= 3).sort((a, b) => a[1].size - b[1].size)[0] ?? ['', new Set<string>()];
   const domainId = cellKey;
   const n = fams.size;
-  test.skip(n === 0 || n > 60, `brak małego koszyka w banku (najmniejszy: ${n} rodzin)`);
+  test.skip(n === 0 || n > 80, `brak małego koszyka w banku (najmniejszy: ${n} rodzin)`);
   const domainTitle = BANK.domains.find((d) => d.id === domainId)?.title_pl ?? '';
 
   await openFresh(page);

@@ -9,16 +9,18 @@
  *  1. pliki: obecność index.html / manifestu / sw.js; tylko dozwolone typy; brak map źródeł, plików roboczych;
  *  2. index.html: każde src/href względne albo pod `base`, istniejący plik, brak hostów zewnętrznych;
  *  3. manifest: start_url/scope/id rozwiązane do `base`, ikony 192/512/maskable (+ apple-touch-icon 180) z wymiarami;
- *  4. sw.js: precache obejmuje shell, JS/CSS, woff2, PNG, SVG, JSON (w tym bank V18 `data/bank-<sha12>.json`,
+ *  4. sw.js: precache obejmuje shell, JS/CSS, woff2, PNG, SVG, JSON (w tym bank wydania `data/bank-<sha12>.json`,
  *     listę wyłączonych ID, profil treningowy i każdą figurę z `bank.figures[*].file`); navigateFallback do
  *     index.html; w sw.js brak clientsClaim i samoczynnego skipWaiting (tylko obsługa SKIP_WAITING); skrypt
  *     przejęcia przy zmianie wersji treści (importScripts: warunkowy skipWaiting, clients.claim, navigate);
  *     rejestracja SW w JS z adresem `${base}sw.js`;
- *  4a. treść V18: SHA-256 pliku banku, `bank_version` trzech plików, liczby z contentRelease.ts (700 / 400 / 200 / 100),
- *     ID banku = allowlista paczki (`content/v18/allowed_question_ids.json`, 700: 600 V16 + 100 V17), 3120 wyłączonych
- *     ID (żadne nie w banku), w `data/` wyłącznie trzy pliki V18; BRAK dawnych plików banków (`data/bank.json`, V15
- *     `data/bank-37f3980a1129.json` i pliki towarzyszące) w dist, w precache i w kodzie JS; skrypt przejęcia
- *     odpowiada 404 na każdy inny plik w `data/`; `dme-release.json` poza precache z wersją V18;
+ *  4a. treść wydania „V18 + webinary”: SHA-256 pliku banku, `bank_version` trzech plików, liczby z contentRelease.ts
+ *     (947 / 647 / 200 / 100, 247 pytań z webinarów), ID banku = allowlista wydania
+ *     (`content/v18-webinary/allowed_question_ids.json`, 947 = V18 700 [600 V16 + 100 V17] + WB 247, SHA-256 =
+ *     `allowedSha256`), źródła webinarów bez url/doi/pmid, 3120 wyłączonych ID (żadne nie w banku), w `data/` wyłącznie
+ *     trzy pliki wydania; BRAK dawnych plików banków (`data/bank.json`, V15 `data/bank-37f3980a1129.json`, V18
+ *     `data/bank-5db40505308f.json` i pliki towarzyszące) w dist, w precache i w kodzie (po nazwach plików); skrypt
+ *     przejęcia odpowiada 404 na każdy inny plik w `data/`; `dme-release.json` poza precache z wersją wydania;
  *  5. brak http(s):// do hostów zewnętrznych (poza URL źródeł w pliku banku i nazwami przestrzeni XML),
  *     brak support.js, fonts.googleapis/gstatic, sekretów (sk-, api_key, Bearer…), słów anthropic/openai/claude.ai
  *     w JS/HTML, mocka kontrolera; SVG bez skryptów i zasobów zewnętrznych.
@@ -83,15 +85,35 @@ const RELEASE = {
   bankSha256: releaseField('bankSha256'),
   retiredSha256: releaseField('retiredSha256'),
   profileSha256: releaseField('profileSha256'),
+  allowedSha256: releaseField('allowedSha256'),
   bankFile: releaseField('bankFile'),
   retiredFile: releaseField('retiredFile'),
   profileFile: releaseField('profileFile'),
   /** Dawna ścieżka banku (do v0.1.0) — nie może istnieć w buildzie ani w kodzie. */
   legacyBankFile: 'data/bank.json',
-  /** Wszystkie zastąpione pliki treści (do v0.1.0 i V15) — nie mogą istnieć w buildzie, precache ani w kodzie. */
-  legacyDataFiles: ['data/bank.json', 'data/bank-37f3980a1129.json', 'data/retired-question-ids-83b36ff80986.json', 'data/training-profile-c0edd4ca07c2.json'],
-  counts: { questions: releaseCount('questions'), basic: releaseCount('basic'), intermediate: releaseCount('intermediate'), advanced: releaseCount('advanced'), retired: releaseCount('retired') },
+  /** Wszystkie zastąpione pliki treści (do v0.1.0, V15 i V18) — nie mogą istnieć w buildzie, precache ani w kodzie. */
+  legacyDataFiles: [
+    'data/bank.json',
+    'data/bank-37f3980a1129.json',
+    'data/retired-question-ids-83b36ff80986.json',
+    'data/training-profile-c0edd4ca07c2.json',
+    'data/bank-5db40505308f.json',
+    'data/retired-question-ids-54a05ea91281.json',
+    'data/training-profile-2bdad504f50e.json',
+  ],
+  counts: {
+    questions: releaseCount('questions'),
+    basic: releaseCount('basic'),
+    intermediate: releaseCount('intermediate'),
+    advanced: releaseCount('advanced'),
+    retired: releaseCount('retired'),
+    webinar: releaseCount('webinar'),
+  },
 };
+/** Allowlista wydania (V18 700 + WB 247) — źródło src/persistence/v18Allowlist.ts. */
+const ALLOWLIST_PATH = 'content/v18-webinary/allowed_question_ids.json';
+/** Rodzaj źródła webinaru (bez url/doi/pmid). */
+const WEBINAR_SOURCE_KIND = 'user_supplied_webinar_transcript';
 const BANK = RELEASE.bankFile;
 const PRECACHE_INFO = 'pwa-precache.json';
 const RELEASE_INFO = 'dme-release.json';
@@ -103,16 +125,16 @@ for (const required of ['index.html', 'manifest.webmanifest', 'sw.js', BANK, REL
   check(fileSet.has(required), `jest ${required}`, `brak ${required}`);
 }
 
-/* ---------------- treść: wyłącznie bank V18 (komplet 700) ---------------- */
+/* ---------------- treść: wyłącznie wydanie V18 + webinary (947) ---------------- */
 
 const sha256 = (rel) => createHash('sha256').update(readFileSync(join(distDir, rel))).digest('hex');
 for (const legacy of RELEASE.legacyDataFiles) check(!fileSet.has(legacy), `brak dawnego pliku ${legacy}`, `dist zawiera dawny plik ${legacy}`);
-check(![...fileSet].some((f) => f.startsWith('figures/')), 'brak figur dawnych banków (bank V18 nie ma schematów)', 'dist zawiera katalog figures/');
+check(![...fileSet].some((f) => f.startsWith('figures/')), 'brak figur dawnych banków (wydanie nie ma schematów)', 'dist zawiera katalog figures/');
 const dataFiles = [...fileSet].filter((f) => f.startsWith('data/')).sort();
 const expectedData = [RELEASE.bankFile, RELEASE.retiredFile, RELEASE.profileFile].sort();
 check(
   JSON.stringify(dataFiles) === JSON.stringify(expectedData),
-  `data/: wyłącznie pliki V18 (${dataFiles.join(', ')})`,
+  `data/: wyłącznie pliki wydania (${dataFiles.join(', ')})`,
   `data/: ${dataFiles.join(', ')} — oczekiwano ${expectedData.join(', ')}`,
 );
 if (fileSet.has(BANK)) {
@@ -138,21 +160,42 @@ if (fileSet.has(BANK)) {
       `${BANK}: ${(bank.questions ?? []).length} pytań (${by.basic} basic / ${by.intermediate} intermediate / ${by.advanced} advanced), zgodne z counts`,
       `${BANK}: liczby ${(bank.questions ?? []).length} / ${by.basic} / ${by.intermediate} / ${by.advanced} ≠ ${c.questions} / ${c.basic} / ${c.intermediate} / ${c.advanced}`,
     );
-    // Allowlista paczki V18: ID banku = dokładnie lista 700 ID (600 V16 + 100 V17).
+    // Allowlista wydania: ID banku = dokładnie lista 947 ID (V18 700: 600 V16 + 100 V17, WB 247), SHA = allowedSha256.
     try {
-      const allowed = JSON.parse(readFileSync(resolve('content/v18/allowed_question_ids.json'), 'utf8'));
+      const allowedRaw = readFileSync(resolve(ALLOWLIST_PATH));
+      const allowed = JSON.parse(allowedRaw.toString('utf8'));
       const ids = (bank.questions ?? []).map((q) => q.id).sort();
       const list = [...(allowed.ids ?? [])].sort();
       const v16 = list.filter((id) => id.startsWith('V16-')).length;
       const v17 = list.filter((id) => id.startsWith('V17-')).length;
+      const wb = list.filter((id) => id.startsWith('WB-')).length;
+      const allowedSha = createHash('sha256').update(allowedRaw).digest('hex');
       check(
-        allowed.bank_version === RELEASE.bankVersion && JSON.stringify(ids) === JSON.stringify(list) && list.length === c.questions && v16 === 600 && v17 === 100,
-        `${BANK}: ID = allowlista paczki (${list.length}: ${v16} V16 + ${v17} V17)`,
-        `${BANK}: ID ≠ allowlista paczki (bank ${ids.length}, allowlista ${list.length}, V16 ${v16}, V17 ${v17})`,
+        allowed.bank_version === RELEASE.bankVersion &&
+          allowedSha === RELEASE.allowedSha256 &&
+          JSON.stringify(ids) === JSON.stringify(list) &&
+          list.length === c.questions &&
+          allowed.components?.V18 === 700 &&
+          allowed.components?.WB === c.webinar &&
+          v16 === 600 &&
+          v17 === 100 &&
+          wb === c.webinar &&
+          v16 + v17 + wb === list.length,
+        `${BANK}: ID = allowlista wydania (${list.length} = V18 ${v16 + v17}: ${v16} V16 + ${v17} V17, WB ${wb}; SHA-256 ${allowedSha})`,
+        `${BANK}: ID ≠ allowlista wydania (bank ${ids.length}, allowlista ${list.length}, V16 ${v16}, V17 ${v17}, WB ${wb}, SHA-256 ${allowedSha}, oczekiwano ${RELEASE.allowedSha256})`,
       );
     } catch (e) {
-      fail(`allowlista content/v18/allowed_question_ids.json: ${e.message}`);
+      fail(`allowlista ${ALLOWLIST_PATH}: ${e.message}`);
     }
+    // Pytania z webinarów: liczba = contentRelease.ts, treść z oznaczeniem [webinar], źródła webinarów bez url/doi/pmid.
+    const webinarQuestions = (bank.questions ?? []).filter((q) => q.origin === 'webinar');
+    const webinarSources = Object.values(bank.sources ?? {}).filter((s) => s?.kind === WEBINAR_SOURCE_KIND);
+    const linkedSources = webinarSources.filter((s) => s.url !== null || s.doi !== null || s.pmid !== null).map((s) => s.id);
+    check(
+      webinarQuestions.length === c.webinar && webinarQuestions.every((q) => String(q.stem_pl).endsWith('[webinar]')) && linkedSources.length === 0,
+      `${BANK}: ${webinarQuestions.length} pytań z webinarów (oznaczenie [webinar]), ${webinarSources.length} źródeł webinarów bez url/doi/pmid`,
+      `${BANK}: pytania z webinarów ${webinarQuestions.length} (oczekiwano ${c.webinar}); źródła webinarów z adresem: ${linkedSources.join(', ') || '—'}`,
+    );
     if (fileSet.has(RELEASE.retiredFile)) {
       const retired = JSON.parse(read(RELEASE.retiredFile));
       const ids = Array.isArray(retired.ids) ? retired.ids : [];
@@ -160,7 +203,7 @@ if (fileSet.has(BANK)) {
       const leaked = ids.filter((id) => inBank.has(id));
       check(
         retired.bank_version === RELEASE.bankVersion && ids.length === c.retired && new Set(ids).size === ids.length && leaked.length === 0 && sha256(RELEASE.retiredFile) === RELEASE.retiredSha256,
-        `${RELEASE.retiredFile}: ${ids.length} wyłączonych ID, wersja V18, żadne nie występuje w banku`,
+        `${RELEASE.retiredFile}: ${ids.length} wyłączonych ID, wersja wydania, żadne nie występuje w banku`,
         `${RELEASE.retiredFile}: ${ids.length} ID (oczekiwano ${c.retired}), wersja ${retired.bank_version}, w banku: ${leaked.join(', ') || '—'}`,
       );
     }
@@ -170,8 +213,8 @@ if (fileSet.has(BANK)) {
       const bankIds = (bank.questions ?? []).map((q) => q.id);
       check(
         profile.bank_version === RELEASE.bankVersion && sha256(RELEASE.profileFile) === RELEASE.profileSha256 && grouped.length === bankIds.length && new Set(grouped).size === grouped.length && bankIds.every((id) => grouped.includes(id)),
-        `${RELEASE.profileFile}: wersja V18, ${grouped.length} ID w grupach (każde pytanie banku dokładnie raz)`,
-        `${RELEASE.profileFile}: niezgodny z bankiem V18`,
+        `${RELEASE.profileFile}: wersja wydania, ${grouped.length} ID w grupach (każde pytanie banku dokładnie raz)`,
+        `${RELEASE.profileFile}: niezgodny z bankiem wydania`,
       );
     }
   } catch (e) {
@@ -449,10 +492,11 @@ scan('klucz prywatny / tokeny (AKIA, ghp_, PRIVATE KEY)', /AKIA[0-9A-Z]{16}|\bgh
 scan('anthropic / openai / claude.ai w kodzie', /anthropic|openai|claude\.ai/i, codeFiles);
 scan('mock kontrolera w buildzie (__dmeMock, createMockController)', /__dmeMock|createMockController/, codeFiles);
 scan('mapy źródeł (sourceMappingURL)', /sourceMappingURL=/, codeFiles);
-// Dawne pliki banków (do v0.1.0 i V15) nie mogą być nigdzie wskazane w kodzie ani w JSON (żadnego fallbacku).
+// Dawne pliki banków (do v0.1.0, V15 i V18) nie mogą być nigdzie wskazane w kodzie ani w JSON (żadnego fallbacku).
+// V18 — po NAZWACH plików, nie po wersji: migracja danych (src/persistence/bankMigration.ts) zna wersję banku V18.
 scan(
-  `dawne pliki banków (${RELEASE.legacyDataFiles.join(', ')}, wersja V15) w kodzie i danych`,
-  /data\/bank\.json|37f3980a1129|83b36ff80986|c0edd4ca07c2|chatgpt-editorial-v15/,
+  `dawne pliki banków (${RELEASE.legacyDataFiles.join(', ')}; wersja V15, pliki V18) w kodzie i danych`,
+  /data\/bank\.json|37f3980a1129|83b36ff80986|c0edd4ca07c2|chatgpt-editorial-v15|bank-5db40505308f|retired-question-ids-54a05ea91281|training-profile-2bdad504f50e/,
   textFiles.filter((f) => f.rel !== TAKEOVER),
 );
 

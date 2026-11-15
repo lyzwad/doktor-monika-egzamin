@@ -1,7 +1,8 @@
 /**
- * Test dymny silnika na rzeczywistym banku V18 (`public/data/bank-<sha12>.json` + retired_question_ids +
- * training_profile): profil treningowy 35/25/40 (TEST_POLICY_V3, FREE_FLOW_POLICY_V3), zakres jednej domeny bez
- * profilu, test o maksymalnym N. Plik i katalog (700 rekordów 1:1 z paczką) — tests/domain/bank-v18.test.ts.
+ * Test dymny silnika na rzeczywistym wydaniu „V18 + webinary” (`public/data/bank-<sha12>.json` + retired_question_ids +
+ * training_profile; 947 pytań = 700 V18 + 247 WB): profil treningowy 35/25/40 (TEST_POLICY_V3, FREE_FLOW_POLICY_V3),
+ * zakres jednej domeny bez profilu, test o maksymalnym N. Plik i katalog — tests/domain/bank-webinary.test.ts
+ * (całe wydanie) i tests/domain/bank-v18.test.ts (700 rekordów V18 1:1 z paczką).
  */
 import { describe, expect, it } from 'vitest';
 import {
@@ -42,7 +43,7 @@ describe('TEST_POLICY_V3 — profil treningowy 35/25/40 (metoda największych re
     expect(q(3)).toEqual({ skin: 1, facial_anatomy: 1, other: 1 });
   });
 
-  it.each([1, 2, 3, 20, 30, 40, 50, 60])('Test %i/mixed/ALL: grupy wg profilu, unikalne rodziny i ID, tylko V18, bez wyłączonych', (n) => {
+  it.each([1, 2, 3, 20, 30, 40, 50, 60])('Test %i/mixed/ALL: grupy wg profilu, unikalne rodziny i ID, tylko bieżące wydanie, bez wyłączonych', (n) => {
     const out = must(startTest(emptyUserState(), catalog, { config: { scope: 'ALL', difficulty: 'mixed', targetN: n, myErrorsPriority: false }, seed: 2026 + n }, new Clock().ctx()));
     const s = session(out.state, out.value.sessionId);
     expect(s.allocation.policy).toBe('TEST_POLICY_V3');
@@ -75,11 +76,12 @@ describe('TEST_POLICY_V3 — profil treningowy 35/25/40 (metoda największych re
   });
 
   it('niedobór pojemności grupy → redystrybucja na pozostałe grupy z zapisem, bez duplikatów; N = pojemność obejmuje każdą rodzinę', () => {
-    // Bank V18: skin 160 i facial_anatomy 141 rodzin < kwot 242 i 173 przy N = 692 (wszystkie rodziny) → przesunięcie na „other”.
+    // Wydanie V18 + webinary: skin 196 i facial_anatomy 147 rodzin < kwot 329 i 235 przy N = 939 (wszystkie rodziny)
+    // → przesunięcie na „other” (596 rodzin: 391 V18 + 205 WB).
     const cap = (g: string) => new Set(catalog.questions.filter((q) => groupOf(q.id) === g).map((q) => q.familyId)).size;
-    expect([cap('skin'), cap('facial_anatomy'), cap('other')]).toEqual([160, 141, 391]);
+    expect([cap('skin'), cap('facial_anatomy'), cap('other')]).toEqual([196, 147, 596]);
     const n = capacityFor(catalog, emptyUserState(), 'ALL', 'mixed');
-    expect(n).toBe(692);
+    expect(n).toBe(939);
     const quotas = largestRemainderQuotas(n, PROFILE.groupOrder, PROFILE.weightsBp);
     const out = must(startTest(emptyUserState(), catalog, { config: { scope: 'ALL', difficulty: 'mixed', targetN: n, myErrorsPriority: false }, seed: 9 }, new Clock().ctx()));
     const s = session(out.state, out.value.sessionId);
@@ -87,12 +89,12 @@ describe('TEST_POLICY_V3 — profil treningowy 35/25/40 (metoda największych re
     expect(new Set(planFamilies(out.state, s.id)).size).toBe(n);
     expect(new Set(s.plan.map((id) => s.slots[id]!.questionId)).size).toBe(n);
     const actual = s.allocation.profile?.groupActual ?? {};
-    expect(actual).toEqual({ skin: 160, facial_anatomy: 141, other: 391 });
+    expect(actual).toEqual({ skin: 196, facial_anatomy: 147, other: 596 });
     const short = PROFILE.groupOrder.filter((g) => cap(g) < (quotas.get(g) ?? 0));
     expect(short).toEqual(['skin', 'facial_anatomy']);
     const moved = (s.allocation.profile?.redistributed ?? []).filter((r) => r.kind === 'group');
     expect(moved.every((r) => r.reason === 'supply' && r.toGroup === 'other')).toBe(true);
-    expect(moved.reduce((a, r) => a + r.count, 0)).toBe((quotas.get('skin') ?? 0) - 160 + (quotas.get('facial_anatomy') ?? 0) - 141);
+    expect(moved.reduce((a, r) => a + r.count, 0)).toBe((quotas.get('skin') ?? 0) - 196 + (quotas.get('facial_anatomy') ?? 0) - 147);
   });
 
   it('zakres jednej domeny: bez profilu (przydział domenowy jak V2), polityka V3', () => {

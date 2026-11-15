@@ -31,8 +31,11 @@ import type { BankTransformReport } from './bankMigration';
 /* ========================================================================== */
 
 export const DB_NAME = 'doktor-monika-egzamin';
-/** Wersja schematu IndexedDB (migracje wersjonowane, `onupgradeneeded`). */
-export const DB_SCHEMA_VERSION = 4;
+/**
+ * Wersja schematu IndexedDB (migracje wersjonowane, `onupgradeneeded`). 4 — bank V18 (historyczna),
+ * 5 — wydanie „V18 + webinary” (przekształcenie danych do bieżącego wydania, ./schema.ts).
+ */
+export const DB_SCHEMA_VERSION = 5;
 
 /** Magazyny (DECYZJE §10). */
 export const STORE_NAMES = [
@@ -103,7 +106,7 @@ export interface MetaRecord {
   appVersion: string;
 }
 
-/** Rekord `meta` z wersją treści (klucz `'content'`): bank pytań, do którego dostosowano dane (V18). */
+/** Rekord `meta` z wersją treści (klucz `'content'`): wydanie banku pytań, do którego dostosowano dane. */
 export interface ContentMetaRecord {
   key: 'content';
   bankVersion: string;
@@ -112,7 +115,10 @@ export interface ContentMetaRecord {
   appVersion: string;
 }
 
-/** Rekord `meta` wykonanej migracji treści (klucz `migration:<id>`), z raportem liczbowym. */
+/**
+ * Rekord `meta` wykonanej migracji treści (klucz `migration:<id>`), z raportem liczbowym. Bieżąca:
+ * `migration:bank-v18-webinary` (schemat v5); historyczna `migration:bank-v18` (v4) zostaje w bazie.
+ */
 export interface MigrationMetaRecord {
   key: string;
   migrationId: string;
@@ -356,7 +362,7 @@ export interface RepositoryOptions {
    */
   now?: () => IsoDateTime;
   /**
-   * Wersja treści, której sesje wolno zapisywać (domyślnie bieżący bank V18). Zapis sesji innej wersji, która
+   * Wersja treści, której sesje wolno zapisywać (domyślnie bieżące wydanie). Zapis sesji innej wersji, która
    * nie jest sesją `legacy`, jest odrzucany (ochrona przed opóźnionym zapisem starego kodu).
    */
   contentBankVersion?: string;
@@ -417,7 +423,7 @@ export interface Repository {
   /** Treść automatycznej kopii do pobrania („propozycja pobrania” po imporcie). */
   getBackupFile(id: string): Promise<PersistenceResult<ExportedFile>>;
 
-  /** Rekordy `meta`: wersja treści (V18) i rekord migracji (diagnostyka, testy). */
+  /** Rekordy `meta`: wersja treści (bieżące wydanie) i rekord migracji v5 (diagnostyka, testy). */
   readContentMeta(): Promise<PersistenceResult<{ content: ContentMetaRecord | null; migration: MigrationMetaRecord | null }>>;
 
   /**

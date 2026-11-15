@@ -25,7 +25,7 @@ import type {
   ValidatedBackup,
 } from './api';
 import { backupTooLarge, fail, invalidBackup, ok, unsupportedBackupVersion } from './errors';
-import { settingsForCurrentBank, transformToCurrentBank, type BankTransformReport } from './bankMigration';
+import { CURRENT_BANK_TARGET, settingsForCurrentBank, transformToCurrentBank, type BankTarget, type BankTransformReport } from './bankMigration';
 import {
   ReasonList,
   compareKeys,
@@ -189,6 +189,11 @@ function nullOr(check: FieldCheck): FieldCheck {
   return { test: (v) => v === null || check.test(v), expect: `${check.expect} albo null` };
 }
 
+/** Pole opcjonalne: brak pola (`undefined`) albo wartość spełniająca `check`. */
+function optional(check: FieldCheck): FieldCheck {
+  return { test: (v) => v === undefined || check.test(v), expect: `${check.expect} (pole opcjonalne)` };
+}
+
 const C = {
   id: { test: isSafeId, expect: 'oczekiwano niepustego identyfikatora' },
   text: { test: (v: unknown) => typeof v === 'string', expect: 'oczekiwano tekstu' },
@@ -344,6 +349,12 @@ const SNAPSHOT_SPEC: Spec = {
   reviewStatus: C.text,
   approvedForQuestionKey: C.bool,
 };
+/**
+ * Opcjonalne pola snapshotu pytania z webinaru (wydanie „V18 + webinary”): stare snapshoty ich nie mają (= `null`),
+ * a podane muszą mieć poprawny typ. Pozostałe dodatkowe pola przechodzą bez kontroli.
+ */
+const SNAPSHOT_OPTIONAL_SPEC: Spec = { webinarEvidence: optional(nullOr(C.object)) };
+const SNAPSHOT_WEBINAR_EVIDENCE_SPEC: Spec = { quote: C.text, unitIds: C.stringArray, note: C.text };
 const SNAPSHOT_OPTION_SPEC: Spec = { id: C.id, text: C.nonEmptyText };
 const SNAPSHOT_TOPIC_SPEC: Spec = { id: C.id, title: C.text, learningObjective: nullOr(C.text), pearls: C.stringArray };
 const SNAPSHOT_SOURCE_SPEC: Spec = {
@@ -354,6 +365,8 @@ const SNAPSHOT_SOURCE_SPEC: Spec = {
   pmid: nullOr(C.text),
   kindPl: C.text,
   accessPl: C.text,
+  fileName: optional(nullOr(C.text)),
+  webinar: optional(C.bool),
 };
 const SNAPSHOT_FIGURE_SPEC: Spec = { id: C.id, file: C.mediaPath, alt: C.text, caption: C.text };
 
@@ -456,9 +469,13 @@ function checkConfig(value: unknown, where: string, reasons: ReasonList): boolea
 }
 
 function checkSnapshot(snapshot: JsonObject, where: string, reasons: ReasonList): string[] | null {
-  if (!checkFields(snapshot, SNAPSHOT_SPEC, where, reasons)) return null;
+  const required = checkFields(snapshot, SNAPSHOT_SPEC, where, reasons);
+  const optionalOk = checkFields(snapshot, SNAPSHOT_OPTIONAL_SPEC, where, reasons);
+  if (!required || !optionalOk) return null;
   const options = snapshot.options as unknown[];
   let valid = true;
+  const evidence = snapshot.webinarEvidence;
+  if (isObject(evidence) && !checkFields(evidence, SNAPSHOT_WEBINAR_EVIDENCE_SPEC, `${where}, dowód z webinaru`, reasons)) valid = false;
   if (options.length !== 4) {
     reasons.add(`${where}: snapshot musi mieć dokładnie 4 warianty (jest ${options.length}).`);
     valid = false;
@@ -809,7 +826,12 @@ export function isRegisteredValidatedBackup(value: ValidatedBackup): boolean {
  * Walidacja sparsowanego JSON jako kopii `BackupFileV1` (format, wersja, schemat, referencje,
  * fingerprinty paczek). Nie zmienia danych.
  */
-export async function validateBackupJson(json: unknown, fileName: string, now: IsoDateTime = new Date().toISOString()): Promise<PersistenceResult<BackupFileV1>> {
+export async function validateBackupJson(
+  json: unknown,
+  fileName: string,
+  now: IsoDateTime = new Date().toISOString(),
+  target: BankTarget = CURRENT_BANK_TARGET,
+): Promise<PersistenceResult<BackupFileV1>> {
   if (!isObject(json)) return fail(invalidBackup(fileName, ['Plik nie zawiera obiektu kopii danych.']));
   if (json.format !== BACKUP_FORMAT || json.appId !== APP_ID) {
     const reasons = ['Brak oznaczenia kopii aplikacji Doktor Monika Egzamin (format „dme-backup”).'];
@@ -828,17 +850,17 @@ export async function validateBackupJson(json: unknown, fileName: string, now: I
   if (!checkBackupStructure(json, reasons) || !reasons.empty) return fail(invalidBackup(fileName, reasons.toArray()));
   const original = json as unknown as BackupFileV1;
   const profileEmail = original.formatVersion >= 2 ? (knownProfile(original.profileEmail) ?? null) : null;
-  return ok(toCurrentBankBackup({ ...original, profileEmail }, now).backup);
+  return ok(toCurrentBankBackup({ ...original, profileEmail }, now, target).backup);
 }
 
 /**
  * (c) Kopia sprzed migracji albo ze starej aplikacji przechodzi TĘ SAMĄ transformację co baza (./bankMigration.ts,
- * allowlista V18): zgodne V16/V17 zostają, ustawienia bez filtra trudności,
- * zostają ustawienia i podsumowania sesji (bez treści), sesje otwarte → przerwane, paczki odrzucone.
+ * allowlista wydania `target`): zgodne sesje (V18, V16/V17) zostają aktywne, ustawienia bez filtra trudności,
+ * pozostałe sesje jako podsumowania (bez treści), sesje otwarte → przerwane, paczki odrzucone.
  * Nigdy nie przywraca treści innej wersji banku. Idempotentna dla kopii zapisanej po migracji.
  */
-export function toCurrentBankBackup(file: BackupFileV1, now: IsoDateTime): { backup: BackupFileV1; report: BankTransformReport } {
-  const t = transformToCurrentBank(file.data, now);
+export function toCurrentBankBackup(file: BackupFileV1, now: IsoDateTime, target: BankTarget = CURRENT_BANK_TARGET): { backup: BackupFileV1; report: BankTransformReport } {
+  const t = transformToCurrentBank(file.data, now, target);
   return {
     backup: {
       ...file,
@@ -870,7 +892,7 @@ function inputFileName(input: Blob | string, fileName: string | undefined): stri
  * Odczyt i pełna walidacja pliku kopii BEZ zmiany danych (S22c–S22g, S24e):
  * limit 25 MB → JSON → format/appId → `formatVersion` → schemat/enumy/daty → referencje.
  */
-export async function parseBackup(input: Blob | string, fileName?: string, now?: IsoDateTime): Promise<PersistenceResult<ValidatedBackup>> {
+export async function parseBackup(input: Blob | string, fileName?: string, now?: IsoDateTime, target: BankTarget = CURRENT_BANK_TARGET): Promise<PersistenceResult<ValidatedBackup>> {
   const name = inputFileName(input, fileName);
   const read = await readJsonInput(input, BACKUP_MAX_BYTES);
   if (!read.ok) {
@@ -878,7 +900,7 @@ export async function parseBackup(input: Blob | string, fileName?: string, now?:
     if (read.reason === 'unreadable') return fail(invalidBackup(name, ['Nie udało się odczytać wybranego pliku.']));
     return fail(invalidBackup(name, ['Plik nie jest poprawnym plikiem JSON (niepoprawna struktura).']));
   }
-  const checked = await validateBackupJson(read.json, name, now);
+  const checked = await validateBackupJson(read.json, name, now, target);
   if (!checked.ok) return checked;
   const packsInFile = isObject(read.json) && isObject(read.json.data) && Array.isArray(read.json.data.packs) ? read.json.data.packs.length : 0;
   const validated: ValidatedBackup = {

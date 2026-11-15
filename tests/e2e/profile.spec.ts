@@ -1,9 +1,11 @@
 /**
  * Profile lokalne (DECYZJE §16) w przeglądarce, na buildzie produkcyjnym:
  *  1. aktualizacja z wersji bez profili (commit `b50eb19`, bank V15 — urządzenie nieotwierane od 25.10.2026) od razu
- *     do banku V18 pod tym samym adresem: nowy SW przejmuje karty, ekran wyboru z historią bez profilu (po migracji:
- *     wynik zostaje, rozpoczęta sesja V15 przerwana aktualizacją), przypisanie przez UI, historia w profilu bez treści
- *     V15, druga karta widzi, że historia jest już przypisana; dane źródłowe nietknięte;
+ *     do bieżącego wydania treści (od 15.11.2026 „V18 + webinary”; dane przekształca jeden krok — migracja IndexedDB
+ *     v5) pod tym samym adresem: nowy SW przejmuje karty, ekran wyboru z historią bez profilu (po migracji: wynik
+ *     zostaje, rozpoczęta sesja V15 przerwana aktualizacją), przypisanie przez UI, historia w profilu bez treści
+ *     V15, baza profilu w `DB_SCHEMA_VERSION` z bieżącą wersją treści, druga karta widzi, że historia jest już
+ *     przypisana; dane źródłowe nietknięte;
  *  2. profil A → test → profil B pusty → A z wynikiem; zapamiętanie profilu; dwie karty z różnymi profilami;
  *  3. profile offline (serwer niedostępny): zmiana profilu i nauka bez sieci.
  * To nie zastępuje testu na fizycznym iPhonie (G05).
@@ -13,6 +15,8 @@ import { existsSync, mkdirSync, rmSync, symlinkSync } from 'node:fs';
 import { resolve } from 'node:path';
 import type { Page } from '@playwright/test';
 import { startDistServer, type DistServer } from '../../scripts/serve-dist.mjs';
+import { CONTENT_RELEASE } from '../../src/domain/contentRelease';
+import { DB_SCHEMA_VERSION } from '../../src/persistence/api';
 import { expect, test } from './fixtures';
 import { BASE_PATH, answer, finishTest, profileDb, readStore, reloadUntilControlled, screenshot, startTest, waitOfflineReady } from './helpers';
 
@@ -65,13 +69,13 @@ async function historyRows(page: Page): Promise<number> {
 
 test.use({ presetProfile: null });
 
-/** Odpowiedź w STAREJ aplikacji (treść V15 spoza banku V18 na dysku): pierwsza opcja. */
+/** Odpowiedź w STAREJ aplikacji (treść V15 spoza bieżącego banku na dysku): pierwsza opcja. */
 async function tapFirstOption(page: Page): Promise<void> {
   await page.locator('ul.answers > li').first().locator('button').tap();
   await expect(page.locator('section.expl')).toBeVisible();
 }
 
-test('aktualizacja z wersji bez profili (V15) do V18: przejęcie kart, historia bez profilu, przypisanie, sesja V15 przerwana', async ({ context }, testInfo) => {
+test('aktualizacja z wersji bez profili (V15) do bieżącego wydania: przejęcie kart, historia bez profilu, przypisanie, sesja V15 przerwana', async ({ context }, testInfo) => {
   test.setTimeout(400_000);
   ensurePreProfilesDist();
   const server: DistServer = await startDistServer({ dist: OLD_DIST, base: BASE_PATH, port: 0 });
@@ -114,7 +118,7 @@ test('aktualizacja z wersji bez profili (V15) do V18: przejęcie kart, historia 
     for (const p of [page, page2]) {
       await expect(p.getByRole('heading', { level: 1, name: 'Wybierz profil' })).toBeVisible({ timeout: 60_000 });
       await expect(p.getByRole('note')).toContainText('1 ukończony test');
-      // Bank V18: rozpoczęta sesja V15 nie jest wznawialna — w podsumowaniu jako test niedokończony.
+      // Bieżące wydanie: rozpoczęta sesja V15 nie jest wznawialna — w podsumowaniu jako test niedokończony.
       await expect(p.getByRole('note')).toContainText('1 test niedokończony');
       await expect(p.getByRole('note')).not.toContainText('rozpoczęta sesja');
     }
@@ -135,6 +139,9 @@ test('aktualizacja z wersji bez profili (V15) do V18: przejęcie kart, historia 
     await page.getByRole('button', { name: 'Wstecz' }).click();
     const izaSessions = await readStore<{ slots: object; legacy?: { reason: string } }>(page, 'sessions', profileDb(IZA));
     expect(izaSessions.every((x) => Object.keys(x.slots).length === 0 && x.legacy?.reason === 'bank_v18_update')).toBe(true);
+    // Baza profilu w bieżącym schemacie (v5) i na bieżącej wersji treści.
+    expect(await page.evaluate(async (name) => (await indexedDB.databases()).find((d) => d.name === name)?.version ?? 0, profileDb(IZA))).toBe(DB_SCHEMA_VERSION);
+    expect((await readStore<{ key: string; bankVersion?: string }>(page, 'meta', profileDb(IZA))).find((m) => m.key === 'content')?.bankVersion).toBe(CONTENT_RELEASE.bankVersion);
     // Dane źródłowe nietknięte (zabezpieczenie), bez duplikatów w profilu.
     expect((await readStore<{ id: string }>(page, 'sessions', LEGACY_DB)).map((s) => s.id).sort()).toEqual(before.map((s) => s.id).sort());
     expect((await readStore<{ id: string }>(page, 'sessions', profileDb(IZA))).map((s) => s.id).sort()).toEqual(before.map((s) => s.id).sort());

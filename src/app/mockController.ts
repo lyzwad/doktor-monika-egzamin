@@ -11,10 +11,11 @@
  * Do testowania stanów UI służy `simulate()` (błąd zapisu, offline, aktualizacja, przygotowanie).
  */
 import { bankSummaryOf } from '../domain/catalog';
-import { CONTENT_RELEASE } from '../domain/contentRelease';
+import { CONTENT_RELEASE, CONTENT_RELEASE_LABEL } from '../domain/contentRelease';
 import { mulberry32, shuffle, type Rng } from '../domain/rng';
 import { formatPercentPl, isPassed, passThreshold, truncatedPercent } from '../domain/scoring';
 import { DEFAULT_FREE_FLOW_CONFIG, DEFAULT_TEST_CONFIG, N_STEP, QUICK_N_VALUES } from '../domain/policies';
+import { buildSnapshot } from '../domain/snapshot';
 import { emptyUserState } from '../domain/state';
 import type {
   Allocation,
@@ -46,7 +47,7 @@ import type {
 import type { BackupFileV1, BackupSummary, ExportedFile } from '../persistence/api';
 import type { ActionResult, AppController, AppState } from './controller';
 import { HOME_ROUTE, type HistoryTab, type ResultOrigin, type ReviewFilter, type Route } from './routes';
-import { bankByDomainOf, bankInfoOf } from './screenModels';
+import { bankByDomainOf, bankInfoOf, explanationOf } from './screenModels';
 import type {
   AnswerCardVM,
   AnswerLetter,
@@ -73,7 +74,7 @@ import type {
 } from './viewModels';
 
 export interface MockControllerOptions {
-  /** Prawdziwy bank V18 (`public/data/bank-<sha12>.json`) — mock nie ma własnych danych i nie przyjmuje innej wersji. */
+  /** Prawdziwy bank bieżącego wydania treści (`CONTENT_RELEASE.bankFile`, `public/data/bank-<sha12>.json`) — mock nie ma własnych danych i nie przyjmuje innej wersji. */
   bank: RuntimeBank;
   /** ID wyłączone z aktywnej puli (retired_question_ids.json) — pomijane w każdym trybie mocka. */
   retiredIds?: readonly string[];
@@ -125,7 +126,7 @@ interface UndoState {
 /* -------------------------------------------------------------------------- */
 
 function mockCatalog(bank: RuntimeBank, retiredIds: readonly string[]): Catalog {
-  // Mock (dev/testy UI) działa wyłącznie na bieżącym banku (V18) — bez awaryjnego ładowania innego banku.
+  // Mock (dev/testy UI) działa wyłącznie na banku bieżącego wydania (`CONTENT_RELEASE.bankVersion`) — bez awaryjnego ładowania innego banku.
   if (bank.bank_version !== CONTENT_RELEASE.bankVersion) throw new Error(`Mock: oczekiwano banku ${CONTENT_RELEASE.bankVersion}, jest ${bank.bank_version}`);
   const retired = new Set(retiredIds);
   const questions: CatalogQuestion[] = bank.questions.filter((q) => !retired.has(q.id)).map((q) => ({
@@ -150,6 +151,7 @@ function mockCatalog(bank: RuntimeBank, retiredIds: readonly string[]): Catalog 
     contentCheckStatus: q.content_check_status,
     cognitiveLevel: q.cognitive_level,
     origin: { kind: 'bank', bankVersion: bank.bank_version },
+    webinarEvidence: q.origin === 'webinar' ? { quote: q.evidence_quote ?? '', unitIds: [...(q.evidence_unit_ids ?? [])], note: q.source_note_pl ?? '' } : null,
   }));
   const byId: Record<QuestionId, CatalogQuestion> = {};
   for (const q of questions) byId[q.id] = q;
@@ -181,6 +183,8 @@ function mockCatalog(bank: RuntimeBank, retiredIds: readonly string[]): Catalog 
           kindPl: s.kind_pl,
           accessPl: s.access_pl,
           checkedOn: s.checked_on,
+          fileName: s.filename ?? null,
+          webinar: s.kind === 'user_supplied_webinar_transcript',
         },
       ]),
     ),
@@ -369,39 +373,7 @@ export function createMockController(options: MockControllerOptions): MockContro
   }
 
   function snapshotOf(q: CatalogQuestion, order: OptionId[]): QuestionSnapshot {
-    const cat = catalog as Catalog;
-    const fig = (id: string | null) => {
-      const f = id ? cat.figures[id] : undefined;
-      return f ? { id: f.id, file: f.file, alt: f.alt, caption: f.caption } : null;
-    };
-    return {
-      questionId: q.id,
-      revision: q.revision,
-      bankVersion: q.origin.bankVersion,
-      familyId: q.familyId,
-      fingerprint: q.fingerprint,
-      domainId: q.domainId,
-      domainTitle: domainTitle(q.domainId),
-      topicIds: q.topicIds,
-      topics: q.topicIds.flatMap((id) => {
-        const t = cat.topics[id];
-        return t ? [{ id: t.id, title: t.title, learningObjective: t.learningObjective, pearls: t.pearls }] : [];
-      }),
-      difficulty: q.difficulty,
-      stem: q.stem,
-      options: order.map((id) => ({ id, text: q.options.find((o) => o.id === id)?.text ?? '' })),
-      correctOptionId: q.correctOptionId,
-      explanation: q.explanation,
-      sources: q.sourceIds.flatMap((id) => {
-        const s = cat.sources[id];
-        return s ? [{ id: s.id, title: s.title, url: s.url, doi: s.doi, pmid: s.pmid, kindPl: s.kindPl, accessPl: s.accessPl }] : [];
-      }),
-      sourceLocator: q.sourceLocator,
-      figure: fig(q.figureId),
-      explanationFigure: fig(q.explanationFigureId),
-      reviewStatus: q.reviewStatus,
-      approvedForQuestionKey: q.approvedForQuestionKey,
-    };
+    return buildSnapshot(catalog as Catalog, q, order);
   }
 
   function makeSlot(q: CatalogQuestion, origin: SlotOrigin, replacesSlotId: SlotId | null = null): Slot {
@@ -670,16 +642,7 @@ export function createMockController(options: MockControllerOptions): MockContro
         interactive: mode === 'live' && !attempt && !pendingAnswer && !slot.excluded,
       };
     });
-    const topic = snap.topics[0];
-    const explanation: ExplanationVM | null = attempt
-      ? {
-          text: snap.explanation,
-          figure: figureVM(snap.explanationFigure),
-          context: topic ? { topicTitle: topic.title, learningObjective: topic.learningObjective, pearls: topic.pearls } : null,
-          sources: snap.sources.map((x) => ({ id: x.id, title: x.title, kindPl: x.kindPl, accessPl: x.accessPl, url: x.url, doi: x.doi, pmid: x.pmid })),
-          sourceLocator: snap.sourceLocator,
-        }
-      : null;
+    const explanation: ExplanationVM | null = attempt ? explanationOf(snap) : null;
     const counts = validCounts(s);
     const isTest = s.kind === 'test';
     const awaiting = s.awaitingReplacement.includes(slot.id);
@@ -1153,7 +1116,7 @@ export function createMockController(options: MockControllerOptions): MockContro
     },
     updateConfigDraft(patch) {
       if (route.name !== 'config') return;
-      // Jak w rzeczywistym kontrolerze: jedna pula V18 bez poziomów (zawsze `mixed`).
+      // Jak w rzeczywistym kontrolerze: jedna pula bieżącego wydania bez poziomów (zawsze `mixed`).
       drafts = { ...drafts, [route.mode]: { ...drafts[route.mode], ...patch, difficulty: 'mixed' } };
       publish();
     },
@@ -1645,8 +1608,13 @@ export function createMockController(options: MockControllerOptions): MockContro
       publish();
     },
     async importPackFile(_file, fileName) {
-      // Jak w rzeczywistym kontrolerze: import dodatkowych pul wyłączony (wyłącznie bank V18).
-      poolFlow = { step: 'error', fileName, issues: [], messagePl: 'Aplikacja używa wyłącznie wbudowanego banku pytań V18 (700 pytań) — import dodatkowych pul pytań jest wyłączony.' };
+      // Jak w rzeczywistym kontrolerze (MSG_PACKS_DISABLED): import dodatkowych pul wyłączony, etykieta i liczba z wydania.
+      poolFlow = {
+        step: 'error',
+        fileName,
+        issues: [],
+        messagePl: `Aplikacja używa wyłącznie wbudowanego banku pytań ${CONTENT_RELEASE_LABEL} (${CONTENT_RELEASE.counts.questions} pytań) — import dodatkowych pul pytań jest wyłączony.`,
+      };
       publish();
       return failResult('PACKS_DISABLED', 'Import dodatkowych pul pytań jest wyłączony.');
     },

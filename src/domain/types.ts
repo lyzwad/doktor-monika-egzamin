@@ -213,6 +213,14 @@ export interface RuntimeSource {
   /** Zakres odczytu po polsku, np. „abstrakt”. */
   access_pl: string;
   checked_on: IsoDate | null;
+  /** Źródło webinaru (`kind` = `user_supplied_webinar_transcript`): nazwa pliku transkrypcji. */
+  filename?: string;
+  /** Źródło webinaru: SHA-256 pliku transkrypcji. */
+  sha256?: string;
+  /** Źródło webinaru: rodzaj lokalizatora (`source_unit` — fragmenty napisów). */
+  locator_type?: string;
+  /** Źródło webinaru: czy treść sprawdzono z nagraniem (zawsze `false`). */
+  audio_verified?: boolean;
 }
 
 /**
@@ -266,6 +274,14 @@ export interface RuntimeQuestion {
   content_check_status: string;
   /** Np. `mechanism`, `clinical_application`, `evidence_appraisal`; może być `null`. */
   cognitive_level: string | null;
+  /** Pytanie z transkrypcji webinaru (WB); brak pola = pytanie banku V18. */
+  origin?: 'webinar';
+  /** Pytanie WB: cytat dowodowy z automatycznych napisów. */
+  evidence_quote?: string;
+  /** Pytanie WB: identyfikatory fragmentów napisów (`Wxx-Unnnn`). */
+  evidence_unit_ids?: string[];
+  /** Pytanie WB: notatka o źródle klucza. */
+  source_note_pl?: string;
 }
 
 /* ========================================================================== */
@@ -367,6 +383,15 @@ export interface CatalogQuestion {
   contentCheckStatus: string;
   cognitiveLevel: string | null;
   origin: QuestionOrigin;
+  /** Dowód z webinaru (pytanie WB) albo `null` (pytanie V18). */
+  webinarEvidence: WebinarEvidence | null;
+}
+
+/** Dowód pytania z webinaru: cytat z automatycznych napisów, identyfikatory fragmentów, notatka o źródle klucza. */
+export interface WebinarEvidence {
+  quote: string;
+  unitIds: string[];
+  note: string;
 }
 
 export interface CatalogDomain {
@@ -393,6 +418,10 @@ export interface CatalogSource {
   kindPl: string;
   accessPl: string;
   checkedOn: IsoDate | null;
+  /** Nazwa pliku transkrypcji (źródło webinaru) albo `null`. */
+  fileName: string | null;
+  /** Źródło webinaru (`kind` = `user_supplied_webinar_transcript`): bez linku, panel wewnętrzny. */
+  webinar: boolean;
 }
 
 export interface CatalogFigure {
@@ -598,6 +627,10 @@ export interface SnapshotSource {
   pmid: string | null;
   kindPl: string;
   accessPl: string;
+  /** Nazwa pliku transkrypcji (źródło webinaru); stare snapshoty bez pola. */
+  fileName?: string | null;
+  /** Źródło webinaru; stare snapshoty bez pola (= `false`). */
+  webinar?: boolean;
 }
 
 export interface SnapshotFigure {
@@ -642,6 +675,8 @@ export interface QuestionSnapshot {
   explanationFigure: SnapshotFigure | null;
   reviewStatus: string;
   approvedForQuestionKey: boolean;
+  /** Dowód z webinaru (pytanie WB); stare snapshoty bez pola (= `null`). */
+  webinarEvidence?: WebinarEvidence | null;
 }
 
 /** Pierwsza ważna odpowiedź w slocie (jedna na slot). */

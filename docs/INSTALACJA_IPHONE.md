@@ -43,7 +43,10 @@ Postęp jest zapisany tylko na tym telefonie. Może zniknąć po usunięciu ikon
 
 Gdy jest nowa wersja, poza ekranem pytania pojawia się baner „Nowa wersja aplikacji jest gotowa” z przyciskiem **Uruchom ponownie**. Aplikacja nie przeładuje się sama w trakcie pytania. Nowa wersja uruchomi się też po zamknięciu i ponownym otwarciu aplikacji. Dane nauki zostają.
 
-**Wyjątek — nowa wersja banku pytań (np. przejście na bank V18 z 700 pytaniami, 09.11.2026):** aplikacja przeładuje się sama (także w trakcie pytania) i pokaże „Aktualizacja banku pytań…”, bo stara pula nie może pozostać dostępna. Dawne wyniki zostają w historii jako podsumowania; przerwana sesja ma opis „Przerwany aktualizacją banku pytań”. Szczegóły i instrukcja: `docs/MIGRACJA_V18.md` §4.
+**Wyjątek — nowa wersja banku pytań:** aplikacja przeładuje się sama (także w trakcie pytania) i pokaże „Aktualizacja banku pytań…”, bo telefon musi przejść na nowy bank pytań i przenieść do niego zapisane dane nauki. Otwórz ją z ikony **przy włączonym internecie** i poczekaj kilka sekund; nie trzeba usuwać ikony ani danych witryny. Jeśli widać „Aktualizacja danych czeka”, zamknij inne karty z aplikacją i dotknij „Spróbuj ponownie”. Jeśli „Aktualizacja banku pytań…” trwa ponad minutę, całkowicie zamknij aplikację (przesuń ją w górę w przełączniku aplikacji) i otwórz ją ponownie z ikony przy włączonym internecie.
+
+- **Dodatek 247 pytań z webinarów (wydanie „V18 + webinary”, 15.11.2026):** po aktualizacji Ustawienia → „O bazie pytań” pokazuje **947 pytań** i wiersz „Pytania z webinarów” z liczbą **247**. Wszystkie wyniki z V18 zostają razem z przeglądem odpowiedzi, rozpoczęty test można dokończyć przez „Kontynuuj”, a „Moje błędy” pamięta wcześniejsze pomyłki. Pytanie z webinaru ma na końcu „[webinar]”; po odpowiedzi przycisk **Źródło webinaru** pokazuje nazwę pliku transkrypcji i krótki cytat (działa też w trybie samolotowym, bez linku do nagrania). Szczegóły: `docs/MIGRACJA_WEBINARY.md` §4.
+- **Przejście na bank V18 z 700 pytaniami (09.11.2026):** dawne wyniki V15 zostały w historii jako podsumowania; przerwana sesja ma opis „Przerwany aktualizacją banku pytań”. Szczegóły: `docs/MIGRACJA_V18.md` §4.
 
 ## 6. Lista kontroli G05 — fizyczny iPhone 15
 
@@ -69,6 +72,7 @@ Status: **NOT RUN** (brak urządzenia w środowisku wykonawczym). Wypełnić prz
 | 12 | Wybranie pliku do importu | Systemowy wybór pliku, podsumowanie, zamiana danych | NOT RUN | |
 | 13 | Tryb samolotowy (p. 3) | Pełna nauka offline, zapis sesji | NOT RUN | |
 | 14 | Aktualizacja (po wdrożeniu nowej wersji) | Baner poza pytaniem; brak przeładowania w trakcie pytania; po „Uruchom ponownie” historia zachowana | NOT RUN | |
+| 14a | Aktualizacja do wydania „V18 + webinary” z ikony (telefon z V18 i historią) | Samoczynne przeładowanie z „Aktualizacja banku pytań…”; „O bazie pytań”: 947 pytań i „Pytania z webinarów” 247; dawne wyniki z przeglądem; „Kontynuuj” dokańcza rozpoczęty test; pytanie „[webinar]” z przyciskiem „Źródło webinaru” także w trybie samolotowym | NOT RUN | |
 | 15 | Przerwane pierwsze przygotowanie (wyłączenie sieci w trakcie p. 2 na świeżej instalacji) | Komunikat z „Spróbuj ponownie” (odnotować pokazany %); po ponowieniu — oraz osobno po zamknięciu i ponownym otwarciu zamiast ponowienia — aplikacja startuje w trybie samolotowym (sprawdza obejście błędu WebKit, `docs/WDROZENIE.md` p. 8) | NOT RUN | |
 | 16 | Większy tekst (Dynamic Type) | Tekst rośnie, brak ucinania i poziomego przewijania | NOT RUN | |
 | 17 | Dane Safari vs aplikacja | Odnotować, czy postęp z karty Safari jest widoczny w aplikacji z ikony | NOT RUN | |

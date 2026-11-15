@@ -9,8 +9,11 @@ import { createAppController } from '../../src/app/appController';
 import type { AppController } from '../../src/app/controller';
 import { CONTENT_RELEASE } from '../../src/domain/contentRelease';
 import type { Repository, RepositoryOptions } from '../../src/persistence/api';
+import { DB_SCHEMA_VERSION } from '../../src/persistence/api';
 import { createIndexedDbRepository } from '../../src/persistence/repository';
-import { createProfileShell, MSG_ASSIGN_OTHER } from '../../src/profiles/profileShell';
+import { MIGRATIONS } from '../../src/persistence/schema';
+import { createProfileShell, MSG_ASSIGN_OTHER, MSG_CONTENT_UPDATE } from '../../src/profiles/profileShell';
+import { seedChangeset, V18_BANK_VERSION, v18ProfileData } from '../persistence/fixtures';
 import type { ProfileShell, ShellChannel, ShellMessage } from '../../src/profiles/profileShell';
 import { LEGACY_DB_NAME, profileDbName } from '../../src/profiles/profiles';
 import type { ProfileEmail } from '../../src/profiles/profiles';
@@ -327,7 +330,41 @@ async function seedLegacy(factory: IDBFactory): Promise<{ completedId: string; o
   return { completedId, openId };
 }
 
+/** Baza historii bez profilu zapisana przez aplikację ze schematem `schemaVersion` (dane z aplikacji V18). */
+async function seedLegacyAtSchema(factory: IDBFactory, schemaVersion: number): Promise<void> {
+  const repo = createIndexedDbRepository({
+    indexedDB: factory,
+    dbName: LEGACY_DB_NAME,
+    schemaVersion,
+    migrations: MIGRATIONS.slice(0, schemaVersion),
+    contentBankVersion: V18_BANK_VERSION,
+    storageManager: null,
+  });
+  const r = await repo.commit(seedChangeset(v18ProfileData()));
+  repo.close();
+  if (!r.ok) throw new Error(r.error.code);
+}
+
 describe('dotychczasowa historia bez profilu', () => {
+  it.each([
+    [3, true],
+    [4, true],
+    [DB_SCHEMA_VERSION, false],
+  ] as const)('baza bez profilu w schemacie %i: komunikat „Aktualizacja banku pytań…” przy jej odczycie = %s', async (schemaVersion, expected) => {
+    const factory = new IDBFactory();
+    await seedLegacyAtSchema(factory, schemaVersion);
+    const t = openTab(factory);
+    const messages: string[] = [];
+    t.shell.subscribe(() => {
+      const s = t.shell.getState();
+      if (s.phase === 'loading' && s.messagePl) messages.push(s.messagePl);
+    });
+    await t.shell.start();
+    expect(t.shell.getState()).toMatchObject({ phase: 'picker' });
+    expect(messages.includes(MSG_CONTENT_UPDATE)).toBe(expected);
+    t.shell.dispose();
+  });
+
   it('ekran wyboru pokazuje historię; „Nie teraz” zostawia ją bez profilu; przypisanie przenosi wynik i wznawialną sesję V15', async () => {
     const factory = new IDBFactory();
     const legacy = await seedLegacy(factory);

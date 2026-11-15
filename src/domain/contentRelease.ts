@@ -1,36 +1,40 @@
 /**
- * JEDYNA dopuszczona wersja treści: bank V18 — komplet 700 pytań (600 V16 + 100 V17), docs/MIGRACJA_V18.md.
+ * JEDYNA dopuszczona wersja treści: wydanie „V18 + webinary” — 947 pytań = bank V18 bez zmian (700: 600 V16 + 100 V17,
+ * docs/MIGRACJA_V18.md) + 247 pytań z transkrypcji webinarów (WB, dodatek `dme-webinar-addendum`,
+ * content/webinary-2026-11-15/). Wartości generuje scripts/webinary-addendum.mjs (raport CLI).
  *
- * Aplikacja udostępnia wyłącznie ten bank: pliki są wersjonowane w nazwie (`data/bank-<sha12>.json`),
- * kontroler sprawdza SHA-256 pliku, `bank_version`, liczby oraz zgodność katalogu z allowlistą paczki
- * (src/persistence/v18Allowlist.ts). Wcześniejsze pliki banków (V15 i starsze) nie istnieją w buildzie
- * (pilnują tego scripts/check-dist.mjs, Service Worker i testy).
- * Czyste dane — bez zależności od DOM/Node (warstwa domeny).
+ * Aplikacja udostępnia wyłącznie to wydanie: pliki są wersjonowane w nazwie (`data/bank-<sha12>.json`),
+ * kontroler sprawdza SHA-256 pliku, `bank_version`, liczby (w tym liczbę pytań WB) oraz zgodność katalogu z allowlistą
+ * wydania (content/v18-webinary/allowed_question_ids.json → src/persistence/v18Allowlist.ts). Wcześniejsze pliki banków
+ * (V18 `bank-5db40505308f.json` i starsze) nie istnieją w buildzie (pilnują tego scripts/check-dist.mjs, Service Worker
+ * i testy). Czyste dane — bez zależności od DOM/Node (warstwa domeny).
  */
 
 export const CONTENT_RELEASE = Object.freeze({
   /** `bank_version` z bank.json, retired_question_ids.json, training_profile.json i allowed_question_ids.json. */
-  bankVersion: 'chatgpt-combined-v18-2026-11-09-1fb7f7546332',
-  /** SHA-256 pliku bank.json (bajt w bajt jak w paczce redakcji, MANIFEST.json). */
-  bankSha256: '5db40505308f0183ed85d5be4b2e9f8c3871d091f6ec7413f5518c88b39966f6',
-  retiredSha256: '54a05ea912817442599f73691efaf83b259df3383ea0e9b6d4fdd1148f26905e',
-  profileSha256: '2bdad504f50ec265c203e440c72aeebc06f5f94c9eba7f65198dae85594738e9',
-  /** SHA-256 allowlisty paczki (content/v18/allowed_question_ids.json → src/persistence/v18Allowlist.ts). */
-  allowedSha256: '982cf1cf97b14c711b864833153f26a79866a036208b97f50e90f00bfce8a64b',
+  bankVersion: 'dme-v18-webinary-2026-11-15-8622d52b9a42',
+  /** SHA-256 pliku bank.json (wynik scripts/webinary-addendum.mjs, bajtowo powtarzalny). */
+  bankSha256: '475c1fef009903f4151cd8234ca279ece879a89b6dabfb86e5e29045f7af171e',
+  retiredSha256: '40450ecb4f2bdba293b29a77a7b0093e8781cc40c93095fd316e6fb0e122c5ba',
+  profileSha256: 'a8bf8dbe7e3b23ed08e73a99396dcb412d842b9ebceac8d655e3775bbc8c664f',
+  /** SHA-256 allowlisty wydania (content/v18-webinary/allowed_question_ids.json → src/persistence/v18Allowlist.ts). */
+  allowedSha256: '3af684c4716ad8721d7b4f23328b7a5db08afcc898b669cdcc6266e02d6fd9f5',
   /** Ścieżki względem `base` (nazwy z prefiksem sumy kontrolnej — nowa ścieżka przy każdej wersji treści). */
-  bankFile: 'data/bank-5db40505308f.json',
-  retiredFile: 'data/retired-question-ids-54a05ea91281.json',
-  profileFile: 'data/training-profile-2bdad504f50e.json',
+  bankFile: 'data/bank-475c1fef0099.json',
+  retiredFile: 'data/retired-question-ids-40450ecb4f2b.json',
+  profileFile: 'data/training-profile-a8bf8dbe7e3b.json',
   counts: Object.freeze({
-    questions: 700,
-    basic: 400,
+    questions: 947,
+    basic: 647,
     intermediate: 200,
     advanced: 100,
     retired: 3120,
+    /** Pytania z transkrypcji webinarów (`origin: webinar`, w katalogu z `webinarEvidence`). */
+    webinar: 247,
   }),
 });
 
 export type ContentRelease = typeof CONTENT_RELEASE;
 
-/** Krótka nazwa wersji treści do komunikatów („bank V18”). */
-export const CONTENT_RELEASE_LABEL = 'V18';
+/** Krótka nazwa wersji treści do komunikatów („bank V18 + webinary”). */
+export const CONTENT_RELEASE_LABEL = 'V18 + webinary';

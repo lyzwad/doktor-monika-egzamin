@@ -1,85 +1,86 @@
 # Raport kontroli — Doktor Monika Egzamin
 
-Raport końcowy według `05_KONTROLA/01_KRYTERIA_ODBIORU.txt` (kryterium G07). Dotyczy podmiany banku na **V18 — komplet 700 pytań** (`chatgpt-combined-v18-2026-11-09-1fb7f7546332`: 600 pytań V16 + 100 pytań V17) z migracją danych lokalnych wszystkich profili. Przebieg kontroli: **09.11.2026 (Europe/Warsaw)**. Raport podaje osobno: wersje i środowisko (§1), stan kodu i buildu (§2), stan testów (§3), pulę (§4), status recenzji treści (§5), testy niewykonane i pominięte (§6), wdrożenie (§7) oraz macierz kryteriów A01–G07 (§8). Opis migracji, kopia i cofnięcie: `docs/MIGRACJA_V18.md`. Poprzedni raport (V15, 24–25.10.2026) jest w historii git tego pliku.
+Raport końcowy według `05_KONTROLA/01_KRYTERIA_ODBIORU.txt` (kryterium G07). Dotyczy wydania **„V18 + webinary” — 947 pytań** (`dme-v18-webinary-2026-11-15-8622d52b9a42`: niezmieniony bank V18 z 700 pytaniami + 247 pytań z transkrypcji webinarów jako dodatek) z migracją danych lokalnych wszystkich profili (IndexedDB v5). Przebieg kontroli: **15.11.2026 (Europe/Warsaw)**. Raport podaje osobno: wersje i środowisko (§1), stan kodu i buildu (§2), stan testów (§3), pulę (§4), status recenzji treści (§5), testy niewykonane i pominięte (§6), wdrożenie (§7) oraz macierz kryteriów A01–G07 (§8). Opis wydania, migracji, kopii i postępowania przy awarii: `docs/MIGRACJA_WEBINARY.md`. Poprzednie raporty (V15 z 24–25.10.2026, V18 z 09.11.2026) są w historii git tego pliku.
 
 PASS testu albo kontroli oznacza, że aplikacja działa zgodnie z wymaganiami i że struktura danych jest poprawna. Nie jest oceną poprawności medycznej pytań ani prognozą wyniku egzaminu.
 
 **Trzy osobne oceny:**
 
-- **Gotowość techniczna aplikacji: tak, w emulacji i lokalnie; wdrożona na produkcję (§7).** Typecheck, Vitest, build, `check-dist`, `check-offline` i e2e w WebKit „iPhone 15” oraz w Chromium (§2–§3), w tym aktualizacja zainstalowanej aplikacji z produkcji V15 (`b6f9201`) z dwoma profilami. Testu na fizycznym iPhonie (G05) nie wykonano (§6).
-- **Liczebność puli: dokładnie 700 pytań z allowlisty paczki** (600 V16 + 100 V17). Dawne cele (2000 pytań, 1000 na poziom) **nie zostały osiągnięte** i decyzją właściciela z 09.11.2026 nie obowiązują — aplikacja nie dopisuje pytań (§4, A03).
-- **Recenzja treści.** Żadne pytanie nie ma recenzji lekarskiej; scalenie V18 nie jest nową recenzją (§5).
+- **Gotowość techniczna aplikacji: tak, w emulacji i lokalnie; jeszcze niewdrożona (§7).** Typecheck, Vitest, build, `check-dist`, `check-offline` i e2e w WebKit „iPhone 15” oraz w Chromium (§2–§3), w tym aktualizacja zainstalowanej aplikacji z obecnej produkcji (`39d9d46`, V18) z dwoma profilami oraz ze starszych wersji V15 (`b6f9201`, `b50eb19`). Testu na fizycznym iPhonie (G05) nie wykonano (§6).
+- **Liczebność puli: dokładnie 947 pytań z allowlisty wydania** (700 V18 + 247 WB). Dawne cele (2000 pytań, 1000 na poziom) **nie zostały osiągnięte** i decyzją właściciela z 09.11.2026 nie obowiązują — aplikacja nie dopisuje pytań (§4, A03).
+- **Recenzja treści.** Żadne pytanie nie ma recenzji lekarskiej; 247 pytań WB ma klucz sprawdzony przez AI względem transkrypcji (napisy automatyczne), bez recenzji klinicznej; scalenie nie jest nową recenzją (§5).
 
-Zgodność raportu z repozytorium sprawdza test `tests/docs/raport-kontroli.test.ts` (projekt Vitest `docs`): sekcje, pełna macierz, status G05, liczby, wersja i SHA-256 pliku `public/data/bank-5db40505308f.json`, liczba wycofanych ID, nazwanie poziomów poniżej 1000 pytań (A03 nie może mieć PASS), opis każdego pominiętego testu e2e i adres wdrożenia.
+Zgodność raportu z repozytorium sprawdza test `tests/docs/raport-kontroli.test.ts` (projekt Vitest `docs`): sekcje, pełna macierz, status G05, liczby, wersja i SHA-256 pliku `public/data/bank-475c1fef0099.json`, liczba wycofanych ID, nazwanie poziomów poniżej 1000 pytań (A03 nie może mieć PASS), opis każdego pominiętego testu e2e i adres wdrożenia. Dokument wydania sprawdza `tests/docs/migracja-webinary.test.ts`.
 
 ## 1. Wersje i środowisko
 
 | Element | Wartość |
 |---|---|
-| Aplikacja | `doktor-monika-egzamin` 0.1.0, gałąź `feat/bank-v18-700` (Pull Request do `main`, §7) |
-| Bank pytań | `chatgpt-combined-v18-2026-11-09-1fb7f7546332`, plik `public/data/bank-5db40505308f.json` (szczegóły w §4) |
-| Paczka źródłowa | `Doktor_Monika_V18_Komplet_700_Pytan.zip`: SHA-256 wszystkich 65 plików zgodne z `SHA256SUMS.txt`; `python3 validation/validate_bank.py .` — 24/24 kontroli, `all_pass: true` (`medical_validation: false`, `production_validation: false`) |
-| System | macOS 26.6 (Darwin 25.6.0), Apple Silicon. Testy e2e z `--workers=2` (`E2E_WORKERS=2`) |
+| Aplikacja | `doktor-monika-egzamin` 0.1.0; przebieg na gałęzi `story/4` = `feat/webinary-247` z historiami 1–3 (treść, migracja v5, interfejs źródła webinaru) + historia 4 (Service Worker, e2e, dokumentacja); Pull Request do `main` (§7) |
+| Bank pytań | `dme-v18-webinary-2026-11-15-8622d52b9a42`, plik `public/data/bank-475c1fef0099.json` (szczegóły w §4) |
+| Wejścia treści | bank V18 bajt w bajt (`content/v18/bank.json`, SHA-256 `5db40505…66f6`) i dodatek `content/webinary-2026-11-15/bank_webinar_addendum.json` (`webinar-addendum-2026-11-15-2fdd243bcfc0`, SHA-256 zgodny z `MANIFEST.json`); `python3 -I content/webinary-2026-11-15/validate_addendum.py content/webinary-2026-11-15` — **PASS: 247 pytań, tryb append, unikalne ID, struktura i SHA** (walidator nie ocenia poprawności medycznej) |
+| System | macOS 26.7 (Darwin 25.6.0), Apple Silicon; w czasie przebiegu komputer obciążony testami innych projektów. Testy e2e z `--workers=2` (`E2E_WORKERS=2`), port `E2E_PORT=4184` |
 | Node.js | 24.18.1 |
 | TypeScript / Vite / vite-plugin-pwa / Vitest | 7.0.2 / 8.3.5 / 2.0.0 / 5.0.5 |
 | Playwright | 1.63.0. Projekty: WebKit (rev. 2359) z emulacją „iPhone 15” (393×852, DPR 3, dotyk) oraz Chromium (rev. 1243) w trybie mobilnym 393×852 |
-| Stare aplikacje w e2e aktualizacji | `b6f9201` (produkcja od 25.10.2026: V15 z profilami) oraz `b50eb19` (V15 bez profili) — `git archive` do `test-results/`, build z `BASE_PATH=/` |
+| Stare aplikacje w e2e aktualizacji | `39d9d46` (obecna produkcja od 09.11.2026: V18, IndexedDB v4, profile), `b6f9201` (produkcja 25.10–09.11.2026: V15 z profilami) oraz `b50eb19` (V15 bez profili) — `git archive` do `test-results/`, build z `BASE_PATH=/` |
 | Urządzenie fizyczne | **brak**: nie wykonano testu na iPhonie (G05, §6) |
 
 ## 2. Stan kodu i buildu
 
-Zmiany z 09.11.2026 (szczegóły: `docs/MIGRACJA_V18.md`). Całość przeszła niezależną recenzję (agent recenzent, bez dostępu do moich wniosków); 5 uwag dotyczących przypadków brzegowych migracji poprawiono z testami, pozostałe dotyczyły stanu sprzed ostatniego commita:
+Zmiany z 15.11.2026 (szczegóły: `docs/MIGRACJA_WEBINARY.md`; specyfikacja `_bmad-output/specs/spec-webinary-247/`). Każda z czterech historii przeszła przegląd w `bmad-build-auto` (warstwy recenzentów bez dostępu do wniosków wykonawcy):
 
-- Treść: `public/data/` zawiera wyłącznie trzy pliki V18 bajt w bajt z paczki; pliki V15 i cztery figury V15 usunięte. Allowlista paczki w `content/v18/allowed_question_ids.json`, w kodzie jako `src/persistence/v18Allowlist.ts` (`scripts/v18-allowlist.mjs`). Kontroler odrzuca bank, którego katalog nie jest równy allowliście.
-- Migracja IndexedDB v3 → v4 (`src/persistence/schema.ts`, `bankMigration.ts`) dla każdego profilu osobno, w jednej transakcji `versionchange`; ta sama transformacja przy imporcie i eksporcie kopii oraz dla automatycznych kopii bezpieczeństwa w bazie.
-- Interfejs: jedna pula bez wyboru i etykiet trudności; dawne filtry trudności czyszczone.
-- Service Worker: każdy plik w `data/` poza trzema bieżącymi → 404 (dawne banki nie wracają z pamięci przeglądarki); przejęcie kart przy zmianie wersji treści jak od V15.
+- Treść: `scripts/webinary-addendum.mjs` łączy bajtowo niezmieniony bank V18 z dodatkiem w jedno wydanie (adapter, idempotentne scalanie, konflikt ID z inną treścią przerywa budowanie, raport identycznych pytań: 0 par). `public/data/` zawiera wyłącznie trzy pliki wydania; pliki V18 przeniesione jako wejście do `content/v18/`. Allowlista wydania w `content/v18-webinary/allowed_question_ids.json`, w kodzie jako `src/persistence/v18Allowlist.ts` (947 wierszy). Kontroler odrzuca bank, którego katalog nie jest równy allowliście.
+- Migracja IndexedDB v4 → v5 (`createMigrationV5` w `src/persistence/schema.ts`, `transformToCurrentBank` z wydaniem docelowym `BankTarget` w `bankMigration.ts`) dla każdego profilu osobno, w jednej transakcji `versionchange`: sesje V18 (także otwarte i puste) zostają aktywne z nową wersją banku; próby, „Moje błędy” i zgłoszenia zostają. v4 to od teraz krok historyczny bez zmian danych (baza v3/v1 przechodzi do v5 jedną transformacją). Ta sama transformacja przy imporcie i eksporcie kopii; kopia zachowuje pola dowodu webinaru.
+- Interfejs: po odpowiedzi na pytanie WB wiersz źródła webinaru z przyciskiem „Źródło webinaru” i lokalnym panelem (plik, cytat z automatycznych napisów, zastrzeżenia) — bez żadnego linku; „O bazie pytań” z wierszem „Pytania z webinarów”; teksty z liczbami wydania z `CONTENT_RELEASE`.
+- Service Worker: bez zmian logiki — nazwy plików, SHA i wersja treści pochodzą z `CONTENT_RELEASE`, więc nowe wydanie zmienia znacznik treści i nazwę skryptu przejęcia (`dme-sw-takeover-475c1fef0099-profile-1.js`): przejęcie kart jak od V15, każdy plik w `data/` poza trzema bieżącymi (w tym pliki V18) → 404. `scripts/check-offline.mjs` czyta plik banku z `dist/dme-release.json`.
 
 | Kontrola | Komenda | Wynik |
 |---|---|---|
-| Build produkcyjny | `BASE_PATH=/ npm run build` | **PASS**: typecheck, `vite build`; precache SW 21 wpisów (2202,31 KiB), w tym `data/bank-5db40505308f.json` (1 410 659 B), lista wycofanych ID, profil i skrypt przejęcia; `dme-release.json` poza precache |
-| Statyczna kontrola `dist` | `node scripts/check-dist.mjs --dist dist --base /` | **80/80 PASS** (FAIL 0, WARN 0). Między innymi: SHA-256 banku V18, `bank_version` trzech plików, liczby 700 / 400 / 200 / 100, **ID banku = allowlista paczki (700: 600 V16 + 100 V17)**, 3120 wycofanych ID (żadne w banku), profil obejmuje każde pytanie dokładnie raz; w `data/` wyłącznie trzy pliki V18; **brak dawnych plików banków (`data/bank.json`, `data/bank-37f3980a1129.json` i pliki towarzyszące V15) w `dist`, w precache i w kodzie/JSON**; brak `figures/`; skrypt przejęcia z regułą 404 dla innych plików w `data/` |
+| Build produkcyjny | `BASE_PATH=/ npm run build` | **PASS** (15.11.2026, po scaleniu historii 1–3): typecheck, `vite build`; precache SW 21 wpisów (2699,37 KiB), w tym `data/bank-475c1fef0099.json` (1 901 801 B), lista wycofanych ID, profil i skrypt przejęcia `dme-sw-takeover-475c1fef0099-profile-1.js`; `dme-release.json` poza precache |
+| Statyczna kontrola `dist` | `node scripts/check-dist.mjs --dist dist --base /` | **87/87 PASS** (FAIL 0, WARN 0; rozmiar `dist` 2 784 515 B). Między innymi: SHA-256 banku wydania, `bank_version` trzech plików i `dme-release.json`, 947 pytań (647 / 200 / 100) zgodne z `counts`, **ID banku = allowlista wydania (947 = V18 700: 600 V16 + 100 V17, WB 247)**, 247 pytań z webinarów z oznaczeniem `[webinar]` i 17 źródeł webinarów bez url/doi/pmid, 3120 wycofanych ID (żadne w banku), profil obejmuje każde pytanie dokładnie raz; w `data/` wyłącznie trzy pliki wydania; **brak plików V18 (`data/bank-5db40505308f.json` i towarzyszące) i starszych (`data/bank.json`, pliki V15) w `dist`, w precache i w kodzie/JSON**; skrypt przejęcia z regułą 404 dla innych plików w `data/` |
 
 ## 3. Stan testów
 
 | Kontrola | Komenda | Wynik | Uwagi |
 |---|---|---|---|
 | Typy | `npm run typecheck` | **PASS** | 4 konfiguracje `tsc`: domain, app, test, node |
-| Testy jednostkowe i integracyjne | `npx vitest run` | **665/665 PASS** (57 plików; 09.11.2026, po poprawkach z recenzji) | Nowe: `tests/domain/bank-v18.test.ts` (12: wydanie, pliki, allowlista 600 + 100, treść 1:1 wszystkich 700 rekordów, fingerprinty, trudność bez reklasyfikacji), `tests/persistence/migracja-v18.test.ts` (24: profile V15/V16/V17/mieszane, niezgodna treść, nieznane ID, idempotencja, v1/v3 → v4, przerwanie po każdym z 4 magazynów, dwa profile, import kopii; przypadki brzegowe z niezależnej recenzji — pusta sesja z innego banku, dawny filtr trudności w przeniesionej sesji, stan powtórek bez dowodu zgodności lub z obcą rodziną, zgłoszenie z obcą rodziną, próba innej rewizji), `tests/app/migracja-v18.test.ts` (3: rzeczywisty kontroler), `tests/ui/pula-v18.test.tsx` (6: brak trudności w UI), test 404 w `tests/pwa/tresc-sw.test.ts`, kontrola allowlisty w `tests/app/appController.test.ts`. Usunięte: testy migracji V15 (zastąpione) |
-| E2E | `E2E_SKIP_BUILD=1 BASE_PATH=/ E2E_WORKERS=2 npx playwright test` | ****84 PASS, 2 SKIP, 0 FAIL** (86 testów w 14 plikach; 09.11.2026, 1,4–1,5 min; WebKit 41 PASS + 2 SKIP, Chromium 43 PASS; powtórzone po poprawkach z recenzji z tym samym wynikiem)** | `aktualizacja-v18.spec.ts`: stara aplikacja z produkcji (`b6f9201`) z danymi w dwóch profilach wpisanymi przez UI → podmiana `dist` pod tym samym adresem → nowy SW sam przejmuje otwartą kartę; każdy profil migruje przy własnym otwarciu (v3 → v4), wyniki i daty zostają, treść V15 znika z IndexedDB obu profili i z Cache Storage; dawne pliki banków → 404 z SW i z serwera; Test 20: **13/20 zaliczony, 12/20 niezaliczony**, runda błędów, Free Flow, odświeżenie i historia, rozdzielenie profili, start offline po aktualizacji — wyłącznie ID z allowlisty, bez powtórzeń; 0 błędów konsoli i 0 odpowiedzi ≥ 400 (poza celowymi 404 dawnych banków i nieudanym sprawdzeniem wersji w trybie offline). `profile.spec.ts`: aktualizacja z V15 bez profili (`b50eb19`) prosto do V18. Pominięcia: §6 |
-| Service Worker w przeglądarkach | `node scripts/check-offline.mjs --base /` | **54 kontrole, 0 FAIL, 2 WARN** | WARN tylko w WebKit, te same co przy poprzednim wdrożeniu: ponowienie przerwanego pierwszego przygotowania pobiera pliki od nowa; obejście w aplikacji sprawdza scenariusz 6 (PASS) |
+| Testy jednostkowe i integracyjne | `npx vitest run` | **864/864 PASS** (69 plików; 15.11.2026, 20:24, po scaleniu poprawek historii 2 i 3 z recenzji). Przy obciążonym komputerze w części wcześniejszych przebiegów 1–2 testy przekraczały limit 5 s (`tests/domain/freeflow.test.ts`, raz `tests/app/regresje-weryfikacji.test.ts`) — przekroczenia czasu, nie błędne wyniki | Nowe w tym wydaniu: `tests/domain/webinary-addendum.test.ts`, `webinary-cli.test.ts`, `bank-webinary.test.ts`, `catalog-webinar.test.ts` (scalanie, idempotencja, konflikty, 700 rekordów V18 głęboko równych wejściu, 247 WB 1:1 z dodatkiem, walidacja dowodu), `tests/persistence/migracja-webinary.test.ts` i `tests/app/migracja-webinary.test.ts` (migracja v4 → v5, dwa profile, idempotencja, przerwanie, kopia), `tests/ui/zrodlo-webinaru*.test.tsx`, `o-bazie-webinary.test.tsx`, `teksty-wydania.test.tsx` (panel źródła bez linków, liczniki), przejście SW z V18 w `tests/pwa/tresc-sw.test.ts`, `tests/docs/migracja-webinary.test.ts` |
+| E2E | `E2E_SKIP_BUILD=1 BASE_PATH=/ E2E_PORT=4184 E2E_WORKERS=2 npx playwright test` | **92 PASS, 2 SKIP, 0 FAIL** (94 testy w 15 plikach; 15.11.2026, 20:19–20:23, 4,1 min; WebKit 45 PASS + 2 SKIP, Chromium 47 PASS) | `aktualizacja-webinary.spec.ts`: stara aplikacja z obecnej produkcji (`39d9d46`, V18) z danymi w dwóch profilach wpisanymi przez UI (ukończony test z błędem, Free Flow, otwarty test ze zgłoszeniem) → podmiana `dist` pod tym samym adresem → nowy SW sam przejmuje otwartą kartę; `dme-release.json` z nową wersją; każdy profil migruje przy własnym otwarciu (v4 → v5, rekord `migration:bank-v18-webinary`, rekord V18 bez zmian); każda sesja V18 aktywna z wynikiem, slotami i nową wersją banku, bez `legacy`; próby, „Moje błędy” i zgłoszenia bez zmian; „Kontynuuj” dokańcza otwarty test (4 z 5), historia z przeglądem dawnych odpowiedzi; „O bazie pytań” — 947 i „Pytania z webinarów” 247; Test z „Moje błędy” (błędy z V18 jako pozycje obowiązkowe), Test 20 **12/20 niezaliczony**, runda błędów, Free Flow — wyłącznie ID z allowlisty, bez powtórzeń; pytanie WB z przyciskiem „Źródło webinaru”, panelem z cytatem i **0 elementów `<a>`**; pliki V18 i V15 → 404 z SW i z serwera, brak plików V18 w Cache Storage; start offline z pytaniem WB i panelem źródła; **0 błędów konsoli, 0 nieobsłużonych wyjątków strony i 0 odpowiedzi ≥ 400** (poza celowymi 404 dawnych plików i nieudanym sprawdzeniem wersji offline; komunikaty WebKit o przerwanym pobieraniu plików pomocniczych `sw.js`, `pwa-precache.json`, `dme-release.json` przy przeładowaniu karty lub bez sieci są dołączane do wyniku testu jako osobna lista — `tests/e2e/aktualizacja-pomocnicze.spec.ts`). `aktualizacja-v18.spec.ts`: z V15 (`b6f9201`) do bieżącego wydania jedną migracją v3 → v5, Test 20 13/20 zaliczony i 12/20 niezaliczony. `profile.spec.ts`: z V15 bez profili (`b50eb19`) prosto do bieżącego wydania. `dostepnosc.spec.ts` E03 na dziedzinie THER (72 rodziny). Pominięcia: §6 |
+| Service Worker w przeglądarkach | `node scripts/check-offline.mjs --base /` | **54 kontrole, 0 FAIL, 0 WARN** | Chromium i WebKit: rejestracja w scope `/`, komplet precache (21/21), start offline z `data/bank-475c1fef0099.json` (947 pytań) i fontami, aktualizacja na żądanie (`SKIP_WAITING`), odrzucona nieudana aktualizacja, przerwane pierwsze przygotowanie i obejście w aplikacji (S24a). Plik banku skrypt czyta z `dist/dme-release.json`. W przebiegu przed scaleniem historii 3, przy obciążonym komputerze, jedna kontrola WebKit S24a („Spróbuj ponownie”) przekroczyła limit 30 s; w przebiegu końcowym (ten sam `dist` co e2e) — PASS. Brak WARN (przy V18: 2 WARN w WebKit) nie oznacza zmiany w aplikacji: w tym przebiegu WebKit zachował 20/21 plików przerwanego przygotowania i dociągnął tylko brakujący — zależy to od czasu w silniku, więc w kolejnych przebiegach WARN może wrócić |
 
-Testy e2e nie czytają klucza z interfejsu: klucz pochodzi z pliku banku V18 na dysku, a zapis sprawdzają przez odczyt IndexedDB w stronie.
+Testy e2e nie czytają klucza z interfejsu: klucz pochodzi z pliku banku na dysku, a zapis sprawdzają przez odczyt IndexedDB w stronie.
 
 ## 4. Pula pytań
 
-Liczby odczytano z pliku `public/data/bank-5db40505308f.json`. Test `tests/docs/raport-kontroli.test.ts` porównuje je z tym plikiem.
+Liczby odczytano z pliku `public/data/bank-475c1fef0099.json`. Test `tests/docs/raport-kontroli.test.ts` porównuje je z tym plikiem.
 
-| Pole (`bank-5db40505308f.json`) | Wartość |
+| Pole (`bank-475c1fef0099.json`) | Wartość |
 |---|---|
-| `bank_version` | `chatgpt-combined-v18-2026-11-09-1fb7f7546332` |
-| SHA-256 pliku (bajt w bajt z paczki V18, `MANIFEST.json`) | `5db40505308f0183ed85d5be4b2e9f8c3871d091f6ec7413f5518c88b39966f6` |
-| `counts.questions` | 700 |
-| `counts.families` (rodziny = pojemność Testu „cały zakres”) | 692 |
-| `counts.by_domain.ANAT` (anatomia) | 141 |
-| `counts.by_domain.SKIN` (skóra i dermatologia) | 160 |
-| `counts.by_domain.DEV` (urządzenia) | 145 |
-| `counts.by_domain.INJ` (iniekcje) | 160 |
-| `counts.by_domain.THER` (pozostałe terapie) | 58 |
-| `counts.by_domain.SAFE` (bezpieczeństwo i prawo) | 36 |
-| `counts.by_difficulty.basic` (300 V16 + 100 V17 z technicznym placeholderem) | 400 |
+| `bank_version` | `dme-v18-webinary-2026-11-15-8622d52b9a42` |
+| SHA-256 pliku (wynik `scripts/webinary-addendum.mjs`, bajtowo powtarzalny) | `475c1fef009903f4151cd8234ca279ece879a89b6dabfb86e5e29045f7af171e` |
+| `counts.questions` | 947 |
+| `counts.families` (rodziny = pojemność Testu „cały zakres”) | 939 |
+| `counts.by_domain.ANAT` (anatomia) | 147 |
+| `counts.by_domain.SKIN` (skóra i dermatologia) | 196 |
+| `counts.by_domain.DEV` (urządzenia) | 263 |
+| `counts.by_domain.INJ` (iniekcje) | 186 |
+| `counts.by_domain.THER` (pozostałe terapie) | 72 |
+| `counts.by_domain.SAFE` (bezpieczeństwo i prawo) | 83 |
+| `counts.by_difficulty.basic` (300 V16 + 100 V17 i 247 WB z technicznym placeholderem) | 647 |
 | `counts.by_difficulty.intermediate` | 200 |
 | `counts.by_difficulty.advanced` | 100 |
 | `counts.schematic` | 0 |
-| `retired_question_ids` (plik `retired-question-ids-54a05ea91281.json`; w tym 2987 ID V15; żadne nie występuje w banku) | 3120 |
+| `counts.webinar` w `CONTENT_RELEASE` (pytania `origin: webinar`) | 247 |
+| `retired_question_ids` (plik `retired-question-ids-40450ecb4f2b.json`; te same ID co w V18, w tym 2987 ID V15; żadne nie występuje w banku) | 3120 |
 
-**Skład.** Allowlista paczki: 600 ID `V16-…` i 100 ID `V17-001`…`V17-100` — katalog aplikacji jest jej dokładnym odpowiednikiem (bez pominięć i bez ID spoza listy).
+**Skład.** Allowlista wydania: 700 ID V18 (600 `V16-…` i 100 `V17-…`, kolejność V18) oraz 247 ID `WB-…` (kolejność dodatku) — katalog aplikacji jest jej dokładnym odpowiednikiem (bez pominięć i bez ID spoza listy). Każdy z 700 rekordów V18 jest głęboko równy rekordowi z `content/v18/bank.json`. Liczby „przed + dodane = po”: `docs/MIGRACJA_WEBINARY.md` §2.
 
-**Liczebność.** Dawny cel 2000 pytań **nie został osiągnięty** (700, brakuje 1300), a dawne minimum 1000 pytań na poziom nie jest spełnione: basic 400 < 1000, intermediate 200 < 1000, advanced 100 < 1000. Oba wymogi odwołał właściciel 09.11.2026 („nie dopisuj pytań w celu spełnienia dawnych wymogów”). Aplikacja nie dopisuje ani nie przekwalifikowuje pytań. Trudność nie jest pokazywana: 100 pytań V17 ma `basic` tylko jako techniczny placeholder.
+**Liczebność.** Dawny cel 2000 pytań **nie został osiągnięty** (947, brakuje 1053), a dawne minimum 1000 pytań na poziom nie jest spełnione: basic 647 < 1000, intermediate 200 < 1000, advanced 100 < 1000. Oba wymogi odwołał właściciel 09.11.2026 („nie dopisuj pytań w celu spełnienia dawnych wymogów”). Aplikacja nie dopisuje ani nie przekwalifikowuje pytań. Trudność nie jest pokazywana: `basic` w 100 pytaniach V17 i w 247 WB to techniczny placeholder.
 
-**Profil treningowy** (`training-profile-2bdad504f50e.json`): `skin` 160, `facial_anatomy` 141, `other` 399 pytań, udziały 35/25/40 w całym zakresie (DECYZJE §6a, §7a). Przy teście o maksymalnym N (692) brakujące miejsca grup skin i facial_anatomy przechodzą na other — każda rodzina trafia do testu.
+**Profil treningowy** (`training-profile-a8bf8dbe7e3b.json`): `skin` 196, `facial_anatomy` 147, `other` 604 pytań, udziały 35/25/40 w całym zakresie (DECYZJE §6a, §7a). Przy teście o maksymalnym N (939) brakujące miejsca grup skin i facial_anatomy przechodzą na other — każda rodzina trafia do testu (`tests/domain/bank-smoke.test.ts`).
 
-**Względem poprzedniej puli** (V15, 2987 pytań, usunięta z aplikacji): 0 wspólnych ID, więc żadne pytanie V15 nie przechodzi do V18.
+**Względem poprzedniej puli** (V18, 700 pytań): wszystkie 700 pytań zostają bez zmian, dochodzi 247 WB; nic nie usunięto i niczego nie dopisano na podstawie podobieństwa.
 
 ## 5. Status recenzji treści
 
@@ -87,91 +88,90 @@ Liczby odczytano z pliku `public/data/bank-5db40505308f.json`. Test `tests/docs/
 |---|---|
 | `clinical_signoff` | false |
 | `official_exam_question_bank` | false |
-| `review_status: draft_pending_clinical_review` | 700 |
+| `review_status: draft_pending_clinical_review` | 947 |
 | `approved_for_question_key: true` | 0 |
 | `content_check_status: independently_checked_draft` | 600 |
 | `content_check_status: author_checked_draft` | 100 |
+| `content_check_status: source_checked_AI_draft` | 247 |
 | `counts.independently_checked_draft` | 600 |
 
-- Status materiału (`status_pl` z banku): „Scalona pula: 600 pytań V16 i 100 krótkich V17, bez zmian treści. Statusy kontroli odziedziczono z paczek wejściowych; scalanie nie jest nową recenzją medyczną.” Aplikacja pokazuje go w „O bazie” i w Ustawieniach.
-- To **nie jest recenzja lekarska**: wszystkie klucze są robocze. To nie jest oficjalny bank pytań PTMEiAA, a wynik w aplikacji nie jest oceną komisji egzaminacyjnej.
-- Treść V18 nie była zmieniana w aplikacji (porównanie 1:1 i przeliczone fingerprinty w `tests/domain/bank-v18.test.ts`).
+- Status materiału (`status_pl` z banku): zdania V18 o scalonej puli 600 + 100 oraz „247 pytań z transkrypcji webinarów (napisy automatyczne): klucz sprawdzony przez AI względem transkrypcji, bez recenzji klinicznej.” Aplikacja pokazuje go w „O bazie” i w Ustawieniach.
+- To **nie jest recenzja lekarska**: wszystkie klucze są robocze. Pytania WB to materiał egzaminacyjny z wykładów, a nie zweryfikowane aktualne wytyczne; cytaty pochodzą z automatycznych napisów i mogą zawierać błędy rozpoznawania mowy (`audio_verified: false`). To nie jest oficjalny bank pytań PTMEiAA, a wynik w aplikacji nie jest oceną komisji egzaminacyjnej.
+- Treść V18 nie była zmieniana (porównanie 1:1 w `tests/domain/bank-webinary.test.ts` i `bank-v18.test.ts`); treść WB jest 1:1 z dodatkiem.
 
 ## 6. Testy niewykonane i pominięte
 
 | Pozycja | Status | Powód | Co sprawdzono zamiast tego |
 |---|---|---|---|
-| G05: fizyczny iPhone w Safari i po „Do ekranu głównego”, w tym aktualizacja do V18 z ikony | **NOT RUN** | brak urządzenia w środowisku wykonawczym | emulacja WebKit „iPhone 15” w e2e (to nie jest urządzenie ani tryb standalone). Protokół: `docs/INSTALACJA_IPHONE.md` §6 (wszystkie kroki NOT RUN) |
-| `aktualizacja-v18.spec.ts`: „V18: zamknięcie karty w trakcie pobierania aktualizacji i ponowne otwarcie kończy aktualizację” w projekcie WebKit | **SKIP** | Playwright WebKit (rev. 2359): pobieranie banku przez instalujący się Service Worker, przerwane zamknięciem jedynej karty, nie kończy się ani nie zgłasza błędu — nowy SW zostaje w stanie „installing” w tym samym kontekście przeglądarki, także po ponownym otwarciu karty (diagnoza 09.11.2026). Stara aplikacja poprawnie wykrywa nową wersję i pokazuje „Aktualizacja banku pytań…”. Nie wiadomo, czy prawdziwy Safari iOS zachowuje się tak samo | w Chromium ten sam test: PASS. Główny scenariusz aktualizacji (bez przerwania) w WebKit: PASS. Zalecenie dla użytkowniczki, gdy komunikat „Aktualizacja banku pytań…” trwa ponad minutę: całkowicie zamknąć aplikację (przesunąć w górę w przełączniku aplikacji) i otworzyć ponownie przy włączonym internecie |
-| `pwa.spec.ts`: „G02 + A04: offline (context.setOffline)” w projekcie WebKit | **SKIP** | Playwright WebKit przy `context.setOffline(true)` blokuje każdą nawigację, także obsługiwaną przez Service Workera — ograniczenie narzędzia | w Chromium: PASS; w WebKit offline sprawdzają `aktualizacja-v18.spec.ts` (start offline po aktualizacji, serwer niedostępny) i `check-offline.mjs` |
-| `dostepnosc.spec.ts`: E03 (brak zastępstwa dla wcześniejszej pozycji) | wykonany | test pomija się tylko, gdy najmniejsza dziedzina ma ponad 60 rodzin; w V18 najmniejsza to SAFE z 36 rodzinami | — |
+| G05: fizyczny iPhone w Safari i po „Do ekranu głównego”, w tym aktualizacja do wydania „V18 + webinary” z ikony | **NOT RUN** | brak urządzenia w środowisku wykonawczym | emulacja WebKit „iPhone 15” w e2e (to nie jest urządzenie ani tryb standalone). Protokół: `docs/INSTALACJA_IPHONE.md` §6 (wszystkie kroki NOT RUN, w tym 14a — aktualizacja do nowego wydania) |
+| `aktualizacja-v18.spec.ts`: „V18: zamknięcie karty w trakcie pobierania aktualizacji i ponowne otwarcie kończy aktualizację” w projekcie WebKit | **SKIP** | Playwright WebKit (rev. 2359): pobieranie banku przez instalujący się Service Worker, przerwane zamknięciem jedynej karty, nie kończy się ani nie zgłasza błędu — nowy SW zostaje w stanie „installing” w tym samym kontekście przeglądarki, także po ponownym otwarciu karty (diagnoza 09.11.2026). Stara aplikacja poprawnie wykrywa nową wersję i pokazuje „Aktualizacja banku pytań…”. Nie wiadomo, czy prawdziwy Safari iOS zachowuje się tak samo | w Chromium ten sam test: PASS. Główne scenariusze aktualizacji (bez przerwania) w WebKit: `aktualizacja-webinary.spec.ts` i `aktualizacja-v18.spec.ts`. Zalecenie dla użytkowniczki, gdy komunikat „Aktualizacja banku pytań…” trwa ponad minutę: całkowicie zamknąć aplikację (przesunąć w górę w przełączniku aplikacji) i otworzyć ponownie przy włączonym internecie |
+| `pwa.spec.ts`: „G02 + A04: offline (context.setOffline)” w projekcie WebKit | **SKIP** | Playwright WebKit przy `context.setOffline(true)` blokuje każdą nawigację, także obsługiwaną przez Service Workera — ograniczenie narzędzia | w Chromium: PASS; w WebKit offline sprawdzają `aktualizacja-webinary.spec.ts` i `aktualizacja-v18.spec.ts` (start offline po aktualizacji, serwer niedostępny) oraz `check-offline.mjs` |
+| `dostepnosc.spec.ts`: E03 (brak zastępstwa dla wcześniejszej pozycji) | wykonany | test pomija się tylko, gdy najmniejsza dziedzina ma ponad 80 rodzin; w wydaniu „V18 + webinary” najmniejsza to THER z 72 rodzinami (w V18 była to SAFE z 36 — próg podniesiono z 60, aby test nie zniknął po dodaniu pytań) | — |
 | Aktualizacja w trybie standalone (aplikacja z ikony) i w karcie zamrożonej w tle | **NOT RUN** | Playwright nie emuluje trybu standalone iOS ani zamrażania kart | fallback w kodzie (`dme-release.json` przy starcie i powrocie z tła, wiadomość `DME_CONTENT_UPDATE`) — `tests/pwa/tresc-sw.test.ts` |
-| Rzeczywiste profile użytkowniczek | **NOT RUN** | dane są wyłącznie w telefonach; nie ma serwera ani kopii danych użytkowników | migracja sprawdzona na danych wpisanych przez UI produkcyjnej wersji V15 (e2e) i na danych syntetycznych V15/V16/V17/mieszanych (Vitest) |
+| Rzeczywiste profile użytkowniczek | **NOT RUN** | dane są wyłącznie w telefonach; nie ma serwera ani kopii danych użytkowników | migracja sprawdzona na danych wpisanych przez UI produkcyjnej wersji `39d9d46` (V18) i wersji V15 (e2e) oraz na danych syntetycznych (Vitest) |
+| Zgodność cytatów WB z nagraniami (odsłuch) | **NOT RUN** | poza zakresem (SPEC: bez poprawiania błędów ASR i bez linków do nagrań); cytaty są fragmentami automatycznych napisów, `audio_verified: false` | panel źródła oznacza cytat jako fragment automatycznych napisów; cytat i ID fragmentów 1:1 z dodatku (`tests/domain/bank-webinary.test.ts`) |
 | Recenzja lekarska kluczy | **NOT RUN** | poza zakresem kontroli aplikacji | status w §5 |
 
 ## 7. Wdrożenie
 
-Adres wdrożenia: **https://wiedza.doktormonika.pl/** (GitHub Pages z własną domeną, repozytorium https://github.com/lyzwad/doktor-monika-egzamin, publiczne; workflow „Publikacja na GitHub Pages” po scaleniu do `main`). Hosting rozpoznany 09.11.2026: odpowiedź `server: GitHub.com`, API Pages — `build_type: workflow`, `cname: wiedza.doktormonika.pl`, HTTPS wymuszony, certyfikat ważny do 23.01.2027; wdrożony był commit `b6f9201` (bank V15). VPS nie obsługuje tej domeny i nie był zmieniany; DNS bez zmian. Dawny adres https://lyzwad.github.io/doktor-monika-egzamin/ odpowiada `301` na nowy (przekierowanie GitHub Pages po ustawieniu własnej domeny).
+Adres wdrożenia: **https://wiedza.doktormonika.pl/** (GitHub Pages z własną domeną, repozytorium https://github.com/lyzwad/doktor-monika-egzamin, publiczne; workflow „Publikacja na GitHub Pages” po scaleniu do `main`). Dawny adres https://lyzwad.github.io/doktor-monika-egzamin/ odpowiada `301` na nowy (przekierowanie GitHub Pages po ustawieniu własnej domeny). VPS nie obsługuje tej domeny; DNS bez zmian.
 
-**Wdrożenie V18 (09.11.2026).** Pull Request https://github.com/lyzwad/doktor-monika-egzamin/pull/3 scalony (squash) jako commit `954194d`; przebieg workflow `42695955540` (20:45 UTC): testy Vitest, build, `check-dist` i deploy — **success**. Kopia sprzed wdrożenia i procedura cofnięcia: `docs/MIGRACJA_V18.md` §6.
+**Stan na 15.11.2026: wydanie „V18 + webinary” nie jest jeszcze wdrożone.** Na produkcji działa commit `39d9d46` (bank V18, 700 pytań, `0.1.0+39d9d46`). Wdrożenie nastąpi przez Pull Request z `feat/webinary-247` do `main` i workflow „Publikacja na GitHub Pages” (testy Vitest, build, `check-dist`, deploy). Historie 1 (treść) i 2 (baza v5) muszą trafić na produkcję razem — `docs/MIGRACJA_WEBINARY.md` §3. Kopia sprzed wdrożenia (lustro strony V18, pakiet git, konfiguracja Pages): `docs/MIGRACJA_WEBINARY.md` §6. Po wdrożeniu **nie wolno** cofać zmiany zwykłym `git revert` (telefony będą miały bazę v5 i sesje nowej wersji banku, których aplikacja V18 nie otworzy) — przy awarii wyłącznie poprawka „do przodu” (§6 tamtego dokumentu).
 
-Kontrola publicznego adresu po wdrożeniu (09.11.2026, ok. 21:50 CET):
+Kontrola publicznego adresu po wdrożeniu (do wykonania): `dme-release.json` z `bankVersion` `dme-v18-webinary-2026-11-15-8622d52b9a42` i `bankSha256` `475c1fef…171e`; `data/bank-475c1fef0099.json` → `200`, 947 rekordów równych allowliście; pliki V18 (`data/bank-5db40505308f.json` i towarzyszące) oraz V15 → `404`.
 
-- `dme-release.json`: `bankVersion` `chatgpt-combined-v18-2026-11-09-1fb7f7546332`, `bankSha256` `5db40505…66f6`, `appVersion` `0.1.0+954194d`;
-- `data/bank-5db40505308f.json` → `200`, SHA-256 `5db40505308f0183ed85d5be4b2e9f8c3871d091f6ec7413f5518c88b39966f6` (zgodny z paczką); **700 rekordów, 700 unikalnych ID, równe allowliście paczki: 600 V16 + 100 V17**; pliki towarzyszące V18 → `200` z sumami zgodnymi z `MANIFEST.json`;
-- dawne pliki → `404`: `data/bank.json`, `data/bank-37f3980a1129.json`, `data/retired-question-ids-83b36ff80986.json`, `data/training-profile-c0edd4ca07c2.json`, `figures/FIG-ANAT-01-p.svg` (strona 404 GitHub Pages, nie JSON ani aplikacja); `sw.js` wskazuje wyłącznie nowy bank;
-- przeglądarka na adresie produkcyjnym (świeży profil przeglądarki, Playwright): **WebKit „iPhone 15” — PASS**: wersja V18, „O bazie pytań” — 700 pytań, brak wyboru trudności, Test 20 (domyślnie 20) z 20 różnymi ID z allowlisty, wynik **13 z 20**, źródła po odpowiedzi, historia z wynikiem po otwarciu w nowej karcie, 20 prób w IndexedDB wyłącznie z ID V18, bank V18 w Cache Storage; **0 błędów konsoli, 0 odpowiedzi ≥ 400, jedyny host `wiedza.doktormonika.pl`**. **Chromium mobile — PASS** dla tych samych kroków online oraz offline: po pierwszym wczytaniu start i Free Flow bez sieci, wyłącznie pytania V18.
+**Poprzednie wdrożenie — V18 (09.11.2026).** Pull Request https://github.com/lyzwad/doktor-monika-egzamin/pull/3 scalony (squash) jako commit `954194d` (raport `39d9d46`); workflow `42695955540` — **success**. Kontrola publicznego adresu 09.11.2026: `dme-release.json` z wersją V18, bank 700 rekordów równych allowliście, dawne pliki V15 → `404`; WebKit „iPhone 15” i Chromium mobile na adresie produkcyjnym — PASS, 0 błędów konsoli, 0 odpowiedzi ≥ 400 (szczegóły w historii git tego pliku).
 
-Aktualizacji już zainstalowanej aplikacji nie da się sprawdzić na produkcji po wdrożeniu (stara wersja nie jest już serwowana) — sprawdza ją e2e `aktualizacja-v18.spec.ts` na tej samej wersji, która była na produkcji (`b6f9201`). Fizyczny iPhone: G05 **NOT RUN**.
+Aktualizacji już zainstalowanej aplikacji nie da się sprawdzić na produkcji po wdrożeniu (stara wersja nie jest już serwowana) — sprawdza ją e2e `aktualizacja-webinary.spec.ts` na tej samej wersji, która jest na produkcji (`39d9d46`). Fizyczny iPhone: G05 **NOT RUN**.
 
 ## 8. Macierz kryteriów A01–G07
 
-Wynik opiera się na przebiegach z §2–§3 (09.11.2026, bank V18). G05 pozostaje NOT RUN. PASS w emulacji przeglądarkowej nie zastępuje G05.
+Wynik opiera się na przebiegach z §2–§3 (15.11.2026, wydanie „V18 + webinary”). G05 pozostaje NOT RUN. PASS w emulacji przeglądarkowej nie zastępuje G05.
 
-Środowiska: **V** — Vitest 5.0.5; **W** — Playwright WebKit, emulacja „iPhone 15”; **C** — Playwright Chromium mobile; **D** — `check-dist.mjs`; **O** — `check-offline.mjs`; **K** — inspekcja kodu i dokumentacji; **P** — kontrola publicznego adresu (§7).
+Środowiska: **V** — Vitest 5.0.5; **W** — Playwright WebKit, emulacja „iPhone 15”; **C** — Playwright Chromium mobile; **D** — `check-dist.mjs`; **O** — `check-offline.mjs`; **K** — inspekcja kodu i dokumentacji; **P** — kontrola publicznego adresu (§7; dla tego wydania jeszcze niewykonana).
 
 | ID | Wynik | Dowód | Środowisko | Ograniczenie |
 |---|---|---|---|---|
 | A01 | PASS | `tests/ui/App.test.tsx` „Start (S01–S02)” | V, K, W | — |
 | A02 | PASS | e2e `smoke.spec.ts`; `check-dist.mjs` (manifest) | W, C, D | bez porównania pikselowego; wygląd na urządzeniu zależy od G05 |
-| A03 | PARTIAL | `tests/domain/bank-v18.test.ts` (700 = allowlista, 600 V16 + 100 V17, treść 1:1), `check-dist.mjs`, `tests/app/regresje-p3.test.ts`, `tests/ui/regresje-p3.test.tsx` | V, D, P | dawne cele 2000 pytań i 1000 na poziom niespełnione (700; basic 400, intermediate 200, advanced 100) i odwołane przez właściciela 09.11.2026 |
-| A04 | PASS | e2e `smoke.spec.ts`, `pwa.spec.ts`; `check-dist.mjs` | W, C, D | linki do źródeł otwiera tylko użytkowniczka |
-| B01 | PASS | `tests/domain/catalog.test.ts`; katalog V18 bez odrzuceń (`tests/domain/bank-v18.test.ts`) | V | — |
+| A03 | PARTIAL | `tests/domain/bank-webinary.test.ts` (947 = allowlista, 700 V18 + 247 WB, treść 1:1), `check-dist.mjs`, `tests/ui/o-bazie-webinary.test.tsx` | V, D | dawne cele 2000 pytań i 1000 na poziom niespełnione (947; basic 647, intermediate 200, advanced 100) i odwołane przez właściciela 09.11.2026 |
+| A04 | PASS | e2e `smoke.spec.ts`, `pwa.spec.ts`; `check-dist.mjs` | W, C, D | linki do źródeł otwiera tylko użytkowniczka; źródła webinarów nie mają linków |
+| B01 | PASS | `tests/domain/catalog.test.ts`, `tests/domain/catalog-webinar.test.ts`; katalog wydania bez odrzuceń (`tests/domain/bank-webinary.test.ts`) | V | — |
 | B02 | PASS | `tests/domain/answer.test.ts` „B02”; e2e `flows.spec.ts` | V, W, C | — |
 | B03 | PASS | `tests/domain/answer.test.ts` „B03”; `tests/ui/AnswerCard.test.tsx`; e2e `interactions.spec.ts` | V, W, C | tap na fizycznym ekranie zależy od G05 |
 | B04 | PASS | e2e `flow-a.spec.ts` (przed odpowiedzią brak klucza i wyjaśnienia w DOM) | V, W, C | — |
 | B05 | PASS | `tests/ui/AnswerCard.test.tsx`; e2e `flow-a.spec.ts` | V, W, C | — |
-| B06 | PASS | `tests/ui/ExplanationPanel.test.tsx`; e2e `flow-a.spec.ts` (źródło z linkiem po odpowiedzi) | V, W, C | — |
-| C01 | PASS | `tests/domain/pool.test.ts`; e2e `interactions.spec.ts` „C01” (pojemność 692, bez wyboru trudności) | V, W, C | klawiatura iOS zależy od G05 |
+| B06 | PASS | `tests/ui/ExplanationPanel.test.tsx`, `tests/ui/zrodlo-webinaru.test.tsx`; e2e `flow-a.spec.ts` (źródło z linkiem po odpowiedzi), `aktualizacja-webinary.spec.ts` (pytanie WB: przycisk „Źródło webinaru”, panel z cytatem, 0 elementów `<a>`, także offline) | V, W, C | — |
+| C01 | PASS | `tests/domain/pool.test.ts`; e2e `interactions.spec.ts` „C01” (pojemność z banku, bez wyboru trudności) | V, W, C | klawiatura iOS zależy od G05 |
 | C02 | PASS | `tests/domain/test-flow.test.ts` | V | — |
 | C03 | PASS | `tests/domain/test-flow.test.ts`; `tests/ui/QuestionScreen.test.tsx` | V | — |
-| C04 | PASS | `tests/domain/scoring.test.ts`; e2e `aktualizacja-v18.spec.ts` (13/20 zaliczony, 12/20 niezaliczony) | V, W, C | — |
-| C05 | PASS | `tests/domain/test-flow.test.ts`; sesje „Przerwany aktualizacją banku pytań” poza wykresem (`tests/persistence/migracja-v18.test.ts`) | V, W, C | — |
-| D01 | PASS | `tests/domain/retry.test.ts`; e2e `aktualizacja-v18.spec.ts` (runda błędów na V18) | V, W, C | runda błędów z sesji sprzed V18 niedostępna (`LEGACY_SESSION`) |
+| C04 | PASS | `tests/domain/scoring.test.ts`; e2e `aktualizacja-v18.spec.ts` (13/20 zaliczony, 12/20 niezaliczony), `aktualizacja-webinary.spec.ts` (12/20 niezaliczony) | V, W, C | — |
+| C05 | PASS | `tests/domain/test-flow.test.ts`; otwarty test V18 dokończony po aktualizacji (e2e `aktualizacja-webinary.spec.ts`, `tests/app/migracja-webinary.test.ts`) | V, W, C | — |
+| D01 | PASS | `tests/domain/retry.test.ts`; e2e `aktualizacja-webinary.spec.ts`, `aktualizacja-v18.spec.ts` (runda błędów na nowym wydaniu) | V, W, C | runda błędów z sesji sprzed V18 niedostępna (`LEGACY_SESSION`) |
 | D02 | PASS | `tests/domain/retry.test.ts`, `tests/domain/niezmienniki.test.ts` | V | — |
 | D03 | PASS | `tests/domain/retry.test.ts` | V | — |
-| D04 | PASS | `tests/domain/selection.test.ts`; `tests/domain/bank-smoke.test.ts` (N = 692 obejmuje każdą rodzinę) | V | — |
-| D05 | PASS | `tests/domain/freeflow.test.ts`; `tests/domain/bank-smoke.test.ts`; e2e `aktualizacja-v18.spec.ts` (Free Flow, także offline) | V, W, C | — |
-| D06 | PASS | `tests/domain/my-errors.test.ts`; `tests/app/migracja-v18.test.ts` (aktywny błąd zgodnego pytania V16 zachowany) | V, W, C | — |
+| D04 | PASS | `tests/domain/selection.test.ts`; `tests/domain/bank-smoke.test.ts` (N = 939 obejmuje każdą rodzinę) | V | — |
+| D05 | PASS | `tests/domain/freeflow.test.ts`; `tests/domain/bank-smoke.test.ts`; e2e `aktualizacja-webinary.spec.ts` (Free Flow z pytaniem WB, także offline) | V, W, C | — |
+| D06 | PASS | `tests/domain/my-errors.test.ts`; „Moje błędy” z V18 zachowane po migracji i użyte w Teście (`tests/persistence/migracja-webinary.test.ts`, e2e `aktualizacja-webinary.spec.ts`) | V, W, C | — |
 | D07 | PASS | `tests/domain/my-errors.test.ts` | V | — |
 | E01 | PASS | `tests/domain/report.test.ts` | V | — |
 | E02 | PASS | `tests/domain/report.test.ts`; e2e `flows.spec.ts` | V, W, C | — |
-| E03 | PASS | `tests/app/regresje-weryfikacji.test.ts`; e2e `dostepnosc.spec.ts` „E03” (dziedzina SAFE, 36 rodzin) | V, W, C | — |
+| E03 | PASS | `tests/app/regresje-weryfikacji.test.ts`; e2e `dostepnosc.spec.ts` „E03” (dziedzina THER, 72 rodziny) | V, W, C | — |
 | E04 | PASS | `tests/domain/report.test.ts`; e2e `flows-extra.spec.ts` | V, W, C | — |
 | E05 | PASS | `tests/domain/report.test.ts`; e2e `flows.spec.ts` | V, W, C | — |
-| E06 | PASS | `tests/domain/report.test.ts`; zgłoszenia pytań spoza V18 nieaktywne po migracji (`tests/persistence/migracja-v18.test.ts`) | V | — |
+| E06 | PASS | `tests/domain/report.test.ts`; zgłoszenia V18 aktywne po migracji (`tests/persistence/migracja-webinary.test.ts`, e2e `aktualizacja-webinary.spec.ts`) | V, W, C | — |
 | F01 | PASS | `tests/persistence/commit.test.ts`; e2e `flows.spec.ts` | V, W, C | zamknięcie aplikacji z ekranu głównego iOS zależy od G05 |
-| F02 | PASS | `tests/persistence/kopia.test.ts`; `tests/persistence/migracja-v18.test.ts` (import kopii V15/V17/mieszanej, eksport bez dawnej treści, idempotencja) | V, W, C | zapis pliku w aplikacji Pliki zależy od G05 |
-| F03 | PASS | `tests/persistence/kopia.test.ts`; automatyczne kopie bezpieczeństwa przekształcone migracją (`tests/persistence/migracja-v18.test.ts`) | V, W, C | — |
-| F04 | PASS | `tests/domain/history.test.ts`; e2e `aktualizacja-v18.spec.ts` (wyniki i daty sprzed aktualizacji w historii, bez treści) | V, W, C | przegląd treści sesji sprzed V18 celowo niedostępny |
-| F05 | PASS | `tests/domain/history.test.ts`; wykres bez zmian liczb po migracji (`tests/persistence/migracja-v18.test.ts`) | V, W, C | — |
+| F02 | PASS | `tests/persistence/kopia.test.ts`; `tests/persistence/migracja-webinary.test.ts` (kopia z V18 = migracja bazy, pola dowodu webinaru zachowane, zły typ → nieprawidłowa kopia); `tests/app/migracja-webinary.test.ts` (eksport → wczytanie) | V, W, C | zapis pliku w aplikacji Pliki zależy od G05 |
+| F03 | PASS | `tests/persistence/kopia.test.ts`; automatyczne kopie bezpieczeństwa przekształcone migracją v5 | V, W, C | — |
+| F04 | PASS | `tests/domain/history.test.ts`; e2e `aktualizacja-webinary.spec.ts` (wyniki V18 w historii z przeglądem odpowiedzi po aktualizacji) | V, W, C | przegląd treści sesji sprzed V18 celowo niedostępny |
+| F05 | PASS | `tests/domain/history.test.ts`; wykres bez zmian liczb po migracji | V, W, C | — |
 | G01 | PASS | build i `check-dist.mjs` (§2); e2e `layout.spec.ts` | D, W, C, O | — |
-| G02 | PASS | e2e `pwa.spec.ts`, `aktualizacja-v18.spec.ts` (offline po aktualizacji); `check-offline.mjs` | W, C, O | `setOffline` w WebKit: SKIP (§6); tryb samolotowy na iPhonie zależy od G05 |
-| G03 | PASS | e2e `integration.spec.ts`; e2e `aktualizacja-v18.spec.ts` (przejęcie kart, migracja profili); `tests/pwa/tresc-sw.test.ts`; `check-offline.mjs` | W, C, O, V | przerwana instalacja w WebKit: SKIP (§6); Safari iOS zależy od G05 |
-| G04 | PASS | `check-dist.mjs` (brak dawnych plików banków, brak hostów zewnętrznych); e2e `smoke.spec.ts` | D, W, C | — |
+| G02 | PASS | e2e `pwa.spec.ts`, `aktualizacja-webinary.spec.ts` i `aktualizacja-v18.spec.ts` (offline po aktualizacji); `check-offline.mjs` | W, C, O | `setOffline` w WebKit: SKIP (§6); tryb samolotowy na iPhonie zależy od G05 |
+| G03 | PASS | e2e `integration.spec.ts`; e2e `aktualizacja-webinary.spec.ts` (przejęcie karty z produkcji `39d9d46`, migracja każdego profilu, 404 plików V18); `tests/pwa/tresc-sw.test.ts`; `check-offline.mjs` | W, C, O, V | przerwana instalacja w WebKit: SKIP (§6); Safari iOS zależy od G05 |
+| G04 | PASS | `check-dist.mjs` (brak plików V18 i starszych banków, brak hostów zewnętrznych); e2e `smoke.spec.ts` | D, W, C | — |
 | G05 | NOT RUN | brak fizycznego iPhone'a; protokół `docs/INSTALACJA_IPHONE.md` §6 niewypełniony | — (brak urządzenia) | e2e w WebKit to emulacja silnika, nie urządzenie |
 | G06 | PASS | e2e `layout.spec.ts`; `tests/ui/typography.test.ts` | W, C, V | Dynamic Type i VoiceOver zależą od G05 |
-| G07 | PASS | ten raport; test `tests/docs/raport-kontroli.test.ts`; README odsyła do raportu | V, K | samoocena wykonawcy |
+| G07 | PASS | ten raport; testy `tests/docs/raport-kontroli.test.ts` i `tests/docs/migracja-webinary.test.ts`; README odsyła do raportu | V, K | samoocena wykonawcy |
 
 ## 9. Jak powtórzyć kontrolę
 
@@ -182,7 +182,8 @@ npx vitest run
 BASE_PATH=/ npm run build
 node scripts/check-dist.mjs --base /
 node scripts/check-offline.mjs --base /
-E2E_SKIP_BUILD=1 BASE_PATH=/ E2E_WORKERS=2 npx playwright test
+E2E_SKIP_BUILD=1 BASE_PATH=/ E2E_WORKERS=2 npx playwright test   # opcjonalnie E2E_PORT=<wolny port>, np. 4184 jak w §3
+python3 -I content/webinary-2026-11-15/validate_addendum.py content/webinary-2026-11-15
 ```
 
-E2E aktualizacji budują przy pierwszym uruchomieniu stare aplikacje z commitów `b6f9201` i `b50eb19` do `test-results/` (`git archive`). Po zmianie treści (`src/domain/contentRelease.ts`, `public/data/`) zaktualizuj §4–§5, inaczej test `tests/docs/raport-kontroli.test.ts` nie przejdzie.
+E2E aktualizacji budują przy pierwszym uruchomieniu stare aplikacje z commitów `39d9d46`, `b6f9201` i `b50eb19` do `test-results/` (`git archive`). Po zmianie treści (`src/domain/contentRelease.ts`, `public/data/`) zaktualizuj §4–§5 oraz `docs/MIGRACJA_WEBINARY.md` §1–§2, inaczej testy `tests/docs/` nie przejdą.

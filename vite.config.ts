@@ -27,22 +27,22 @@ const appVersion = process.env.APP_BUILD_ID ? `${packageVersion}+${process.env.A
 
 /** Lista precache (url, rewizja, rozmiar) do pomiaru postępu pierwszego przygotowania (src/pwa). */
 const PRECACHE_INFO_FILE = 'pwa-precache.json';
-/** Limit pojedynczego pliku w precache — docelowy bank (2000–3000 pytań) ma kilka MB; zapas do 16 MB. */
+/** Limit pojedynczego pliku w precache — bank bieżącego wydania (947 pytań) ma ok. 1,9 MB; zapas do 16 MB. */
 const PRECACHE_MAX_FILE_BYTES = 16 * 1024 * 1024;
-/** Pliki, bez których nauka offline nie działa — brak w precache przerywa build (bank V15 pod wersjonowaną ścieżką). */
+/** Pliki, bez których nauka offline nie działa — brak w precache przerywa build (bieżące wydanie treści pod wersjonowanymi ścieżkami). */
 const PRECACHE_REQUIRED = ['index.html', CONTENT_RELEASE.bankFile, CONTENT_RELEASE.retiredFile, CONTENT_RELEASE.profileFile];
 /** Plik wydania (wersja treści na serwerze) — poza precache, czytany bez cache (src/pwa/swController.ts). */
 const RELEASE_INFO_FILE = 'dme-release.json';
 /**
  * Skrypt Service Workera (importScripts w wygenerowanym sw.js): przejęcie kart i okien z ikony, gdy zmienia
- * się wersja TREŚCI albo epoka danych lokalnych (profile, DECYZJE §16; docs/MIGRACJA_V15.md). Nazwa zawiera skrót sumy banku i epokę — nowa wersja
+ * się wersja TREŚCI albo epoka danych lokalnych (profile, DECYZJE §16; mechanizm: docs/MIGRACJA_V15.md). Nazwa zawiera skrót sumy banku i epokę — nowa wersja
  * treści = nowy plik i inny bajtowo sw.js.
  */
 const TAKEOVER_FILE = takeoverFileName(CONTENT_RELEASE);
 
 /**
- * Plik wydania, skrypt przejęcia i kontrola katalogu `public/data` (wyłącznie trzy pliki V15 z poprawnymi
- * sumami SHA-256) — build przerywa się przy niezgodności.
+ * Plik wydania, skrypt przejęcia i kontrola katalogu `public/data` (wyłącznie trzy pliki bieżącego wydania treści
+ * z `CONTENT_RELEASE`, z poprawnymi sumami SHA-256) — build przerywa się przy niezgodności.
  */
 function contentReleasePlugin(): Plugin {
   return {
@@ -57,7 +57,7 @@ function contentReleasePlugin(): Plugin {
       ]);
       const present = readdirSync(dataDir).filter((f) => !f.startsWith('.'));
       const extra = present.filter((f) => !expected.has(f));
-      if (extra.length > 0) throw new Error(`[treść] public/data zawiera pliki spoza banku V15: ${extra.join(', ')}`);
+      if (extra.length > 0) throw new Error(`[treść] public/data zawiera pliki spoza bieżącego wydania treści: ${extra.join(', ')}`);
       for (const [file, sha] of expected) {
         const path = resolve(dataDir, file);
         if (!existsSync(path)) throw new Error(`[treść] Brak pliku ${file}`);
@@ -161,7 +161,7 @@ export default defineConfig({
       // Ikony (w tym apple-touch-icon 180) trafiają do precache przez glob *.png — bez dublowania wpisów.
       includeManifestIcons: false,
       workbox: {
-        // Shell, JS/CSS, lokalne fonty woff2, ikony PNG, figury SVG i bank V15 (data/bank-<sha12>.json + pliki towarzyszące).
+        // Shell, JS/CSS, lokalne fonty woff2, ikony PNG (oraz SVG, jeśli są w buildzie) i bieżące wydanie treści (data/bank-<sha12>.json + pliki towarzyszące).
         globPatterns: ['**/*.{html,js,css,woff2,svg,png,json}'],
         globIgnores: ['**/node_modules/**/*', PRECACHE_INFO_FILE, RELEASE_INFO_FILE],
         // Przejęcie otwartych kart i aplikacji z ikony przy zmianie wersji treści (bank pytań).

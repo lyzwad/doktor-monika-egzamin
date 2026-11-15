@@ -26,10 +26,11 @@ function explanation(over: Partial<ExplanationVM> = {}): ExplanationVM {
     figure: null,
     context: { topicTitle: 'Warstwy twarzy', learningObjective: 'Przełożyć model warstw na relacje końcówki narzędzia.', pearls: ['SMAS ma regionalnie różną budowę.', 'Przestrzeń potencjalna nie jest pustą jamą.'] },
     sources: [
-      { id: 'A01', title: 'Anatomy of the Facial Glideplanes', kindPl: 'badanie oryginalne', accessPl: 'abstrakt', url: 'https://pubmed.ncbi.nlm.nih.gov/37747400/', doi: '10.1097/PRS.0000000000011078', pmid: '37747400' },
-      { id: 'A30', title: 'Facial layers review', kindPl: 'przegląd', accessPl: 'pełny tekst', url: 'javascript:alert(1)', doi: null, pmid: null },
+      { id: 'A01', title: 'Anatomy of the Facial Glideplanes', kindPl: 'badanie oryginalne', accessPl: 'abstrakt', url: 'https://pubmed.ncbi.nlm.nih.gov/37747400/', doi: '10.1097/PRS.0000000000011078', pmid: '37747400', webinar: false, fileName: null },
+      { id: 'A30', title: 'Facial layers review', kindPl: 'przegląd', accessPl: 'pełny tekst', url: 'javascript:alert(1)', doi: null, pmid: null, webinar: false, fileName: null },
     ],
     sourceLocator: 'A30: indeksowany fragment o pięciu warstwach; A01: abstrakt.',
+    webinarEvidence: null,
     ...over,
   };
 }
