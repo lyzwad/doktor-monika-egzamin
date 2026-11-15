@@ -1,91 +1,38 @@
 /**
- * Aktualizacja ZAINSTALOWANEJ aplikacji z produkcji (commit `b6f9201` — wiedza.doktormonika.pl od 25.10.2026,
- * bank V15, profile lokalne) do banku V18 (700 pytań) pod tym samym adresem — docs/MIGRACJA_V18.md:
+ * Aktualizacja ZAINSTALOWANEJ aplikacji z produkcji V15 (commit `b6f9201` — wiedza.doktormonika.pl 25.10–09.11.2026,
+ * bank V15, profile lokalne; urządzenie nieotwierane od tamtej pory) do BIEŻĄCEGO wydania treści pod tym samym adresem
+ * (od 09.11.2026 V18 — docs/MIGRACJA_V18.md; od 15.11.2026 „V18 + webinary” — docs/MIGRACJA_WEBINARY.md):
  *  1. stara aplikacja (zbudowana z commita do test-results/, `git archive`): dwa profile z danymi wpisanymi przez UI
  *     (Monika: ukończony test, zakończony Free Flow, otwarty test ze zgłoszeniem; Iza: ukończony test);
  *  2. podmiana `dist` (ten sam adres) — nowy Service Worker przejmuje otwarte karty sam (bez czyszczenia danych);
- *  3. każdy profil migruje przy własnym otwarciu (v3 → v4); wyniki liczbowe i daty zostają, treść V15 znika
- *     z IndexedDB obu profili i z Cache Storage; dawne pliki banków → 404 (Service Worker i serwer);
- *  4. nowa nauka wyłącznie z 700 pytań V18: Test 20 — 13/20 zaliczony, 12/20 niezaliczony (próg 65%), runda błędów,
+ *  3. każdy profil migruje przy własnym otwarciu (v3 → `DB_SCHEMA_VERSION`: dane przekształca jeden krok — migracja
+ *     v5, `migration:bank-v18-webinary` w `meta`; v4 to krok historyczny bez zmian danych); wyniki liczbowe i daty
+ *     zostają, treść V15 znika z IndexedDB obu profili i z Cache Storage; dawne pliki banków → 404 (SW i serwer);
+ *  4. nowa nauka wyłącznie z allowlisty bieżącego wydania: Test 20 — 13/20 zaliczony, 12/20 niezaliczony (próg 65%), runda błędów,
  *     Free Flow, odświeżenie i historia, start offline po aktualizacji; brak błędów konsoli i odpowiedzi ≥ 400;
  *  5. zamknięcie karty w trakcie pobierania aktualizacji i ponowne otwarcie kończy aktualizację.
  * To nie zastępuje testu na fizycznym iPhonie (G05): emulacja WebKit to nie Safari iOS z ekranu głównego.
  */
-import { execFileSync } from 'node:child_process';
-import { existsSync, mkdirSync, renameSync, rmSync, symlinkSync } from 'node:fs';
-import { resolve } from 'node:path';
-import type { BrowserContext, ConsoleMessage, Page } from '@playwright/test';
+import type { Page } from '@playwright/test';
 import { startDistServer, type DistServer } from '../../scripts/serve-dist.mjs';
 import { CONTENT_RELEASE } from '../../src/domain/contentRelease';
 import { DB_SCHEMA_VERSION } from '../../src/persistence/api';
+import { BANK_MIGRATION_ID, BANK_MIGRATION_ID_V18 } from '../../src/persistence/bankMigration';
 import { V18_ALLOWED } from '../../src/persistence/v18Allowlist';
+import { NEW_DIST, attachNetwork, cacheUrls, chooseProfile, collectProblems, dumpDb, ensureOldDist, ensureProfile, waitControlled } from './aktualizacja';
 import { expect, test } from './fixtures';
 import { BANK, BASE_PATH, answer, currentQuestion, next, profileDb } from './helpers';
 
 const PROD_REF = 'b6f9201';
-const OLD_SRC = resolve(process.cwd(), 'test-results', 'zrodlo-produkcja-v15');
-const OLD_DIST = resolve(process.cwd(), 'test-results', 'dist-produkcja-v15');
-const NEW_DIST = resolve(process.cwd(), 'dist');
 const MONIKA = 'monika@doktormonika.pl';
 const IZA = 'iza@doktormonika.pl';
 const V15_BANK_FILE = 'data/bank-37f3980a1129.json';
 const OLD_DATA_FILES = ['data/bank.json', V15_BANK_FILE, 'data/retired-question-ids-83b36ff80986.json', 'data/training-profile-c0edd4ca07c2.json'];
 const ALLOWED = new Set(V18_ALLOWED.map(([id]) => id));
-const V18_STEMS = new Set(BANK.questions.map((q) => q.stem_pl.trim()));
-
-/**
- * Build wdrożonej wersji (raz na przebieg): `git archive` → vite build z tym samym BASE_PATH. Każdy proces testów
- * buduje we własnym katalogu i podmienia wynik atomowo (`rename`) — równoległe workery się nie zderzają.
- */
-function ensureOldDist(): void {
-  const ready = (): boolean => existsSync(resolve(OLD_DIST, 'sw.js')) && existsSync(resolve(OLD_DIST, V15_BANK_FILE));
-  if (ready()) return;
-  const src = `${OLD_SRC}-${process.pid}`;
-  const out = `${OLD_DIST}-${process.pid}`;
-  rmSync(src, { recursive: true, force: true });
-  mkdirSync(src, { recursive: true });
-  const archive = execFileSync('git', ['archive', PROD_REF], { maxBuffer: 256 * 1024 * 1024 });
-  execFileSync('tar', ['-x', '-C', src], { input: archive });
-  symlinkSync(resolve(process.cwd(), 'node_modules'), resolve(src, 'node_modules'));
-  execFileSync(process.execPath, [resolve(src, 'node_modules/vite/bin/vite.js'), 'build', '--outDir', out, '--emptyOutDir', '--logLevel', 'warn'], {
-    cwd: src,
-    env: { ...process.env, BASE_PATH },
-    stdio: 'pipe',
-  });
-  try {
-    if (!ready()) renameSync(out, OLD_DIST);
-  } catch {
-    /* inny worker zdążył pierwszy — jego build jest identyczny */
-  }
-  rmSync(src, { recursive: true, force: true });
-}
-
-async function waitControlled(page: Page): Promise<void> {
-  await page.waitForFunction(async () => (await navigator.serviceWorker.getRegistration())?.active?.state === 'activated', undefined, { timeout: 60_000 });
-  for (let i = 0; i < 8; i++) {
-    if (await page.evaluate(() => navigator.serviceWorker.controller !== null)) return;
-    await page.reload();
-    await page.waitForTimeout(300 * (i + 1));
-  }
-  throw new Error('Strona nie jest kontrolowana przez Service Workera');
-}
-
-async function chooseProfile(page: Page, email: string): Promise<void> {
-  await expect(page.getByRole('heading', { level: 1, name: 'Wybierz profil' })).toBeVisible({ timeout: 60_000 });
-  await page.getByRole('button', { name: email }).click();
-  await expect(page.getByLabel('Aktywny profil')).toContainText(email, { timeout: 60_000 });
-}
-
-/** Profil karty: ekran wyboru albo start innego profilu (zapamiętany ostatni) → przełączenie na `email`. */
-async function ensureProfile(page: Page, email: string): Promise<void> {
-  const picker = page.getByRole('heading', { level: 1, name: 'Wybierz profil' });
-  const active = page.getByLabel('Aktywny profil');
-  await expect(picker.or(active)).toBeVisible({ timeout: 90_000 });
-  if (await picker.isVisible()) return chooseProfile(page, email);
-  if ((await active.textContent())?.includes(email)) return;
-  await active.getByRole('button', { name: 'Zmień profil' }).click();
-  await chooseProfile(page, email);
-}
+/** Treści pytań bieżącego banku (wydanie z V18 — żadna treść V15 nie może do niego należeć). */
+const CURRENT_STEMS = new Set(BANK.questions.map((q) => q.stem_pl.trim()));
+/** Build wdrożonej wersji V15 (`test-results/dist-produkcja-v15`, aktualizacja.ts). */
+let OLD_DIST = '';
 
 /** Odpowiedź w STAREJ aplikacji (treść V15 spoza banku na dysku): pierwsza opcja. */
 async function tapFirstOption(page: Page): Promise<void> {
@@ -131,73 +78,6 @@ async function oldDataMonika(page: Page): Promise<string> {
   return score;
 }
 
-interface Dump {
-  version: number;
-  stores: Record<string, unknown[]>;
-}
-
-/** Odczyt CAŁEJ bazy (bez tworzenia: brak bazy → wersja 0). */
-async function dumpDb(page: Page, dbName: string): Promise<Dump> {
-  return page.evaluate(async (name) => {
-    const names = (await indexedDB.databases()).map((d) => d.name);
-    if (!names.includes(name)) return { version: 0, stores: {} };
-    return new Promise<Dump>((ok, fail) => {
-      const req = indexedDB.open(name);
-      req.onerror = () => fail(req.error);
-      req.onsuccess = () => {
-        const db = req.result;
-        const storeNames = [...db.objectStoreNames];
-        const stores: Record<string, unknown[]> = {};
-        const version = db.version;
-        if (storeNames.length === 0) {
-          db.close();
-          ok({ version, stores });
-          return;
-        }
-        const tx = db.transaction(storeNames, 'readonly');
-        for (const n of storeNames) {
-          const r = tx.objectStore(n).getAll();
-          r.onsuccess = () => {
-            stores[n] = r.result as unknown[];
-          };
-        }
-        tx.oncomplete = () => {
-          db.close();
-          ok({ version, stores });
-        };
-      };
-    });
-  }, dbName);
-}
-
-async function cacheUrls(page: Page): Promise<string[]> {
-  return page.evaluate(async () => {
-    const out: string[] = [];
-    for (const name of await caches.keys()) for (const r of await (await caches.open(name)).keys()) out.push(r.url);
-    return out;
-  });
-}
-
-function collectProblems(context: BrowserContext): { console: string[]; http: string[]; paused: boolean } {
-  const problems = { console: [] as string[], http: [] as string[], paused: false };
-  const attach = (p: Page): void => {
-    p.on('console', (m: ConsoleMessage) => {
-      if (problems.paused) return;
-      // Celowe zapytania testu o dawne pliki banków (404) przeglądarka też zapisuje w konsoli — pomijamy tylko je.
-      if (m.type() === 'error' && !OLD_DATA_FILES.some((f) => m.location().url.includes(f))) problems.console.push(`${p.url()}: ${m.text()} [${m.location().url}]`);
-    });
-    p.on('response', (r) => {
-      if (problems.paused) return;
-      // Celowe 404 dawnych plików banków sprawdzamy osobno.
-      if (r.status() >= 400 && !OLD_DATA_FILES.some((f) => r.url().includes(f))) problems.http.push(`${r.status()} ${r.url()}`);
-    });
-  };
-  // Karty otwarte przed aktualizacją (przejmowane przez nowy Service Worker) i otwierane później.
-  for (const p of context.pages()) attach(p);
-  context.on('page', attach);
-  return problems;
-}
-
 type OldSession = { id: string; status: string; bankVersion: string; result: { correct: number; targetN: number } | null; createdAt: string; slots: Record<string, { snapshot: { stem: string } }> };
 type NewSession = { id: string; status: string; bankVersion: string; result: { correct: number; targetN: number } | null; createdAt: string; slots: object; plan: unknown[]; legacy?: { reason: string; previousBankVersion: string } | null };
 
@@ -209,7 +89,7 @@ async function newTest20(page: Page, correctCount: number): Promise<void> {
   await page.getByRole('button', { name: 'Rozpocznij test' }).click();
   const seen = new Set<string>();
   for (let i = 0; i < 20; i++) {
-    const q = await currentQuestion(page); // rzuca, gdy treść spoza banku V18
+    const q = await currentQuestion(page); // rzuca, gdy treść spoza bieżącego banku
     expect(ALLOWED.has(q.id)).toBe(true);
     expect(seen.has(q.id)).toBe(false);
     seen.add(q.id);
@@ -226,10 +106,10 @@ test.use({ presetProfile: null });
 
 test.beforeAll(() => {
   test.setTimeout(400_000);
-  ensureOldDist();
+  OLD_DIST = ensureOldDist(PROD_REF, 'produkcja-v15', V15_BANK_FILE);
 });
 
-test('V18: aktualizacja z produkcji V15 (profile) — przejęcie kart, migracja każdego profilu, wyłącznie 700 pytań V18, offline', async ({ context }) => {
+test('V18: aktualizacja z produkcji V15 (profile) do bieżącego wydania — przejęcie kart, migracja każdego profilu (v3 → v5), wyłącznie allowlista wydania, offline', async ({ context }, testInfo) => {
   test.setTimeout(900_000);
   const server: DistServer = await startDistServer({ dist: OLD_DIST, base: BASE_PATH, port: 0 });
   try {
@@ -254,14 +134,14 @@ test('V18: aktualizacja z produkcji V15 (profile) — przejęcie kart, migracja 
     expect([...oldM, ...oldI].every((s) => s.bankVersion === 'chatgpt-editorial-v15-2026-10-24-f020a0440df8')).toBe(true);
     const oldStems = [...oldM, ...oldI].flatMap((s) => Object.values(s.slots).map((x) => x.snapshot.stem.trim()));
     expect(oldStems.length).toBeGreaterThan(5);
-    expect(oldStems.some((stem) => V18_STEMS.has(stem))).toBe(false);
+    expect(oldStems.some((stem) => CURRENT_STEMS.has(stem))).toBe(false);
     expect((await cacheUrls(page)).some((u) => u.includes(V15_BANK_FILE))).toBe(true);
     await page.evaluate(() => {
       (window as unknown as { __dmeOld?: number }).__dmeOld = 1;
     });
 
-    // „Wdrożenie” V18 pod tym samym adresem; od tej chwili zbieramy błędy konsoli i odpowiedzi ≥ 400.
-    const problems = collectProblems(context);
+    // „Wdrożenie” bieżącego wydania pod tym samym adresem; od tej chwili zbieramy błędy konsoli i odpowiedzi ≥ 400.
+    const problems = collectProblems(context, OLD_DATA_FILES);
     server.hooks.dist = NEW_DIST;
     const page2 = await context.newPage();
     await page2.goto(server.url);
@@ -290,11 +170,16 @@ test('V18: aktualizacja z produkcji V15 (profile) — przejęcie kart, migracja 
       expect(s).toMatchObject({ createdAt: old.createdAt, slots: {}, plan: [], legacy: { reason: 'bank_v18_update', previousBankVersion: old.bankVersion } });
       if (old.status === 'completed') expect(s.result).toEqual(old.result);
     }
-    // Brak dawnej treści w obu bazach (sesje, blokady, kopie bezpieczeństwa); meta = V18.
+    // Brak dawnej treści w obu bazach (sesje, blokady, kopie bezpieczeństwa); meta = bieżące wydanie.
+    // Jedna transformacja danych: migracja v5 z bazy v3 (rekord `migration:bank-v18-webinary`); historyczny krok v4
+    // nie zmienia danych, więc rekordu `migration:bank-v18` nie ma.
     for (const dump of [monikaAfter, izaAfter]) {
       const text = JSON.stringify(dump.stores);
       for (const stem of oldStems) expect(text).not.toContain(stem.slice(0, 50));
-      expect((dump.stores.meta as { key: string; bankVersion?: string }[]).find((m) => m.key === 'content')?.bankVersion).toBe(CONTENT_RELEASE.bankVersion);
+      const meta = dump.stores.meta as { key: string; bankVersion?: string; migrationId?: string; fromSchemaVersion?: number; toSchemaVersion?: number }[];
+      expect(meta.find((m) => m.key === 'content')?.bankVersion).toBe(CONTENT_RELEASE.bankVersion);
+      expect(meta.find((m) => m.key === `migration:${BANK_MIGRATION_ID}`)).toMatchObject({ migrationId: BANK_MIGRATION_ID, fromSchemaVersion: 3, toSchemaVersion: DB_SCHEMA_VERSION });
+      expect(meta.some((m) => m.key === `migration:${BANK_MIGRATION_ID_V18}`)).toBe(false);
       expect(dump.stores.questionStats).toEqual([]);
     }
 
@@ -328,7 +213,7 @@ test('V18: aktualizacja z produkcji V15 (profile) — przejęcie kart, migracja 
     await newTest20(page2, 12);
     await expect(page2.locator('.result-card')).toContainText('60');
     await expect(page2.locator('.result-card')).toContainText(/nieosiągnięt|Niezaliczon/i);
-    // Runda błędów: błędy ostatniej rundy (8) uzupełnione pytaniami z puli V18.
+    // Runda błędów: błędy ostatniej rundy (8) uzupełnione pytaniami z puli bieżącego wydania.
     await page2.getByRole('button', { name: /Uwzględnij błędy/ }).click();
     await page2.getByRole('dialog').getByRole('button', { name: 'Rozpocznij rundę' }).click();
     await expect(page2.locator('.q-meta')).toContainText('Powtórka · runda 2');
@@ -337,7 +222,7 @@ test('V18: aktualizacja z produkcji V15 (profile) — przejęcie kart, migracja 
     await page2.getByRole('button', { name: 'Przerwij test' }).click();
     await page2.getByRole('dialog').getByRole('button', { name: 'Kontynuuj później' }).click();
 
-    // Free Flow: wyłącznie V18.
+    // Free Flow: wyłącznie allowlista bieżącego wydania.
     await page2.locator('.mode-card', { hasText: 'Free Flow' }).click();
     await page2.getByRole('button', { name: 'Rozpocznij', exact: true }).click();
     for (let i = 0; i < 3; i++) {
@@ -367,7 +252,7 @@ test('V18: aktualizacja z produkcji V15 (profile) — przejęcie kart, migracja 
     await expect(page.locator('ul[aria-label="Lista testów"]')).toContainText(izaScore);
     await page.getByRole('button', { name: 'Wstecz' }).click();
 
-    // F — offline po aktualizacji: start z precache i nauka wyłącznie z V18 (Free Flow bez sieci).
+    // F — offline po aktualizacji: start z precache i nauka wyłącznie z bieżącego wydania (Free Flow bez sieci).
     // Bez sieci nieudane sprawdzenie `dme-release.json` jest oczekiwane — błędów konsoli nie zbieramy w tym kroku.
     problems.paused = true;
     server.hooks.offline = true;
@@ -382,6 +267,7 @@ test('V18: aktualizacja z produkcji V15 (profile) — przejęcie kart, migracja 
     }
     server.hooks.offline = false;
 
+    await attachNetwork(testInfo, problems);
     expect(problems.console, problems.console.join('\n')).toEqual([]);
     expect(problems.http, problems.http.join('\n')).toEqual([]);
   } finally {
@@ -418,7 +304,7 @@ test('V18: zamknięcie karty w trakcie pobierania aktualizacji i ponowne otwarci
     await expect.poll(async () => p2.evaluate(async () => (await navigator.serviceWorker.getRegistration())?.active?.scriptURL ?? ''), { timeout: 60_000 }).toContain('sw.js');
     await expect.poll(async () => (await cacheUrls(p2)).some((u) => u.includes(V15_BANK_FILE)), { timeout: 120_000, intervals: [1000] }).toBe(false);
     await expect.poll(async () => (await cacheUrls(p2)).some((u) => u.includes(CONTENT_RELEASE.bankFile)), { timeout: 60_000 }).toBe(true);
-    // Profil (z karty albo z wyboru) otwiera się na V18; baza migruje do v4 bez dawnej treści.
+    // Profil (z karty albo z wyboru) otwiera się na bieżącym wydaniu; baza migruje (v3 → v5) bez dawnej treści.
     await ensureProfile(p2, MONIKA);
     await expect.poll(async () => (await dumpDb(p2, profileDb(MONIKA))).version, { timeout: 60_000 }).toBe(DB_SCHEMA_VERSION);
     const sessions = (await dumpDb(p2, profileDb(MONIKA))).stores.sessions as NewSession[];

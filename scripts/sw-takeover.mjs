@@ -9,8 +9,8 @@
  *    `DME_CONTENT_UPDATE` do okien (nowa aplikacja przeładowuje się sama) i `client.navigate(client.url)`
  *    (przeładowanie także STAREGO kodu, który wiadomości nie zna). `navigate` nie jest awaitowane w
  *    `waitUntil` — żądanie nawigacji czeka na zakończenie aktywacji;
- *  - fetch: każdy plik w `data/` w scope inny niż trzy pliki bieżącej wersji treści (dawne banki: `data/bank.json`,
- *    V15 `data/bank-37f3980a1129.json` i pliki towarzyszące, nieznane wersje) → 404 (bez sieci, bez pamięci HTTP
+ *  - fetch: każdy plik w `data/` w scope inny niż trzy pliki bieżącej wersji treści (dawne banki: `data/bank.json`
+ *    oraz pliki każdego wcześniejszego i nieznanego wydania treści) → 404 (bez sieci, bez pamięci HTTP
  *    przeglądarki i bez HTML aplikacji);
  *  - stary precache tej aplikacji usuwa Workbox przy aktywacji (wpisy spoza nowego manifestu, tylko cache
  *    `workbox-precache-v2-<scope>` tej rejestracji); `cleanupOutdatedCaches` usuwa stare formaty Workboxa.
@@ -49,7 +49,7 @@ export function takeoverScript(release) {
   const MARKER_CACHE = 'dme-content-marker-v1:' + scope;
   const VERSION_KEY = new URL('__dme-content-version', scope).href;
   const PENDING_KEY = new URL('__dme-content-takeover', scope).href;
-  // Dawne pliki banków (data/bank.json do v0.1.0, wersjonowane pliki V15 i każda inna wersja) nie są serwowane
+  // Dawne pliki banków (data/bank.json do v0.1.0 i wersjonowane pliki każdego innego wydania treści) nie są serwowane
   // w scope aplikacji — także z pamięci HTTP przeglądarki. Dozwolone są wyłącznie trzy pliki bieżącej treści.
   const DATA_PREFIX = new URL('data/', scope).href;
   const CURRENT_DATA = new Set(CONTENT.dataFiles.map((f) => new URL(f, scope).href));

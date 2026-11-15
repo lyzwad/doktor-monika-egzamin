@@ -33,9 +33,9 @@ Nie ma hasła ani rejestracji, a aplikacja nie wysyła żadnych wiadomości. Pro
   - dla pytań obecnych w obu źródłach statystyki są odtwarzane z połączonego dziennika prób (`recomputeStat`);
   - zapisuje rekord `merge:unassigned`.
 
-  Ponowienie po przerwaniu (rejestr `assigning`) niczego nie duplikuje. Baza sprzed profili `doktor-monika-egzamin` zostaje nietknięta jako zabezpieczenie. Migracja treści (od V18: schemat 4, `docs/MIGRACJA_V18.md`) działa dla niej tak samo jak dla baz profili.
-- Schemat IndexedDB jest w wersji 3, bez zmian danych. Kod sprzed profili nie otworzy takiej bazy, a jego otwarte połączenie zostaje zamknięte. Skrypt przejęcia Service Workera ma epokę danych `profile-1` (`dme-sw-takeover-<sha12>-profile-1.js`), więc po wdrożeniu otwarte karty i aplikacja z ikony przeładowują się jednorazowo na nową wersję.
-- Kopia ma format 2 i pole `profileEmail` (adres z listy, znormalizowany przez `trim().toLowerCase()`). Format 1 nadal się wczytuje, z wyborem profilu docelowego. Przy imporcie obowiązuje allowlista V18 (`docs/MIGRACJA_V18.md` §3).
+  Ponowienie po przerwaniu (rejestr `assigning`) niczego nie duplikuje. Baza sprzed profili `doktor-monika-egzamin` zostaje nietknięta jako zabezpieczenie. Migracja treści (od V18: schemat 4, `docs/MIGRACJA_V18.md`; od wydania „V18 + webinary”: schemat 5, `docs/MIGRACJA_WEBINARY.md`) działa dla niej tak samo jak dla baz profili.
+- Profile wprowadził schemat IndexedDB w wersji 3, bez zmian danych (obecnie schemat 5 — `docs/MIGRACJA_WEBINARY.md` §3). Kod sprzed profili nie otworzy takiej bazy, a jego otwarte połączenie zostaje zamknięte. Skrypt przejęcia Service Workera ma epokę danych `profile-1` (`dme-sw-takeover-<sha12>-profile-1.js`), więc po wdrożeniu otwarte karty i aplikacja z ikony przeładowują się jednorazowo na nową wersję.
+- Kopia ma format 2 i pole `profileEmail` (adres z listy, znormalizowany przez `trim().toLowerCase()`). Format 1 nadal się wczytuje, z wyborem profilu docelowego. Przy imporcie obowiązuje allowlista bieżącego wydania (947 pytań, `docs/MIGRACJA_WEBINARY.md` §3; wcześniej allowlista V18, `docs/MIGRACJA_V18.md` §3).
 - Nie ma backendu, logowania, Supabase ani synchronizacji. Wszystko działa offline po pełnym pobraniu aplikacji.
 
 Testy: `tests/app/profile.test.ts`, `tests/persistence/profile.test.ts`, `tests/ui/ProfileScreens.test.tsx` oraz e2e `tests/e2e/profile.spec.ts`. Ten ostatni obejmuje aktualizację z wersji bez profili (`b50eb19`), profile A/B, dwie karty i działanie offline.

@@ -27,7 +27,10 @@ Usunięte z aplikacji: trzy pliki V15 (`bank-37f3980a1129.json` i pliki towarzys
 
 ## 3. Migracja danych w telefonie (każdy profil osobno)
 
-Każdy profil ma własną bazę IndexedDB. Migracja wykonuje się przy pierwszym otwarciu profilu w nowej wersji: baza przechodzi z wersji 3 na 4 (`src/persistence/schema.ts`, `createMigrationV4`) w **jednej transakcji `versionchange`**, przez funkcję `transformToCurrentBank` (`src/persistence/bankMigration.ts`). Tę samą funkcję stosuje wczytanie kopii danych i eksport kopii. Baza sprzed V15 (wersja 1) przechodzi do wersji 4 w tej samej jednej transakcji.
+Każdy profil ma własną bazę IndexedDB. Migracja wykonuje się przy pierwszym otwarciu profilu w nowej wersji, w **jednej transakcji `versionchange`**, przez funkcję `transformToCurrentBank` (`src/persistence/bankMigration.ts`). Tę samą funkcję stosuje wczytanie kopii danych i eksport kopii.
+
+- **Wydanie V18 (09.11.2026):** baza przechodziła z wersji 3 na 4; dane przekształcał krok v4 (`createMigrationV4`) i zapisywał w `meta` rekord `migration:bank-v18`. Baza sprzed V15 (wersja 1) przechodziła do wersji 4 w tej samej jednej transakcji.
+- **Od wydania „V18 + webinary” (15.11.2026, `docs/MIGRACJA_WEBINARY.md`):** krok v4 jest historyczny i **nie zmienia danych**. Dane przekształca wyłącznie krok **v5** (`createMigrationV5` w `src/persistence/schema.ts`), z allowlistą bieżącego wydania, i zapisuje rekord `migration:bank-v18-webinary`. Urządzenie, które wciąż ma V15 (baza v3) albo wersję sprzed V15 (v1), przechodzi do wersji 5 jedną transformacją według tabeli poniżej — sesje V15 stają się podsumowaniami z `legacy.reason = bank_v18_update`, tak jak przy V18. Rekord `migration:bank-v18` powstaje tylko w bazach, które przeszły krok v4 w aplikacji V18, i zostaje w nich bez zmian.
 
 Pytanie **zgodne** = ID z allowlisty V18, a każdy jego zapis w danych ma tę samą rewizję, fingerprint (treść + opcje) i klucz co paczka. Odpowiedzi nigdy nie są przypisywane do innych ID na podstawie podobieństwa.
 
@@ -62,16 +65,18 @@ Telefon całkowicie offline nie dostanie aktualizacji; po pierwszym połączeniu
 ## 5. Weryfikacja
 
 - `tests/domain/bank-v18.test.ts` — wydanie, pliki, allowlista 700 (600 + 100), treść 1:1, fingerprinty, trudność bez reklasyfikacji.
-- `tests/persistence/migracja-v18.test.ts` — profile V15, V16, V17, mieszane, niezgodna treść, nieznane ID, idempotencja, v1/v3 → v4, przerwanie migracji, dwa profile, import kopii.
+- `tests/persistence/migracja-v18.test.ts` — profile V15, V16, V17, mieszane, niezgodna treść, nieznane ID, idempotencja, v1/v3 → v4 (od 15.11.2026: v1/v3 → v5 — dane przekształca krok v5), przerwanie migracji, dwa profile, import kopii.
 - `tests/app/migracja-v18.test.ts` — rzeczywisty kontroler na profilu z aplikacji V15 i z danymi V16.
 - `tests/ui/pula-v18.test.tsx` — brak wyboru i etykiet trudności, 700 pytań w „O bazie”.
 - `tests/pwa/tresc-sw.test.ts` — 404 dla dawnych plików banków w Service Workerze.
-- E2E `tests/e2e/aktualizacja-v18.spec.ts` — aktualizacja zainstalowanej aplikacji z produkcji (`b6f9201`) z dwoma profilami; `tests/e2e/profile.spec.ts` — z wersji bez profili (`b50eb19`).
+- E2E `tests/e2e/aktualizacja-v18.spec.ts` — aktualizacja zainstalowanej aplikacji z produkcji (`b6f9201`) z dwoma profilami; `tests/e2e/profile.spec.ts` — z wersji bez profili (`b50eb19`). Od 15.11.2026 oba prowadzą do bieżącego wydania („V18 + webinary”): `aktualizacja-v18.spec.ts` sprawdza jeden krok v3 → v5 (rekord `migration:bank-v18-webinary`, bez `migration:bank-v18`), `profile.spec.ts` — bazę profilu w schemacie 5 z bieżącą wersją treści.
 - `scripts/check-dist.mjs` — allowlista, SHA-256, brak dawnych plików banków w `dist`, precache i kodzie.
 
 Fizyczny iPhone (G05): **NOT RUN** — emulacja WebKit w Playwright nie jest testem urządzenia.
 
 ## 6. Kopia i cofnięcie zmiany
+
+> **Uwaga (15.11.2026).** Procedura cofnięcia poniżej dotyczyła stanu z 09.11.2026 (powrót z V18 do V15). Od wdrożenia wydania „V18 + webinary” telefony mają bazę w wersji 5 i sesje nowej wersji banku — **nie wolno** cofać zwykłym `git revert` ani Pull Requesta V18, ani Pull Requesta z webinarami. Jedyna droga to poprawka „do przodu”: `docs/MIGRACJA_WEBINARY.md` §6.
 
 Prywatna kopia sprzed wdrożenia (poza repozytorium i poza katalogiem publicznym): `~/DEWELOPER_CLAUDE/projekty/_kopie/doktor-monika-egzamin-2026-11-09-przed-V18/` — lustro działającej strony V15 (`strona/`, 26 plików z precache i `dme-release.json`), pakiet git z pełną historią (`repo-doktor-monika-egzamin.bundle`), wdrożony commit (`b6f9201`), konfiguracja GitHub Pages i dane ostatniego wdrożenia. Aplikacja nie ma serwera ani bazy danych — dane użytkowników są wyłącznie w ich przeglądarkach.
 
