@@ -111,6 +111,26 @@ describe('uruchomienie', () => {
     expect(h.controller.getState().boot).toMatchObject({ phase: 'fatal', code: 'BANK_INVALID' });
     expect(h.controller.getState().catalog).toBeNull();
   });
+
+  it('pytanie WB bez oznaczenia pochodzenia (te same ID, liczby i klucze, bez sprawdzenia SHA) → BANK_INVALID z nazwą wydania', async () => {
+    const changed = structuredClone(BANK);
+    const wb = changed.questions.find((q) => q.origin === 'webinar')!;
+    // Rekord przechodzi walidację jako zwykłe pytanie i zgadza się z allowlistą — złapie to tylko kontrola liczby pytań WB.
+    delete wb.origin;
+    const h = await startHarness({ loadBank: async () => ({ ...contentBundle(changed), bankSha256: null }) });
+    const boot = h.controller.getState().boot;
+    expect(boot).toMatchObject({ phase: 'fatal', code: 'BANK_INVALID' });
+    expect(boot.phase === 'fatal' ? boot.messagePl : '').toContain('V18 + webinary');
+    expect(h.controller.getState().catalog).toBeNull();
+  });
+
+  it('bank wydania V18 + webinary: start bez błędów, katalog 947 pytań, w tym 247 z dowodem webinaru', async () => {
+    const h = await startHarness();
+    expect(h.controller.getState().boot).toEqual({ phase: 'ready' });
+    const catalog = h.controller.getState().catalog!;
+    expect(catalog.questions).toHaveLength(947);
+    expect(catalog.questions.filter((q) => q.webinarEvidence !== null)).toHaveLength(247);
+  });
 });
 
 describe('test: komenda → domena → zapis → publikacja', () => {

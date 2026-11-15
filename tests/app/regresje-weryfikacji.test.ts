@@ -11,7 +11,13 @@ import { fingerprintRuntimeQuestion } from '../../src/domain/fingerprint';
 import type { RuntimeBank } from '../../src/domain/types';
 import { BANK, contentBundle, failingRepository, keyOf, openSession, question, settle, startHarness, userState, type Harness } from './harness';
 
-/** Test w najmniejszej dziedzinie banku (SAFE) z N = pojemność — zgłoszenie nie ma zastępstwa. */
+/**
+ * Limit czasu przebiegów z pełną pojemnością SAFE: w wydaniu V18 + webinary SAFE ma 83 rodziny (36 V18 + 47 WB),
+ * więc test odpowiada na ponad dwa razy więcej pytań niż w V18 (domyślne 5 s nie wystarcza na obciążonej maszynie).
+ */
+const FULL_CAPACITY_TIMEOUT_MS = 30_000;
+
+/** Test w dziedzinie SAFE z N = pojemność — zgłoszenie nie ma zastępstwa. */
 async function startFullCapacityTest(h: Harness): Promise<number> {
   const c = h.controller;
   c.openConfig('test');
@@ -76,7 +82,7 @@ describe('E03 / LOG-03 — pozycja czekająca na zastępstwo nie blokuje ekranu'
     await settle();
     expect(question(c).position).toBe(n - 1);
     expect(question(c).primaryAction).toBe('go-awaiting');
-  });
+  }, FULL_CAPACITY_TIMEOUT_MS);
 
   it('zgłoszenie bieżącej pozycji (nie ostatniej) bez zastępstwa → „Dalej” pozwala rozwiązywać kolejne; dwie oczekujące liczone osobno', async () => {
     const h = await startHarness();
@@ -109,7 +115,7 @@ describe('E03 / LOG-03 — pozycja czekająca na zastępstwo nie blokuje ekranu'
     expect(question(c).primaryAction).toBe('go-awaiting');
     c.pauseSession();
     expect(c.getState().resume).toMatchObject({ awaitingCount: 2 });
-  });
+  }, FULL_CAPACITY_TIMEOUT_MS);
 });
 
 describe('LOG-01 — niezapisana zmiana blokuje import puli i wczytanie kopii', () => {

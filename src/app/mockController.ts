@@ -150,6 +150,7 @@ function mockCatalog(bank: RuntimeBank, retiredIds: readonly string[]): Catalog 
     contentCheckStatus: q.content_check_status,
     cognitiveLevel: q.cognitive_level,
     origin: { kind: 'bank', bankVersion: bank.bank_version },
+    webinarEvidence: q.origin === 'webinar' ? { quote: q.evidence_quote ?? '', unitIds: [...(q.evidence_unit_ids ?? [])], note: q.source_note_pl ?? '' } : null,
   }));
   const byId: Record<QuestionId, CatalogQuestion> = {};
   for (const q of questions) byId[q.id] = q;
@@ -181,6 +182,8 @@ function mockCatalog(bank: RuntimeBank, retiredIds: readonly string[]): Catalog 
           kindPl: s.kind_pl,
           accessPl: s.access_pl,
           checkedOn: s.checked_on,
+          fileName: s.filename ?? null,
+          webinar: s.kind === 'user_supplied_webinar_transcript',
         },
       ]),
     ),
