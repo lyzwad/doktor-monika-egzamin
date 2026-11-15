@@ -1,0 +1,34 @@
+- id: "1"
+  title: Wydanie treści V18 + webinary (adapter, scalanie, katalog)
+  description: >-
+    CAP-1, CAP-2, CAP-3 bez Service Workera i e2e: skrypt adaptera i idempotentnego scalania, nowe pliki
+    public/data, allowlista 947, contentRelease, typy, walidacja katalogu, snapshot z dowodem, check-dist.
+  invoke_dev_with: >-
+    Pliki tej historii: scripts/ (nowy skrypt scalania, v18-allowlist.mjs, check-dist.mjs), content/v18-webinary/,
+    public/data/, src/domain/{types,contentRelease,catalog,snapshot,fingerprint}.ts, src/persistence/v18Allowlist.ts,
+    src/app/appController.ts (tylko kontrola treści przy starcie), src/main.tsx, tests/domain/, tests/content.ts.
+    Nie dotykaj src/persistence/{bankMigration,schema,api,backup,validation}.ts ani src/ui/.
+- id: "2"
+  title: Migracja danych profili do wydania V18 + webinary (IndexedDB v5, kopia)
+  description: >-
+    CAP-4: schemat v5, restempel sesji V18 (także pustych), zachowanie prób, powtórek i zgłoszeń,
+    idempotencja, atomowość, dwa profile, kopia danych z nowymi opcjonalnymi polami snapshotu.
+  invoke_dev_with: >-
+    Pliki tej historii: src/persistence/{bankMigration,schema,api,backup,validation,repository}.ts, tests/persistence/,
+    tests/app/migracja-*.test.ts. Nie edytuj src/domain/types.ts ani contentRelease.ts (należą do historii 1, która
+    powstaje równolegle) — nową bankVersion czytaj z CONTENT_RELEASE, a wersję V18 zapisz jako stałą poprzednika.
+- id: "3"
+  title: Źródło webinaru w wyjaśnieniu i liczniki w aplikacji
+  description: >-
+    CAP-5 i CAP-6: wiersz źródła webinaru z przyciskiem „Źródło webinaru” i panelem wewnętrznym, wiersz
+    „Pytania z webinarów” w „O bazie pytań”, teksty z liczbami wydania; wyłącznie teksty z teksty-ui.md.
+  invoke_dev_with: >-
+    Start po scaleniu historii 1. Pliki: src/app/{viewModels,screenModels,mockController}.ts, src/ui/, tests/ui/.
+- id: "4"
+  title: Service Worker, e2e aktualizacji z produkcji 39d9d46 i dokumentacja
+  description: >-
+    CAP-3 (Service Worker, 404 dawnych plików) i CAP-7: e2e aktualizacji zainstalowanej PWA z dwoma profilami,
+    Test, Free Flow, runda błędów, offline; docs/MIGRACJA_WEBINARY.md i instrukcja iPhone.
+  invoke_dev_with: >-
+    Start po scaleniu historii 1. Pliki: src/pwa/, vite.config.ts, scripts/check-offline.mjs, scripts/sw-takeover.mjs,
+    tests/pwa/, tests/e2e/, docs/. Pełne e2e uruchom po scaleniu historii 2 i 3 (lider da znać).

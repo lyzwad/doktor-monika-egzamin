@@ -6,3 +6,5 @@ playwright-report
 *.local
 .DS_Store
 .vitest
+.worktrees/
+_bmad/*.bak
