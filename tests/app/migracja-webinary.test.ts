@@ -61,8 +61,9 @@ describe('kontroler: pierwsze uruchomienie bieżącego wydania na profilu z apli
     expect(c.getState().boot).toEqual({ phase: 'ready' });
 
     // Każda sesja V18 aktywna w bieżącej wersji treści, z tym samym statusem, planem i wynikiem.
-    // Bieżące wydanie inne niż V18 (po historii 1) → sesje przeniesione (`revision + 1`); V18 → bez zmian.
-    const restamped = CONTENT_RELEASE.bankVersion !== V18_BANK_VERSION;
+    // Bieżące wydanie (V18 + webinary) jest inne niż V18 → sesje przeniesione (`revision + 1`).
+    expect(CONTENT_RELEASE.bankVersion as string).not.toBe(V18_BANK_VERSION);
+    const restamped = true;
     const state = userState(c);
     for (const original of data.sessions.filter((s) => !s.legacy)) {
       const migrated = state.sessions[original.id]!;
