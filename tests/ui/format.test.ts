@@ -14,6 +14,7 @@ import {
   isSafeHttpsUrl,
   nValidationMessage,
   questionsCount,
+  questionsCountGenitive,
   saveErrorText,
   toastText,
 } from '../../src/ui/format';
@@ -21,6 +22,16 @@ import {
 const draft: ConfigDraft = { scope: 'ANAT', difficulty: 'advanced', nText: '20', myErrorsPriority: false };
 
 describe('format', () => {
+  it('liczebnik pytań w dopełniaczu („z banku N …”): 1 pytania, pozostałe liczby — pytań', () => {
+    expect(questionsCountGenitive(1)).toBe('1 pytania');
+    expect(questionsCountGenitive(2)).toBe('2 pytań');
+    expect(questionsCountGenitive(12)).toBe('12 pytań');
+    expect(questionsCountGenitive(22)).toBe('22 pytań');
+    expect(questionsCountGenitive(942)).toBe('942 pytań');
+    expect(questionsCountGenitive(947)).toBe('947 pytań');
+    expect(questionsCountGenitive(700)).toBe('700 pytań');
+  });
+
   it('liczebniki pytań', () => {
     expect(questionsCount(1)).toBe('1 pytanie');
     expect(questionsCount(3)).toBe('3 pytania');

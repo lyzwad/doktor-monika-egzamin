@@ -13,6 +13,11 @@ export function questionsCount(n: number): string {
   return `${n} ${pluralPl(n, 'pytanie', 'pytania', 'pytań')}`;
 }
 
+/** Dopełniacz („z banku 1 pytania”, „z banku 942 pytań”, „z banku 947 pytań”): poza 1 zawsze „pytań”. */
+export function questionsCountGenitive(n: number): string {
+  return `${n} ${Math.abs(Math.trunc(n)) === 1 ? 'pytania' : 'pytań'}`;
+}
+
 /**
  * Pojemność zakresu = liczba RODZIN (bliskich wariantów jednego zadania), nie liczba pytań (C01):
  * „1 różne zadanie (rodzina)”, „3 różne zadania (rodziny)”, „25 różnych zadań (rodzin)” (przykładowe liczby).

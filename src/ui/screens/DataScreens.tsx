@@ -15,7 +15,7 @@ import { Icon } from '../components/Icon';
 import { Screen, ScreenHeader } from '../components/Screen';
 import { RadioList } from '../components/Sheet';
 import { EmailText } from './ProfileScreens';
-import { backupErrorDetail, formatBytes, formatDateTime, pluralPl, questionsCount } from '../format';
+import { backupErrorDetail, formatBytes, formatDateTime, pluralPl, questionsCount, questionsCountGenitive } from '../format';
 
 /**
  * Opis zawartości pliku kopii (F02). Kopia zawiera magazyny `BACKUP_DATA_STORES` (persistence/backup.ts):
@@ -303,11 +303,12 @@ export function PoolImportScreen({ vm }: { vm: PoolImportVM }) {
   const controller = useController();
   void vm;
   const count = questionsCount(CONTENT_RELEASE.counts.questions);
+  const countGenitive = questionsCountGenitive(CONTENT_RELEASE.counts.questions);
   return (
     <Screen header={<ScreenHeader title="Pula pytań" onBack={() => controller.goBack()} />}>
       <Banner tone="info" role="note" title={`Aplikacja używa wyłącznie wbudowanego banku pytań (${CONTENT_RELEASE_LABEL}, ${count})`}>
         <span className="banner__text">
-          Import dodatkowych pul pytań jest wyłączony. Wszystkie tryby (Test, Free Flow, runda błędów, „Moje błędy”) korzystają tylko z wbudowanego banku {count}. Liczby
+          Import dodatkowych pul pytań jest wyłączony. Wszystkie tryby (Test, Free Flow, runda błędów, „Moje błędy”) korzystają tylko z wbudowanego banku {countGenitive}. Liczby
           pytań i status materiału są w „O bazie pytań”.
         </span>
       </Banner>

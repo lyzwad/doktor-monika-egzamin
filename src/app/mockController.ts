@@ -74,7 +74,7 @@ import type {
 } from './viewModels';
 
 export interface MockControllerOptions {
-  /** Prawdziwy bank V18 (`public/data/bank-<sha12>.json`) — mock nie ma własnych danych i nie przyjmuje innej wersji. */
+  /** Prawdziwy bank bieżącego wydania treści (`CONTENT_RELEASE.bankFile`, `public/data/bank-<sha12>.json`) — mock nie ma własnych danych i nie przyjmuje innej wersji. */
   bank: RuntimeBank;
   /** ID wyłączone z aktywnej puli (retired_question_ids.json) — pomijane w każdym trybie mocka. */
   retiredIds?: readonly string[];
@@ -126,7 +126,7 @@ interface UndoState {
 /* -------------------------------------------------------------------------- */
 
 function mockCatalog(bank: RuntimeBank, retiredIds: readonly string[]): Catalog {
-  // Mock (dev/testy UI) działa wyłącznie na bieżącym banku (V18) — bez awaryjnego ładowania innego banku.
+  // Mock (dev/testy UI) działa wyłącznie na banku bieżącego wydania (`CONTENT_RELEASE.bankVersion`) — bez awaryjnego ładowania innego banku.
   if (bank.bank_version !== CONTENT_RELEASE.bankVersion) throw new Error(`Mock: oczekiwano banku ${CONTENT_RELEASE.bankVersion}, jest ${bank.bank_version}`);
   const retired = new Set(retiredIds);
   const questions: CatalogQuestion[] = bank.questions.filter((q) => !retired.has(q.id)).map((q) => ({
@@ -1116,7 +1116,7 @@ export function createMockController(options: MockControllerOptions): MockContro
     },
     updateConfigDraft(patch) {
       if (route.name !== 'config') return;
-      // Jak w rzeczywistym kontrolerze: jedna pula V18 bez poziomów (zawsze `mixed`).
+      // Jak w rzeczywistym kontrolerze: jedna pula bieżącego wydania bez poziomów (zawsze `mixed`).
       drafts = { ...drafts, [route.mode]: { ...drafts[route.mode], ...patch, difficulty: 'mixed' } };
       publish();
     },
