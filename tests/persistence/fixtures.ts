@@ -4,21 +4,27 @@
  * na świeżej instancji fake-indexeddb. Wyłącznie do testów.
  */
 import { createHash } from 'node:crypto';
+import { readFileSync } from 'node:fs';
+import { resolve } from 'node:path';
 import { IDBFactory } from 'fake-indexeddb';
-import { fingerprintRuntimeQuestion } from '../../src/domain/fingerprint';
+import { buildCatalog, parseTrainingProfile } from '../../src/domain/catalog';
+import { fingerprintPayload, fingerprintRuntimeQuestion } from '../../src/domain/fingerprint';
 import type {
   Attempt,
   Block,
+  Catalog,
   Changeset,
   DmeEvent,
   QuestionSnapshot,
   QuestionStat,
+  RuntimeBank,
   RuntimeQuestion,
   Session,
   Settings,
   Slot,
 } from '../../src/domain/types';
 import type { BackupData, Repository } from '../../src/persistence/api';
+import type { BankTarget } from '../../src/persistence/bankMigration';
 import { createIndexedDbRepository } from '../../src/persistence/repository';
 import type { InternalRepositoryOptions } from '../../src/persistence/repository';
 
@@ -70,19 +76,19 @@ export function freshRepository(options: InternalRepositoryOptions = {}): { repo
 /* Rekordy                                                                    */
 /* ========================================================================== */
 
-export function snapshotOf(question: RuntimeQuestion, order: string[]): QuestionSnapshot {
-  const domain = BANK.domains.find((d) => d.id === question.domain_id);
+export function snapshotOf(question: RuntimeQuestion, order: string[], bank: RuntimeBank = BANK): QuestionSnapshot {
+  const domain = bank.domains.find((d) => d.id === question.domain_id);
   return {
     questionId: question.id,
     revision: question.revision,
-    bankVersion: BANK.bank_version,
+    bankVersion: bank.bank_version,
     familyId: question.family_id,
     fingerprint: question.fingerprint,
     domainId: question.domain_id,
     domainTitle: domain?.title_pl ?? question.domain_id,
     topicIds: [...question.topic_ids],
     topics: question.topic_ids.map((id) => {
-      const topic = BANK.topics[id];
+      const topic = bank.topics[id];
       return {
         id,
         title: topic?.title_pl ?? id,
@@ -96,7 +102,7 @@ export function snapshotOf(question: RuntimeQuestion, order: string[]): Question
     correctOptionId: question.correct_option_id,
     explanation: question.correct_explanation_pl,
     sources: question.source_ids.map((id) => {
-      const source = BANK.sources[id];
+      const source = bank.sources[id];
       return {
         id,
         title: source?.title ?? id,
@@ -551,4 +557,392 @@ export function v15ProfileData(retired: readonly string[]): BackupData & { packs
     },
   ];
   return data;
+}
+
+/* ========================================================================== */
+/* Wydanie „V18 + webinary” (migracja v5, spec-webinary-247)                  */
+/* ========================================================================== */
+
+/** Wersja banku V18 (aplikacja produkcyjna `39d9d46`, baza IndexedDB v4). */
+export const V18_BANK_VERSION = 'chatgpt-combined-v18-2026-11-09-1fb7f7546332';
+
+/**
+ * Bank V18 bajt w bajt (`content/v18/bank.json`) — baza syntetycznego wydania, niezależna od tego, które
+ * wydanie jest bieżące w `CONTENT_RELEASE` (historia 1 podmienia je na „V18 + webinary”).
+ */
+export const V18_BANK = JSON.parse(readFileSync(resolve(process.cwd(), 'content/v18/bank.json'), 'utf-8')) as RuntimeBank;
+
+/** Rekord dodatku webinarowego (`content/webinary-2026-11-15/bank_webinar_addendum.json`). */
+interface AddendumQuestion {
+  id: string;
+  domain_id: string;
+  stem_pl: string;
+  options: { id: string; text_pl: string }[];
+  correct_option_id: string;
+  correct_explanation_pl: string;
+  source_id: string;
+  source_ids: string[];
+  evidence_unit_ids: string[];
+  evidence_quote: string;
+  source_note_pl: string;
+  question_type: string;
+  revision: number;
+  family_id: string;
+  difficulty: string;
+  difficulty_is_technical_placeholder: boolean;
+}
+interface AddendumSource {
+  id: string;
+  title: string;
+  filename: string;
+  sha256: string;
+}
+const ADDENDUM = JSON.parse(readFileSync(resolve(process.cwd(), 'content/webinary-2026-11-15/bank_webinar_addendum.json'), 'utf-8')) as {
+  sources: Record<string, AddendumSource>;
+  questions: AddendumQuestion[];
+};
+
+/** Dwa pytania WB syntetycznego wydania (różne webinary i działy). */
+export const SYNTH_WB_IDS = ['WB-LIGHT-001', 'WB-PIGMENT-001'] as const;
+
+function sha256(text: string): string {
+  return createHash('sha256').update(text, 'utf8').digest('hex');
+}
+
+/** Rekord runtime pytania WB wg kontrakt-danych.md (adapter dodatku), fingerprint algorytmem aplikacji. */
+function webinarRuntimeQuestion(raw: AddendumQuestion): RuntimeQuestion {
+  const locator = raw.source_ids.map((sid) => `${sid}: ${raw.evidence_unit_ids.filter((u) => u.startsWith(`${sid}-`)).join(', ')}`).join('; ');
+  const record = {
+    id: raw.id,
+    domain_id: raw.domain_id,
+    stem_pl: raw.stem_pl,
+    options: raw.options.map((o) => ({ ...o })),
+    correct_option_id: raw.correct_option_id,
+    correct_explanation_pl: raw.correct_explanation_pl,
+    source_ids: [...raw.source_ids],
+    revision: raw.revision,
+    family_id: raw.family_id,
+    difficulty: raw.difficulty,
+    difficulty_is_technical_placeholder: raw.difficulty_is_technical_placeholder,
+    question_type: raw.question_type,
+    evidence_quote: raw.evidence_quote,
+    evidence_unit_ids: [...raw.evidence_unit_ids],
+    source_note_pl: raw.source_note_pl,
+    source_id: raw.source_id,
+    clinical_signoff: false,
+    origin: 'webinar',
+    topic_ids: [`WB-T-${raw.source_id}-${raw.domain_id}`],
+    figure_id: null,
+    explanation_figure_id: null,
+    review_status: 'draft_pending_clinical_review',
+    approved_for_question_key: false,
+    content_check_status: 'source_checked_AI_draft',
+    cognitive_level: null,
+    fingerprint: sha256(fingerprintPayload(raw.stem_pl, raw.options.map((o) => o.text_pl))),
+    source_locator_pl: locator,
+  };
+  return record as unknown as RuntimeQuestion;
+}
+
+/** Pytania WB syntetycznego wydania (z prawdziwego dodatku, z `evidence_quote` / `evidence_unit_ids`). */
+export const SYNTH_WB_QUESTIONS: readonly RuntimeQuestion[] = SYNTH_WB_IDS.map((id) => {
+  const raw = ADDENDUM.questions.find((q) => q.id === id);
+  if (!raw) throw new Error(`Brak pytania ${id} w dodatku`);
+  return webinarRuntimeQuestion(raw);
+});
+
+/** Syntetyczna `bank_version` wydania „V18 + 2 WB” (testy prawdziwego przejścia V18 → nowa wersja). */
+export const SYNTH_BANK_VERSION = 'dme-v18-webinary-test-syntetyczne-000000000000';
+
+function synthBank(): RuntimeBank {
+  const base = structuredClone(V18_BANK);
+  const sources: Record<string, unknown> = { ...base.sources };
+  const topics: Record<string, unknown> = { ...base.topics };
+  for (const q of SYNTH_WB_QUESTIONS) {
+    const raw = q as unknown as { source_id: string; domain_id: string };
+    const src = ADDENDUM.sources[raw.source_id];
+    if (!src) throw new Error(`Brak źródła ${raw.source_id} w dodatku`);
+    sources[src.id] = {
+      id: src.id,
+      title: src.title,
+      url: null,
+      doi: null,
+      pmid: null,
+      kind: 'user_supplied_webinar_transcript',
+      kind_pl: 'transkrypcja webinaru',
+      access: 'source_unit',
+      access_pl: 'fragmenty automatycznych napisów',
+      checked_on: null,
+      filename: src.filename,
+      sha256: src.sha256,
+      locator_type: 'source_unit',
+      audio_verified: false,
+    };
+    topics[`WB-T-${raw.source_id}-${raw.domain_id}`] = {
+      id: `WB-T-${raw.source_id}-${raw.domain_id}`,
+      title_pl: src.title,
+      domain_id: raw.domain_id,
+      learning_objective_pl: null,
+      clinical_pearls_pl: [],
+    };
+  }
+  const questions = [...base.questions, ...SYNTH_WB_QUESTIONS.map((q) => structuredClone(q))];
+  const count = (key: (q: RuntimeQuestion) => string): Record<string, number> => {
+    const out: Record<string, number> = {};
+    for (const q of questions) out[key(q)] = (out[key(q)] ?? 0) + 1;
+    return out;
+  };
+  return {
+    ...base,
+    bank_version: SYNTH_BANK_VERSION,
+    counts: {
+      ...base.counts,
+      questions: questions.length,
+      families: new Set(questions.map((q) => q.family_id)).size,
+      by_domain: count((q) => q.domain_id),
+      by_difficulty: count((q) => q.difficulty),
+      // Licznik pytań WB (kontrakt-danych.md); typ liczników rozszerza historia 1.
+      source_checked_AI_draft: SYNTH_WB_QUESTIONS.length,
+    } as RuntimeBank['counts'],
+    sources: sources as RuntimeBank['sources'],
+    topics: topics as RuntimeBank['topics'],
+    questions,
+  };
+}
+
+/** Bank syntetycznego wydania: 700 rekordów V18 bez zmian + 2 WB. */
+export const SYNTH_BANK: RuntimeBank = synthBank();
+export const SYNTH_BANK_SHA256 = sha256(JSON.stringify(SYNTH_BANK));
+
+type AllowedRow = readonly [string, number, string, string, string, string];
+const rowOf = (q: RuntimeQuestion): AllowedRow => [q.id, q.revision, q.fingerprint, q.correct_option_id, q.family_id, q.domain_id];
+
+/** Allowlista V18 (700) policzona z `content/v18/bank.json`. */
+export const V18_ROWS: readonly AllowedRow[] = V18_BANK.questions.map(rowOf);
+
+/** Wydanie docelowe migracji v5 w testach: V18 (700) + 2 WB, poprzednik = V18. */
+export const SYNTH_TARGET: BankTarget = {
+  bankVersion: SYNTH_BANK_VERSION,
+  bankSha256: SYNTH_BANK_SHA256,
+  allowed: [...V18_ROWS, ...SYNTH_WB_QUESTIONS.map(rowOf)],
+  predecessorBankVersions: [V18_BANK_VERSION],
+};
+
+/** Profil treningowy syntetycznego wydania (grupy wg działu jak w kontrakcie: SKIN / ANAT / pozostałe). */
+export const SYNTH_PROFILE_RAW = (() => {
+  const groups: Record<string, string[]> = { skin: [], facial_anatomy: [], other: [] };
+  for (const q of SYNTH_BANK.questions) groups[q.domain_id === 'SKIN' ? 'skin' : q.domain_id === 'ANAT' ? 'facial_anatomy' : 'other']!.push(q.id);
+  return { bank_version: SYNTH_BANK_VERSION, weights: { skin: 0.35, facial_anatomy: 0.25, other: 0.4 }, groups };
+})();
+
+/** Katalog syntetycznego wydania (jak w aplikacji: asercja wersji, profil). */
+export function synthCatalog(): Catalog {
+  const profile = parseTrainingProfile(structuredClone(SYNTH_PROFILE_RAW), SYNTH_BANK_VERSION);
+  if (!profile.ok) throw new Error(profile.error.messagePl);
+  const r = buildCatalog(structuredClone(SYNTH_BANK), { retiredQuestionIds: [], profile: profile.value, requiredBankVersion: SYNTH_BANK_VERSION });
+  if (!r.ok) throw new Error(r.error.messagePl);
+  return r.value;
+}
+
+/** Snapshot pytania WB z polami webinaru (`webinarEvidence`, `sources[].fileName`, `sources[].webinar`). */
+export function webinarSnapshotOf(question: RuntimeQuestion, order: string[]): QuestionSnapshot {
+  const base = snapshotOf(question, order, SYNTH_BANK);
+  const raw = question as unknown as { evidence_quote: string; evidence_unit_ids: string[]; source_note_pl: string };
+  const snapshot = {
+    ...base,
+    sources: base.sources.map((s) => {
+      const src = SYNTH_BANK.sources[s.id] as unknown as { filename?: string; kind?: string } | undefined;
+      return { ...s, fileName: src?.filename ?? null, webinar: src?.kind === 'user_supplied_webinar_transcript' };
+    }),
+    webinarEvidence: { quote: raw.evidence_quote, unitIds: [...raw.evidence_unit_ids], note: raw.source_note_pl },
+  };
+  return snapshot as QuestionSnapshot;
+}
+
+/** Podsumowania sesji V15 zapisane przez migrację v4 (aplikacja V18): bez treści, z `legacy`. */
+export function v18LegacySessions(): Session[] {
+  const legacy = (id: string, status: 'completed' | 'interrupted_by_update', patch: Partial<Session>, info: Partial<NonNullable<Session['legacy']>>): Session =>
+    ({
+      id,
+      kind: 'test',
+      status,
+      createdAt: '2026-10-25T08:00:00.000Z',
+      updatedAt: '2026-10-25T08:30:00.000Z',
+      closedAt: '2026-10-25T08:30:00.000Z',
+      revision: 9,
+      mutationSeq: 5,
+      config: { scope: 'ALL', difficulty: 'mixed', targetN: 20, myErrorsPriority: false },
+      bankVersion: V15_BANK_VERSION,
+      seed: 5,
+      allocation: allocation('TEST_POLICY_V1'),
+      retry: null,
+      plan: [],
+      slots: {},
+      reached: 0,
+      awaitingReplacement: [],
+      events: [],
+      result: null,
+      freeFlow: null,
+      ...patch,
+      legacy: {
+        reason: 'bank_v18_update',
+        previousBankVersion: V15_BANK_VERSION,
+        contentBankVersion: V18_BANK_VERSION,
+        migratedAt: '2026-11-09T21:00:00.000Z',
+        previousStatus: 'completed',
+        answeredValid: 20,
+        correct: 15,
+        excluded: 0,
+        planLength: 20,
+        ...info,
+      },
+    }) as Session;
+  return [
+    legacy('sess-v15-done', 'completed', { result: { correct: 15, targetN: 20, passed: true, percent: 75 } }, {}),
+    legacy('sess-v15-open', 'interrupted_by_update', { createdAt: '2026-10-26T08:00:00.000Z', updatedAt: '2026-10-26T08:10:00.000Z', closedAt: '2026-10-26T08:10:00.000Z' }, { previousStatus: 'open', answeredValid: 4, correct: 3 }),
+  ];
+}
+
+/**
+ * Profil z aplikacji V18 (baza v4): `sampleUserData()` w wersji V18 (ukończony test, otwarta runda błędów
+ * ze zgłoszeniem i zastępstwem, zakończony Free Flow, próby, powtórki, blokada), otwarty Free Flow z jedną
+ * błędną odpowiedzią, pusta otwarta sesja (bez slotów) oraz podsumowania V15 z migracji v4.
+ */
+export function v18ProfileData(): BackupData {
+  const data = profileData(V18_BANK_VERSION, (_i, q) => q);
+  const q8 = BANK.questions[7]!;
+  const t4 = '2026-11-12T19:00:00.000Z';
+  const slot4 = makeSlot('s4-a', q8, { createdAt: t4, origin: 'freeflow', answer: { commandId: 'cmd-8', optionId: wrongOption(q8), at: '2026-11-12T19:01:00.000Z' } });
+  const s4Start: DmeEvent = { id: 'ev-s4-start', at: t4, commandId: 'cmd-start-4', type: 'session_started', sessionId: 'sess-4', kind: 'freeflow' };
+  const s4: Session = {
+    id: 'sess-4',
+    kind: 'freeflow',
+    status: 'open',
+    createdAt: t4,
+    updatedAt: '2026-11-12T19:01:00.000Z',
+    closedAt: null,
+    revision: 3,
+    mutationSeq: 2,
+    config: { scope: 'ALL', difficulty: 'mixed', targetN: null, myErrorsPriority: false },
+    bankVersion: V18_BANK_VERSION,
+    seed: 99,
+    allocation: allocation('FREE_FLOW_POLICY_V1'),
+    retry: null,
+    plan: ['s4-a'],
+    slots: { 's4-a': { ...slot4, snapshot: { ...slot4.snapshot, bankVersion: V18_BANK_VERSION } } },
+    reached: 0,
+    awaitingReplacement: [],
+    events: [s4Start],
+    result: null,
+    freeFlow: { myErrorsExhaustedNotified: false, empty: false, picks: 1 },
+  };
+  // Pusta otwarta sesja (np. zakres bez dostępnych pytań) — starsza niż otwarty Free Flow.
+  const t5 = '2026-11-11T07:00:00.000Z';
+  const s5Start: DmeEvent = { id: 'ev-s5-start', at: t5, commandId: 'cmd-start-5', type: 'session_started', sessionId: 'sess-5', kind: 'freeflow' };
+  const s5: Session = {
+    ...s4,
+    id: 'sess-5',
+    createdAt: t5,
+    updatedAt: t5,
+    revision: 1,
+    mutationSeq: 1,
+    config: { scope: 'SAFE', difficulty: 'mixed', targetN: null, myErrorsPriority: true },
+    seed: 77,
+    plan: [],
+    slots: {},
+    reached: 0,
+    events: [s5Start],
+    freeFlow: { myErrorsExhaustedNotified: false, empty: true, picks: 0 },
+  };
+  const attempt4 = attemptFor(s4, s4.slots['s4-a']!, q8);
+  const stat4: QuestionStat = {
+    questionId: q8.id,
+    familyId: q8.family_id,
+    domainId: q8.domain_id,
+    seenCount: 1,
+    firstSeenAt: t4,
+    lastSeenAt: t4,
+    answeredCount: 1,
+    correctCount: 0,
+    wrongCount: 1,
+    lastAnsweredAt: '2026-11-12T19:01:00.000Z',
+    activeError: true,
+    streak: 0,
+    dueAt: '2026-11-12T23:00:00.000Z',
+    lastWrongAt: '2026-11-12T19:01:00.000Z',
+    lastWrongSessionId: 'sess-4',
+    streakSessionId: null,
+    resolvedAt: null,
+  };
+  return {
+    settings: data.settings,
+    sessions: [...v18LegacySessions(), ...data.sessions, s4, s5],
+    attempts: [...data.attempts, attempt4],
+    questionStats: [...data.questionStats, stat4],
+    blocks: data.blocks,
+    events: [...data.events, s4Start, s5Start],
+    packs: [],
+  };
+}
+
+/**
+ * Dane profilu z sesją pytań WB w syntetycznym wydaniu: zakończony Free Flow (WB-LIGHT-001 dobrze,
+ * WB-PIGMENT-001 źle), snapshoty z polami webinaru, próby, stan powtórek i zdarzenia.
+ */
+export function webinarProfileData(): BackupData {
+  const [wb1, wb2] = SYNTH_WB_QUESTIONS as [RuntimeQuestion, RuntimeQuestion];
+  const t0 = '2026-11-15T18:00:00.000Z';
+  const slotOf = (id: string, q: RuntimeQuestion, optionId: string, at: string): Slot => {
+    const slot = makeSlot(id, q, { createdAt: t0, origin: 'freeflow', answer: { commandId: `cmd-${id}`, optionId, at } });
+    return { ...slot, snapshot: { ...webinarSnapshotOf(q, slot.optionOrder), bankVersion: SYNTH_BANK_VERSION } };
+  };
+  const slots = [slotOf('wb-a', wb1, wb1.correct_option_id, '2026-11-15T18:01:00.000Z'), slotOf('wb-b', wb2, wrongOption(wb2), '2026-11-15T18:02:00.000Z')];
+  const events: DmeEvent[] = [
+    { id: 'ev-wb-start', at: t0, commandId: 'cmd-wb-start', type: 'session_started', sessionId: 'sess-wb', kind: 'freeflow' },
+    { id: 'ev-wb-end', at: '2026-11-15T18:03:00.000Z', commandId: 'cmd-wb-end', type: 'freeflow_ended', sessionId: 'sess-wb', answeredValid: 2, correct: 1 },
+  ];
+  const session: Session = {
+    id: 'sess-wb',
+    kind: 'freeflow',
+    status: 'ended',
+    createdAt: t0,
+    updatedAt: '2026-11-15T18:03:00.000Z',
+    closedAt: '2026-11-15T18:03:00.000Z',
+    revision: 5,
+    mutationSeq: 3,
+    config: { scope: 'ALL', difficulty: 'mixed', targetN: null, myErrorsPriority: false },
+    bankVersion: SYNTH_BANK_VERSION,
+    seed: 2026,
+    allocation: allocation('FREE_FLOW_POLICY_V1'),
+    retry: null,
+    plan: slots.map((s) => s.id),
+    slots: Object.fromEntries(slots.map((s) => [s.id, s])),
+    reached: 1,
+    awaitingReplacement: [],
+    events,
+    result: null,
+    freeFlow: { myErrorsExhaustedNotified: false, empty: false, picks: 2 },
+  };
+  const attempts = [attemptFor(session, slots[0]!, wb1), attemptFor(session, slots[1]!, wb2)];
+  const stat = (q: RuntimeQuestion, wrong: boolean): QuestionStat => ({
+    questionId: q.id,
+    familyId: q.family_id,
+    domainId: q.domain_id,
+    seenCount: 1,
+    firstSeenAt: t0,
+    lastSeenAt: t0,
+    answeredCount: 1,
+    correctCount: wrong ? 0 : 1,
+    wrongCount: wrong ? 1 : 0,
+    lastAnsweredAt: t0,
+    activeError: wrong,
+    streak: 0,
+    dueAt: wrong ? '2026-11-15T23:00:00.000Z' : null,
+    lastWrongAt: wrong ? t0 : null,
+    lastWrongSessionId: wrong ? 'sess-wb' : null,
+    streakSessionId: null,
+    resolvedAt: null,
+  });
+  const settings: Settings = { id: 'settings', lastTestConfig: null, lastFreeFlowConfig: session.config, installHintDismissedAt: null, persistRequestedAt: null, updatedAt: t0 };
+  return { settings: [settings], sessions: [session], attempts, questionStats: [stat(wb1, false), stat(wb2, true)], blocks: [], events, packs: [] };
 }

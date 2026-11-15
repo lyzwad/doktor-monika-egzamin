@@ -11,7 +11,6 @@
  * W transakcjach nie ma `await` na operacjach spoza IndexedDB: Web Crypto (fingerprinty) i odczyt
  * plików wykonują się PRZED transakcją, a JSON kopii bezpieczeństwa powstaje synchronicznie w callbacku.
  */
-import { CONTENT_RELEASE } from '../domain/contentRelease';
 import { defaultSettings, isChangesetEmpty } from '../domain/state';
 import { USER_STORE_NAMES } from '../domain/types';
 import type { Changeset, Session, UserState, UserStoreName } from '../domain/types';
@@ -66,21 +65,27 @@ import {
 } from './errors';
 import { createTransaction, openDatabase, runTransaction } from './idb';
 import type { TxBody, TxControl } from './idb';
-import { MIGRATIONS } from './schema';
+import { createMigrations, MIGRATIONS } from './schema';
 import type { Migration } from './schema';
 import { createStorageApi, defaultStorageManager } from './storage';
 import { isIsoDateTime, isNonEmptyString, isObject } from './validation';
-import { BANK_MIGRATION_ID, settingsForCurrentBank, transformToCurrentBank } from './bankMigration';
+import { BANK_MIGRATION_ID, CURRENT_BANK_TARGET, settingsForCurrentBank, transformToCurrentBank } from './bankMigration';
+import type { BankTarget } from './bankMigration';
 import { planUnassignedMerge } from './merge';
 import type { StoreRecords } from './merge';
 
 /** Ile automatycznych kopii bezpieczeństwa (sprzed wczytania) przechowywać — najstarsze są usuwane. */
 export const SAFETY_BACKUPS_KEPT = 5;
 
-/** Opcje wewnętrzne (testy migracji): wersja docelowa i lista migracji. */
+/** Opcje wewnętrzne (testy migracji): wersja docelowa, lista migracji i wydanie treści. */
 export interface InternalRepositoryOptions extends RepositoryOptions {
   schemaVersion?: number;
   migrations?: readonly Migration[];
+  /**
+   * Wydanie treści (domyślnie bieżące — `CURRENT_BANK_TARGET`): wersja treści zapisywanych sesji, migracja v5
+   * (gdy nie podano `migrations`), eksport i wczytanie kopii.
+   */
+  bankTarget?: BankTarget;
 }
 
 const USER_STORES: readonly UserStoreName[] = USER_STORE_NAMES;
@@ -257,10 +262,11 @@ export function createIndexedDbRepository(options: InternalRepositoryOptions = {
   const dbName = options.dbName ?? DB_NAME;
   const factory: IDBFactory | null = options.indexedDB ?? (globalThis as { indexedDB?: IDBFactory }).indexedDB ?? null;
   const schemaVersion = options.schemaVersion ?? DB_SCHEMA_VERSION;
-  const migrations = options.migrations ?? MIGRATIONS;
+  const bankTarget = options.bankTarget ?? CURRENT_BANK_TARGET;
+  const migrations = options.migrations ?? (options.bankTarget ? createMigrations({ target: options.bankTarget }) : MIGRATIONS);
   const now = options.now ?? (() => new Date().toISOString());
   const appVersion = options.appVersion ?? 'nieznana';
-  const contentBankVersion = options.contentBankVersion ?? CONTENT_RELEASE.bankVersion;
+  const contentBankVersion = options.contentBankVersion ?? bankTarget.bankVersion;
   /** Właściciel bazy profilu (DECYZJE §16); `undefined` — baza bez kontroli właściciela. */
   const owner = options.owner;
   let upgradeListener: ((info: { from: number; to: number }) => void) | null = null;
@@ -438,7 +444,7 @@ export function createIndexedDbRepository(options: InternalRepositoryOptions = {
       try {
         // (e) Eksport nigdy nie zawiera treści innej wersji banku: ta sama transformacja co migracja
         // (idempotentna — dane po migracji przechodzą bez zmian), bez paczek.
-        const t = transformToCurrentBank(data.value, input.now);
+        const t = transformToCurrentBank(data.value, input.now, bankTarget);
         const file = buildBackupFile(
           { ...data.value, settings: data.value.settings.map(settingsForCurrentBank), sessions: t.sessions, attempts: t.attempts, questionStats: t.questionStats, blocks: t.blocks, events: t.events, packs: [] },
           { ...input, profileEmail: owner ?? input.profileEmail ?? null },
@@ -451,7 +457,7 @@ export function createIndexedDbRepository(options: InternalRepositoryOptions = {
     },
 
     parseAndValidateBackup(input, fileName) {
-      return parseBackup(input, fileName, now());
+      return parseBackup(input, fileName, now(), bankTarget);
     },
 
     async replaceAllFromBackup(validated: ValidatedBackup, input: ReplaceFromBackupInput): Promise<PersistenceResult<ReplaceInfo>> {
@@ -462,7 +468,7 @@ export function createIndexedDbRepository(options: InternalRepositoryOptions = {
       let summary = isObject(validated) ? validated.summary : null;
       // Obiekt spoza `parseAndValidateBackup` (np. sklonowany) — pełna walidacja ponownie, przed transakcją.
       if (!isObject(validated) || validated.kind !== 'validated-backup' || !isRegisteredValidatedBackup(validated) || !backup || !summary) {
-        const recheck = await validateBackupJson(backup, isObject(validated) && typeof validated.fileName === 'string' ? validated.fileName : 'kopia.json');
+        const recheck = await validateBackupJson(backup, isObject(validated) && typeof validated.fileName === 'string' ? validated.fileName : 'kopia.json', now(), bankTarget);
         if (!recheck.ok) return recheck;
         backup = recheck.value;
         summary = summarizeBackup(backup);
@@ -500,7 +506,7 @@ export function createIndexedDbRepository(options: InternalRepositoryOptions = {
             const excess = ordered.length - (SAFETY_BACKUPS_KEPT - 1);
             for (let i = 0; i < excess; i += 1) backups.delete(ordered[i] as IDBValidKey);
           });
-          // 2. Zamiana wszystkich danych użytkownika; paczki pytań nie są przywracane (wyłącznie wbudowany bank V18).
+          // 2. Zamiana wszystkich danych użytkownika; paczki pytań nie są przywracane (wyłącznie wbudowany bank).
           for (const name of BACKUP_DATA_STORES) {
             const store = tx.objectStore(name);
             store.clear();

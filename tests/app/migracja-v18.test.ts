@@ -10,7 +10,7 @@ import { CONTENT_RELEASE } from '../../src/domain/contentRelease';
 import type { Repository } from '../../src/persistence/api';
 import type { BackupData } from '../../src/persistence/api';
 import { createIndexedDbRepository } from '../../src/persistence/repository';
-import { createMigrationV4, MIGRATIONS } from '../../src/persistence/schema';
+import { createMigrations, MIGRATIONS } from '../../src/persistence/schema';
 import { V18_ALLOWED } from '../../src/persistence/v18Allowlist';
 import { profileData, seedChangeset, V15_BANK_VERSION, V16_BANK_VERSION, v15ProfileData } from '../persistence/fixtures';
 import { RETIRED_IDS } from '../content';
@@ -45,7 +45,7 @@ describe('kontroler: pierwsze uruchomienie V18 na profilu z aplikacji V15', () =
       repository: repo,
     });
     const c = h.controller;
-    expect(stages).toEqual(['upgrade:3->4']);
+    expect(stages).toEqual(['upgrade:3->5']);
     expect(c.getState().boot).toEqual({ phase: 'ready' });
     expect(c.getState().resume).toBeNull();
 
@@ -114,7 +114,7 @@ describe('kontroler: pierwsze uruchomienie V18 na profilu z aplikacji V15', () =
 
   it('błąd migracji → ekran „Aktualizacja danych nie powiodła się” bez pytań; „Spróbuj ponownie” kończy migrację', async () => {
     const { factory, dbName } = await v3ProfileDb(v15ProfileData(RETIRED_IDS), V15_BANK_VERSION);
-    const broken = createIndexedDbRepository({ indexedDB: factory, dbName, storageManager: null, migrations: [...MIGRATIONS.slice(0, 3), createMigrationV4({ faultAfterStore: 'questionStats' })] });
+    const broken = createIndexedDbRepository({ indexedDB: factory, dbName, storageManager: null, migrations: createMigrations({ faultAfterStore: 'questionStats' }) });
     const good = createIndexedDbRepository({ indexedDB: factory, dbName, storageManager: null });
     let useGood = false;
     const proxy = new Proxy(good, {
