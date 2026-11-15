@@ -8,22 +8,23 @@
 import { useRef, type ChangeEvent } from 'react';
 import { useAppState, useController } from '../../app/ControllerContext';
 import type { BackupVM, PoolImportVM, SafetyBackupVM } from '../../app/viewModels';
+import { CONTENT_RELEASE, CONTENT_RELEASE_LABEL } from '../../domain/contentRelease';
 import type { BackupSummary } from '../../persistence/api';
 import { Banner } from '../components/Banner';
 import { Icon } from '../components/Icon';
 import { Screen, ScreenHeader } from '../components/Screen';
 import { RadioList } from '../components/Sheet';
 import { EmailText } from './ProfileScreens';
-import { backupErrorDetail, formatBytes, formatDateTime, pluralPl } from '../format';
+import { backupErrorDetail, formatBytes, formatDateTime, pluralPl, questionsCount } from '../format';
 
 /**
  * Opis zawartości pliku kopii (F02). Kopia zawiera magazyny `BACKUP_DATA_STORES` (persistence/backup.ts):
  * ustawienia, sesje ZE SNAPSHOTAMI PYTAŃ (treść, warianty, klucz, wyjaśnienie — do przeglądu odpowiedzi),
- * próby, stan powtórek, blokady (z początkiem treści pytania), zdarzenia — wyłącznie treść banku V18 (allowlista 700).
+ * próby, stan powtórek, blokady (z początkiem treści pytania), zdarzenia — wyłącznie treść aktualnego wydania banku
+ * (etykieta i liczba pytań z `CONTENT_RELEASE_LABEL` / `CONTENT_RELEASE.counts.questions`, nie wpisane na sztywno).
  * Nie zawiera wbudowanej puli, zaimportowanych pul ani danych pacjentów (aplikacja ich nie przetwarza).
  */
-export const BACKUP_CONTENTS_TEXT =
-  'Plik zawiera wyniki, przerwane sesje, ustawienia, stan powtórek i wykluczone pytania, a także treść pytań aktualnego banku (V18, 700 pytań) z Twoich sesji (do przeglądu odpowiedzi). Sesje z wcześniejszych wersji banku mają tylko podsumowanie, bez treści pytań. Nie zawiera wbudowanej puli pytań, zaimportowanych pul ani danych pacjentów.';
+export const BACKUP_CONTENTS_TEXT = `Plik zawiera wyniki, przerwane sesje, ustawienia, stan powtórek i wykluczone pytania, a także treść pytań aktualnego banku (${CONTENT_RELEASE_LABEL}, ${questionsCount(CONTENT_RELEASE.counts.questions)}) z Twoich sesji (do przeglądu odpowiedzi). Sesje z wcześniejszych wersji banku mają tylko podsumowanie, bez treści pytań. Nie zawiera wbudowanej puli pytań, zaimportowanych pul ani danych pacjentów.`;
 
 function FilePicker({ label, accept, onFile, primary = false }: { label: string; accept: string; onFile: (file: File) => void; primary?: boolean }) {
   const inputRef = useRef<HTMLInputElement>(null);
@@ -295,16 +296,18 @@ export function BackupScreen({ vm }: { vm: BackupVM }) {
 
 /**
  * Import dodatkowych pul pytań — WYŁĄCZONY od banku V15 (docs/MIGRACJA_V15.md): aplikacja udostępnia
- * wyłącznie wbudowany bank (od 09.11.2026 V18, docs/MIGRACJA_V18.md). Ekran zostaje pod dotychczasowym adresem z wyjaśnieniem, bez wyboru pliku.
+ * wyłącznie wbudowany bank (od 09.11.2026 V18, docs/MIGRACJA_V18.md; etykieta i liczba pytań z aktualnego
+ * wydania `CONTENT_RELEASE`). Ekran zostaje pod dotychczasowym adresem z wyjaśnieniem, bez wyboru pliku.
  */
 export function PoolImportScreen({ vm }: { vm: PoolImportVM }) {
   const controller = useController();
   void vm;
+  const count = questionsCount(CONTENT_RELEASE.counts.questions);
   return (
     <Screen header={<ScreenHeader title="Pula pytań" onBack={() => controller.goBack()} />}>
-      <Banner tone="info" role="note" title="Aplikacja używa wyłącznie wbudowanego banku pytań (V18, 700 pytań)">
+      <Banner tone="info" role="note" title={`Aplikacja używa wyłącznie wbudowanego banku pytań (${CONTENT_RELEASE_LABEL}, ${count})`}>
         <span className="banner__text">
-          Import dodatkowych pul pytań jest wyłączony. Wszystkie tryby (Test, Free Flow, runda błędów, „Moje błędy”) korzystają tylko z wbudowanego banku 700 pytań. Liczby
+          Import dodatkowych pul pytań jest wyłączony. Wszystkie tryby (Test, Free Flow, runda błędów, „Moje błędy”) korzystają tylko z wbudowanego banku {count}. Liczby
           pytań i status materiału są w „O bazie pytań”.
         </span>
       </Banner>

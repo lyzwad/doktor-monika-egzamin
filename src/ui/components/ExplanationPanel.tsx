@@ -7,9 +7,12 @@
  * SourceRow: tytuł z rejestru, rodzaj i zakres odczytu; po rozwinięciu „Gdzie w źródle”, DOI, PMID
  * i „Otwórz publikację” (link `target="_blank"` `rel="noopener noreferrer"`, wyłącznie https z rejestru).
  * Offline: komunikat; treść pozostaje dostępna lokalnie.
+ * Źródło webinaru (SPEC-webinary-247, teksty-ui.md): zamiast linku przycisk „Źródło webinaru” z lokalnym
+ * panelem (plik, zdanie o automatycznych napisach, cytat, nota pytania, zdanie o źródle egzaminacyjnym) —
+ * bez żadnego `<a>`, także offline i przy niepustym `url`.
  */
 import { forwardRef, useId, useState } from 'react';
-import type { ExplanationVM, FigureVM, SourceVM } from '../../app/viewModels';
+import type { ExplanationVM, FigureVM, SourceVM, WebinarEvidenceVM } from '../../app/viewModels';
 import { isSafeHttpsUrl, locatorForSource } from '../format';
 import { Icon } from './Icon';
 import { FigureBlock } from './Figure';
@@ -18,13 +21,36 @@ export interface SourceRowProps {
   source: SourceVM;
   locator: string;
   online: boolean;
+  /** Dowód pytania z webinaru (wspólny dla wszystkich źródeł webinaru pytania); `null` — brak. */
+  evidence?: WebinarEvidenceVM | null;
 }
 
-export function SourceRow({ source, locator, online }: SourceRowProps) {
+/** Panel „Źródło webinaru” — wyłącznie dane lokalne (działa offline). */
+function WebinarPanel({ id, fileName, evidence }: { id: string; fileName: string | null; evidence: WebinarEvidenceVM | null }) {
+  return (
+    <div className="source-row__webinar" id={id}>
+      {fileName ? (
+        <div>
+          <span className="source-row__label">Plik: </span>
+          {fileName}
+        </div>
+      ) : null}
+      <p className="source-row__caveat">Fragment automatycznych napisów — może zawierać błędy rozpoznawania mowy</p>
+      {evidence && evidence.quote ? <blockquote className="source-row__quote">{evidence.quote}</blockquote> : null}
+      {evidence && evidence.note ? <p>{evidence.note}</p> : null}
+      <p className="source-row__caveat">Źródło egzaminacyjne z wykładu, nie zweryfikowane aktualne wytyczne.</p>
+    </div>
+  );
+}
+
+export function SourceRow({ source, locator, online, evidence = null }: SourceRowProps) {
   const [open, setOpen] = useState(false);
   const [offlineNotice, setOfflineNotice] = useState(false);
+  const [webinarOpen, setWebinarOpen] = useState(false);
   const detailsId = useId();
-  const url = isSafeHttpsUrl(source.url) ? source.url : null;
+  const webinarId = useId();
+  // Źródło webinaru nigdy nie jest linkiem (także gdy `url` byłby niepusty).
+  const url = !source.webinar && isSafeHttpsUrl(source.url) ? source.url : null;
   const meta = [source.kindPl, source.accessPl].filter((x) => x && x.trim()).join(' · ');
   return (
     <li className="source-row">
@@ -36,6 +62,7 @@ export function SourceRow({ source, locator, online }: SourceRowProps) {
         onClick={() => {
           setOpen((v) => !v);
           setOfflineNotice(false);
+          setWebinarOpen(false);
         }}
       >
         <Icon name="description" className="source-row__icon" />
@@ -77,6 +104,19 @@ export function SourceRow({ source, locator, online }: SourceRowProps) {
               <Icon name="open_in_new" size={18} />
             </button>
           ) : null}
+          {source.webinar ? (
+            <button
+              type="button"
+              className="btn btn--secondary source-row__open"
+              aria-expanded={webinarOpen}
+              aria-controls={webinarOpen ? webinarId : undefined}
+              onClick={() => setWebinarOpen((v) => !v)}
+            >
+              Źródło webinaru
+              <Icon name={webinarOpen ? 'expand_less' : 'expand_more'} size={18} />
+            </button>
+          ) : null}
+          {source.webinar && webinarOpen ? <WebinarPanel id={webinarId} fileName={source.fileName} evidence={evidence} /> : null}
           {url && !online && offlineNotice ? (
             <div className="banner banner--plain" role="status">
               <div className="banner__row">
@@ -138,7 +178,7 @@ export const ExplanationPanel = forwardRef<HTMLElement, ExplanationPanelProps>(f
           <h3 className="expl__sources-title">Źródła</h3>
           <ul className="source-list" role="list">
             {explanation.sources.map((s) => (
-              <SourceRow key={s.id} source={s} locator={locatorForSource(explanation.sourceLocator, s.id)} online={online} />
+              <SourceRow key={s.id} source={s} locator={locatorForSource(explanation.sourceLocator, s.id)} online={online} evidence={explanation.webinarEvidence} />
             ))}
           </ul>
         </div>

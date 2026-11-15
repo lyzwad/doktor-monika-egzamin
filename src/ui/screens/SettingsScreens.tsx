@@ -6,6 +6,7 @@
  */
 import { useAppState, useController } from '../../app/ControllerContext';
 import type { AboutVM, BankInfoVM, ExcludedVM, SettingsVM } from '../../app/viewModels';
+import { CONTENT_RELEASE_LABEL } from '../../domain/contentRelease';
 import { Banner } from '../components/Banner';
 import { ListRow } from '../components/Controls';
 import { Icon } from '../components/Icon';
@@ -85,7 +86,7 @@ export function SettingsScreen({ vm }: { vm: SettingsVM }) {
             <ListRow icon="save" title="Kopia danych" subtitle="Zapisz lub wczytaj plik kopii" onClick={() => controller.openBackup()} />
           </li>
           <li>
-            <ListRow icon="library_add" title="Pula pytań" subtitle="Wyłącznie wbudowany bank V18 — import pul wyłączony" onClick={() => controller.openPoolImport()} />
+            <ListRow icon="library_add" title="Pula pytań" subtitle={`Wyłącznie wbudowany bank ${CONTENT_RELEASE_LABEL} — import pul wyłączony`} onClick={() => controller.openPoolImport()} />
           </li>
           <li>
             <ListRow
@@ -187,6 +188,10 @@ export function AboutScreen({ vm }: { vm: AboutVM }) {
         <li>
           <span>Sprawdzone odrębnym przeglądem AI (nie recenzja lekarska)</span>
           <span className="about-table__count">{bank.independentlyCheckedCount}</span>
+        </li>
+        <li>
+          <span>Pytania z webinarów</span>
+          <span className="about-table__count">{bank.webinarQuestionCount}</span>
         </li>
         <li>
           <span>Pytania ze schematem</span>

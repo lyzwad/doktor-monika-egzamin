@@ -75,7 +75,10 @@ export interface FigureVM {
   caption: string;
 }
 
-/** Wiersz źródła (SourceRow). `url` tylko https z rejestru albo `null`. */
+/**
+ * Wiersz źródła (SourceRow). `url` tylko https z rejestru albo `null`.
+ * Źródło webinaru (`webinar`) nie ma linku — zamiast niego lokalny panel z nazwą pliku i dowodem pytania.
+ */
 export interface SourceVM {
   id: SourceId;
   title: string;
@@ -84,6 +87,17 @@ export interface SourceVM {
   url: string | null;
   doi: string | null;
   pmid: string | null;
+  /** Transkrypcja webinaru (snapshot bez pola → `false`). */
+  webinar: boolean;
+  /** Nazwa pliku transkrypcji (snapshot bez pola → `null`). */
+  fileName: string | null;
+}
+
+/** Dowód pytania z webinaru (ze snapshotu): cytat z napisów, ID fragmentów, nota źródła. */
+export interface WebinarEvidenceVM {
+  quote: string;
+  unitIds: string[];
+  note: string;
 }
 
 /** „Rozwiń szerszy kontekst” — temat pytania (cel, perełki). */
@@ -101,6 +115,8 @@ export interface ExplanationVM {
   sources: SourceVM[];
   /** „Gdzie w źródle” (lokator z banku). */
   sourceLocator: string;
+  /** Dowód pytania z webinaru (snapshot bez pola → `null`). */
+  webinarEvidence: WebinarEvidenceVM | null;
 }
 
 /** Konfiguracja do etykiet („Cały zakres · Mieszany”, „20 pytań”, „Moje błędy”). */
@@ -463,6 +479,8 @@ export interface BankInfoVM {
   byDifficulty: { difficulty: Difficulty; count: number }[];
   /** Pytania po odrębnym przeglądzie AI (`independently_checked_draft`) — NIE recenzja lekarska. */
   independentlyCheckedCount: number;
+  /** Pytania z webinarów (z dowodem webinaru w katalogu). */
+  webinarQuestionCount: number;
   /** Pytania ze schematem. */
   schematicCount: number;
   /** `pool_note_pl` z banku (np. cel 2000–3000 nieosiągnięty); pusty, gdy brak. */

@@ -1,17 +1,18 @@
 /**
- * Bank V18 w interfejsie: jedna pula wszystkich 700 pytań, bez selektora i etykiet trudności (docs/MIGRACJA_V18.md).
+ * Bank w interfejsie: jedna pula wszystkich pytań wydania (`CONTENT_RELEASE.counts.questions`), bez selektora i etykiet trudności (docs/MIGRACJA_V18.md).
  * Metadane trudności zostają w pliku, ale aplikacja nie nazywa pytań łatwymi/trudnymi i nie filtruje po poziomie.
  */
 import { cleanup, fireEvent, screen, within } from '@testing-library/react';
 import { afterEach, describe, expect, it } from 'vitest';
-import { configLabel } from '../../src/ui/format';
+import { CONTENT_RELEASE } from '../../src/domain/contentRelease';
+import { configLabel, questionsCount } from '../../src/ui/format';
 import { correctOptionId, renderApp, startedMock } from './helpers';
 
 afterEach(() => cleanup());
 
 const LEVEL_WORDS = /\b(Łatwy|Średni|Trudny|Mieszany)\b/;
 
-describe('jedna pula 700 pytań — bez poziomów trudności', () => {
+describe('jedna pula wszystkich pytań wydania — bez poziomów trudności', () => {
   it.each(['test', 'freeflow'] as const)('konfiguracja %s: brak sekcji „Trudność” i przełącznika poziomu; zakres pokazuje całą pulę', async (mode) => {
     const c = await startedMock();
     c.openConfig(mode);
@@ -22,7 +23,7 @@ describe('jedna pula 700 pytań — bez poziomów trudności', () => {
     expect(document.body.textContent ?? '').not.toMatch(LEVEL_WORDS);
     fireEvent.click(screen.getByRole('button', { name: /Cały zakres/ }));
     const sheet = screen.getByRole('dialog', { name: 'Zakres' });
-    expect(within(sheet).getByRole('radio', { name: /Cały zakres/ }).textContent).toContain('700');
+    expect(within(sheet).getByRole('radio', { name: /Cały zakres/ }).textContent).toContain(String(CONTENT_RELEASE.counts.questions));
   });
 
   it('próba ustawienia poziomu (np. z dawnej konfiguracji) nie zawęża puli', async () => {
@@ -50,13 +51,13 @@ describe('jedna pula 700 pytań — bez poziomów trudności', () => {
     expect(card.textContent ?? '').not.toMatch(LEVEL_WORDS);
   });
 
-  it('„O bazie pytań”: 700 pytań, bez listy poziomów trudności', async () => {
+  it('„O bazie pytań”: liczba pytań wydania, bez listy poziomów trudności', async () => {
     const c = await startedMock();
     c.openSettings();
     c.openAbout();
     await renderApp(c);
     expect(screen.queryByRole('list', { name: 'Liczba pytań według poziomu trudności' })).toBeNull();
-    expect(document.body.textContent ?? '').toContain('700 pytań');
+    expect(document.body.textContent ?? '').toContain(questionsCount(CONTENT_RELEASE.counts.questions));
     expect(document.body.textContent ?? '').not.toMatch(LEVEL_WORDS);
   });
 
