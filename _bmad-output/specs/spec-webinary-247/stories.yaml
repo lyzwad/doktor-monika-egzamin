@@ -32,3 +32,11 @@
   invoke_dev_with: >-
     Start po scaleniu historii 1. Pliki: src/pwa/, vite.config.ts, scripts/check-offline.mjs, scripts/sw-takeover.mjs,
     tests/pwa/, tests/e2e/, docs/. Pełne e2e uruchom po scaleniu historii 2 i 3 (lider da znać).
+- id: "5"
+  title: Zakres „Webinar” w Test i Free Flow
+  description: >-
+    CAP-8: nowa wartość zakresu obejmująca wyłącznie pytania origin=webinar, w selektorze Zakres
+    (Test i Free Flow), z obsługą „Moje błędy”, rundy błędów, historii, ustawień i kopii danych.
+  invoke_dev_with: >-
+    Jeden programista na całość (domena, persistence, app, UI są sprzężone typem Scope). Etykieta wyłącznie
+    z teksty-ui.md. Dodaj przypadek e2e (Test z zakresem Webinar) do istniejących plików e2e.

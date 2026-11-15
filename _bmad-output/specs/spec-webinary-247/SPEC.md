@@ -41,6 +41,10 @@ Mandat właściciela: dołożyć do działającej aplikacji https://wiedza.dokto
   - **intent:** Zainstalowana PWA aktualizuje się sama do nowego wydania i potem działa offline.
   - **success:** E2E: aplikacja z produkcji `39d9d46` z dwoma profilami i historią → nowe wydanie przejmuje kartę, każdy profil migruje osobno, 947 pytań, stare wyniki V18 widoczne i aktywne, test i runda błędów działają, Free Flow działa, po odcięciu sieci aplikacja otwiera się i pokazuje pytania WB ze źródłem.
 
+- **CAP-8** (decyzja Dominika 15.11, po wdrożeniu)
+  - **intent:** W wyborze „Zakres” (Test i Free Flow) jest opcja „Webinar”, która losuje wyłącznie z 247 pytań z paczki webinarowej.
+  - **success:** Lista zakresów pokazuje „Webinar” z liczbą 247 w istniejącym formacie; test i Free Flow z tym zakresem zawierają wyłącznie pytania `WB-`; „Moje błędy” i runda błędów w tym zakresie biorą tylko pytania `WB-`; sesja, ostatnia konfiguracja i kopia danych z tym zakresem zapisują się i wczytują; stare dane bez zmian.
+
 ## Constraints
 
 - Nie zmieniać treści ani metadanych 700 rekordów V18; nie dodawać żadnego ID do retired; nie usuwać żadnego rekordu na podstawie podobieństwa bez decyzji Dominika.
@@ -56,7 +60,8 @@ Mandat właściciela: dołożyć do działającej aplikacji https://wiedza.dokto
 
 ## Non-goals
 
-- Osobny filtr lub tryb „tylko webinary”, wybór poziomu trudności, ocena trudności pytań WB.
+- Wybór poziomu trudności, ocena trudności pytań WB. (Zakres „Webinar” — zob. CAP-8 — od 15.11 jest w zakresie.)
+- Osobne zakresy dla pojedynczych webinarów (W01…W17) ani połączenie „Webinar” z wyborem dziedziny.
 - Recenzja medyczna kluczy, poprawianie błędów ASR w cytatach, linki do nagrań.
 - Import pul przez użytkownika (pozostaje wyłączony).
 - Test na fizycznym iPhonie (emulacja WebKit nie jest takim testem).
