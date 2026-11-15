@@ -10,7 +10,7 @@
 import { describe, expect, it } from 'vitest';
 import { CONTENT_RELEASE } from '../../src/domain/contentRelease';
 import { answer, finishTest, nextFreeFlowSlot } from '../../src/domain/sessions';
-import type { CommandContext, IdKind, Session, UserState } from '../../src/domain/types';
+import type { CommandContext, IdKind, QuestionStat, Session, UserState } from '../../src/domain/types';
 import { APP_ID, BACKUP_FORMAT, DB_SCHEMA_VERSION } from '../../src/persistence/api';
 import type { BackupData, Repository } from '../../src/persistence/api';
 import {
@@ -42,6 +42,7 @@ import {
   V16_BANK_VERSION,
   V17_BANK_VERSION,
   V18_BANK_VERSION,
+  V18_ROWS,
   v15ProfileData,
   v18LegacySessions,
   v18ProfileData,
@@ -175,6 +176,39 @@ function ctx(now: string): CommandContext {
 
 const nonLegacy = (data: BackupData): Session[] => data.sessions.filter((s) => !s.legacy);
 
+/** Statystyka samego wyświetlenia (bez odpowiedzi) pytania z allowlisty — 5. pytanie banku (slot s2-c rundy błędów). */
+function shownOnlyStat(): QuestionStat {
+  const q = BANK.questions[4]!;
+  return {
+    questionId: q.id,
+    familyId: q.family_id,
+    domainId: q.domain_id,
+    seenCount: 1,
+    firstSeenAt: '2026-10-21T18:03:00.000Z',
+    lastSeenAt: '2026-10-21T18:03:00.000Z',
+    answeredCount: 0,
+    correctCount: 0,
+    wrongCount: 0,
+    lastAnsweredAt: null,
+    activeError: false,
+    streak: 0,
+    dueAt: null,
+    lastWrongAt: null,
+    lastWrongSessionId: null,
+    streakSessionId: null,
+    resolvedAt: null,
+  };
+}
+
+/**
+ * Profil V16: otwarta runda błędów (sess-2) zawiera pytanie spoza allowlisty (s2-b), więc staje się podsumowaniem;
+ * jej slot s2-c (pytanie z allowlisty) był tylko pokazany — jedyny ślad to statystyka wyświetlenia.
+ */
+function v16ShownOnlyProfile(): BackupData {
+  const data = profileData(V16_BANK_VERSION, (i, q) => (i === 3 ? retiredQuestion('XX-OBCE-4') : q));
+  return { ...data, questionStats: [...data.questionStats, shownOnlyStat()] };
+}
+
 /* ========================================================================== */
 /* Transformacja                                                              */
 /* ========================================================================== */
@@ -265,9 +299,12 @@ describe('transformacja profilu V18 do wydania „V18 + webinary” (wydanie doc
     expect(t.sessions.filter((x) => x.legacy)).toEqual(before);
   });
 
-  it('idempotencja: transformacja wyniku daje ten sam wynik (profil V18, V15, mieszany)', () => {
+  it('idempotencja: transformacja wyniku daje ten sam wynik (profil V18, V15, mieszany, pytanie tylko pokazane w sesji, która staje się podsumowaniem)', () => {
     const v15 = v15ProfileData(RETIRED_IDS);
-    for (const data of [v18ProfileData(), v15, profileData(V18_BANK_VERSION, (i, q) => (i === 2 ? retiredQuestion('XX-OBCE') : q))]) {
+    const shownOnly = v16ShownOnlyProfile();
+    // Przypadek ma sens: pierwsze przekształcenie zachowuje statystykę samego wyświetlenia.
+    expect(transform(shownOnly).questionStats).toContainEqual(shownOnlyStat());
+    for (const data of [v18ProfileData(), v15, profileData(V18_BANK_VERSION, (i, q) => (i === 2 ? retiredQuestion('XX-OBCE') : q)), shownOnly]) {
       const a = transform(data);
       const b = transformToCurrentBank({ sessions: a.sessions, attempts: a.attempts, questionStats: a.questionStats, blocks: a.blocks, events: a.events }, '2026-12-01T00:00:00.000Z', SYNTH_TARGET);
       expect(b.sessions).toEqual(a.sessions);
@@ -277,6 +314,21 @@ describe('transformacja profilu V18 do wydania „V18 + webinary” (wydanie doc
       expect(b.events).toEqual(a.events);
       expectNoOldContent(a);
     }
+  });
+
+  it('statystyka samego wyświetlenia bez dowodu zostaje tylko dla pytania z allowlisty, bez sprzecznej treści, z tą samą rodziną i dziedziną', () => {
+    const seen = shownOnlyStat();
+    const keep = (stats: QuestionStat[], sessions: Session[] = []) =>
+      transformToCurrentBank({ sessions, attempts: [], questionStats: stats, blocks: [], events: [] }, MIGRATED_AT, SYNTH_TARGET).questionStats;
+    expect(keep([seen])).toEqual([seen]);
+    expect(keep([{ ...seen, questionId: 'XX-SPOZA-ALLOWLISTY' }])).toEqual([]);
+    expect(keep([{ ...seen, familyId: 'OBCA-RODZINA' }])).toEqual([]);
+    // Sprzeczna treść tego ID w danych (inna rewizja i fingerprint) → bez przenoszenia.
+    const contradicting = profileData(V18_BANK_VERSION, (i, q) => (i === 4 ? alteredQuestion(q.id) : q)).sessions;
+    expect(keep([seen], contradicting)).toEqual([]);
+    // Statystyka z odpowiedzią albo z terminem powtórki nadal wymaga dowodu.
+    expect(keep([{ ...seen, answeredCount: 1, correctCount: 1 }])).toEqual([]);
+    expect(keep([{ ...seen, dueAt: '2026-11-16T23:00:00.000Z' }])).toEqual([]);
   });
 
   it('pytania WB nowego wydania są zgodne (sesja wydania z polami webinaru zostaje bez zmian)', () => {
@@ -482,6 +534,18 @@ describe('IndexedDB v4 → v5 (każdy profil osobno, jedna transakcja `versionch
     for (const name of ['settings', 'sessions', 'attempts', 'questionStats', 'blocks', 'events', 'packs', 'backups']) expect(second.stores[name], name).toEqual(first.stores[name]);
     const content = (d: typeof first) => (d.stores.meta as { key: string }[]).find((m) => m.key === 'content');
     expect(content(second)).toEqual(content(first));
+  });
+
+  it('baza v4 po dawnej migracji V18 (sesja V16 już jako podsumowanie, pytanie tylko pokazane): v5 zachowuje statystykę wyświetlenia', async () => {
+    const v18Only: BankTarget = { bankVersion: V18_BANK_VERSION, bankSha256: '5db40505308f0183ed85d5be4b2e9f8c3871d091f6ec7413f5518c88b39966f6', allowed: V18_ROWS, predecessorBankVersions: [] };
+    const atV4 = transform(v16ShownOnlyProfile(), v18Only, '2026-11-09T21:00:00.000Z');
+    expect(atV4.sessions.find((s) => s.id === 'sess-2')?.legacy).toBeTruthy();
+    expect(atV4.questionStats).toContainEqual(shownOnlyStat());
+    const { factory, dbName } = await profileDb({ settings: v16ShownOnlyProfile().settings, sessions: atV4.sessions, attempts: atV4.attempts, questionStats: atV4.questionStats, blocks: atV4.blocks, events: atV4.events, packs: [] });
+    const { repo } = freshRepository({ indexedDB: factory, dbName, bankTarget: SYNTH_TARGET, now: () => MIGRATED_AT });
+    const state = await load(repo);
+    repo.close();
+    expect(state.questionStats).toEqual(Object.fromEntries(atV4.questionStats.map((x) => [x.questionId, x])));
   });
 
   it.each(['sessions', 'attempts', 'questionStats', 'blocks'] as const)('przerwanie migracji po magazynie %s → `MigrationFailed`, baza zostaje w v4 bez zmian; ponowienie kończy migrację', async (store) => {

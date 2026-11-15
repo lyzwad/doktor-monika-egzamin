@@ -72,7 +72,8 @@ describe('D05 — Free Flow', () => {
     for (const d of DOMAIN_IDS.filter((x) => x !== 'DEV')) expect(Math.abs(s[d] - 0.12)).toBeLessThan(0.02);
     const weights = session(r.state, r.sessionId).allocation.freeFlowWeights;
     expect(weights?.DEV).toBeCloseTo(0.4, 10);
-  });
+    // Duża próba (600 doborów): przy obciążonym komputerze trwa dłużej niż domyślne 5 s.
+  }, 20_000);
 
   it('brak podaży domeny → renormalizacja; domena solo → 100% tej domeny', () => {
     const noDev = catalogOf(grid(10, { domains: ['ANAT', 'INJ', 'SKIN', 'THER', 'SAFE'] }));
@@ -169,7 +170,8 @@ describe('D05 — Free Flow', () => {
     // Najpierw nowe: przy samych poprawnych odpowiedziach 300 doborów w puli 720 rodzin to różne pytania.
     const allCorrect = runFreeFlow(big, 300, { seed: 4 });
     expect(new Set(allCorrect.sequence.map((x) => x.id)).size).toBe(300);
-  });
+    // Dwie duże próby (2 × 300 doborów): przy obciążonym komputerze trwają dłużej niż domyślne 5 s.
+  }, 20_000);
 
   it('po wyczerpaniu nowych kontynuuje powtórki (mała pula), „Dalej” wymaga odpowiedzi', () => {
     const small = catalogOf(grid(1, { domains: ['ANAT', 'INJ'], levels: ['basic'] }).concat(grid(1, { domains: ['DEV'], levels: ['basic', 'advanced'] }))); // 4 pytania

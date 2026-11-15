@@ -328,20 +328,24 @@ export function transformToCurrentBank(input: BankTransformInput, now: IsoDateTi
     else attemptsRemoved++;
   }
 
-  // Dowód zgodności pytania: zgodny snapshot w niezmigrowanej treści albo zachowana próba z rewizją wydania.
+  // Dowód zgodności pytania, który ZOSTAJE w danych po przekształceniu (idempotencja: ponowne przekształcenie
+  // widzi ten sam dowód): zgodny snapshot w sesji zachowanej jako aktywna albo zachowana próba z rewizją wydania.
   const evidenced = new Set<string>();
-  for (const s of rawSessions) {
+  for (const s of sessions) {
     if (s.legacy) continue;
     for (const slot of slotsOf(s)) if (matches(slot)) evidenced.add(slot.questionId);
   }
   for (const a of attempts) evidenced.add(a.questionId);
 
-  // Stan powtórek: tylko pytania zgodne, z dowodem zgodności i tą samą rodziną oraz dziedziną co wydanie.
+  // Stan powtórek: tylko pytania zgodne, z tą samą rodziną oraz dziedziną co wydanie i z dowodem zgodności.
+  // Statystyka samego wyświetlenia (bez odpowiedzi, bez błędu i terminu powtórki) nie niesie wyniku nauki — nie
+  // wymaga dowodu (np. pytanie pokazane w sesji, która stała się podsumowaniem już w poprzedniej migracji).
   const questionStats: QuestionStat[] = [];
   let statsReset = 0;
   for (const st of input.questionStats) {
     const ref = isObj(st) && typeof st.questionId === 'string' ? allowed.get(st.questionId) : undefined;
-    const keep = ref !== undefined && isObj(st) && confirmed(st.questionId) && evidenced.has(st.questionId as string) && st.familyId === ref.familyId && st.domainId === ref.domainId;
+    const seenOnly = isObj(st) && st.answeredCount === 0 && st.correctCount === 0 && st.wrongCount === 0 && st.activeError === false && st.dueAt === null;
+    const keep = ref !== undefined && isObj(st) && confirmed(st.questionId) && (seenOnly || evidenced.has(st.questionId as string)) && st.familyId === ref.familyId && st.domainId === ref.domainId;
     if (keep) questionStats.push(st as unknown as QuestionStat);
     else statsReset++;
   }

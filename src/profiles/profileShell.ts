@@ -8,6 +8,7 @@
  */
 import type { AppController } from '../app/controller';
 import type { IsoDateTime } from '../domain/types';
+import { DB_SCHEMA_VERSION } from '../persistence/api';
 import type { Repository, RepositoryOptions } from '../persistence/api';
 import { mapOpenError, MSG_NO_INDEXEDDB, MSG_NO_STORAGE_SUFFIX } from '../persistence/errors';
 import { hasLearningData } from '../persistence/merge';
@@ -187,9 +188,10 @@ export function createProfileShell(deps: ProfileShellDeps): ProfileShell {
     let summary: UnassignedSummary | null = null;
     if (exists !== false) {
       const legacy = deps.createRepository({ dbName: LEGACY_DB_NAME, appVersion: deps.appVersion, now: deps.now });
-      // Dane sprzed V18 (schemat 1–3): migracja treści przy tym odczycie — ten sam komunikat co w aplikacji.
+      // Dane sprzed bieżącego schematu (np. V15 — schemat 3, V18 — schemat 4): migracja treści przy tym odczycie —
+      // ten sam komunikat co w aplikacji.
       legacy.setUpgradeListener((info) => {
-        if (info.from > 0 && info.from < 4) publish({ phase: 'loading', messagePl: MSG_CONTENT_UPDATE });
+        if (info.from > 0 && info.from < DB_SCHEMA_VERSION) publish({ phase: 'loading', messagePl: MSG_CONTENT_UPDATE });
       });
       try {
         summary = summarize(await legacy.loadUserState());
