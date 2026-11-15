@@ -24,6 +24,7 @@ import {
   summarizeSession,
   validateTestN,
   N_STEP,
+  WEBINAR_SCOPE,
 } from '../domain/api';
 import type {
   Catalog,
@@ -118,8 +119,22 @@ export function domainTitleOf(catalog: Catalog, domainId: DomainId): string {
   return catalog.domains.find((d) => d.id === domainId)?.title ?? domainId;
 }
 
+/** Etykieta zakresu „Webinar” (CAP-8, teksty-ui.md) — lista „Zakres”, konfiguracja, karta przerwanej sesji, historia. */
+export const WEBINAR_SCOPE_TITLE = 'Webinar';
+
 export function scopeTitleOf(catalog: Catalog, scope: Scope): string {
-  return scope === 'ALL' ? 'Cały zakres' : domainTitleOf(catalog, scope);
+  if (scope === 'ALL') return 'Cały zakres';
+  if (scope === WEBINAR_SCOPE) return WEBINAR_SCOPE_TITLE;
+  return domainTitleOf(catalog, scope);
+}
+
+/**
+ * Lista „Zakres”: cały zakres, domeny katalogu, na końcu „Webinar” — tylko gdy katalog ma choć jedno pytanie
+ * z transkrypcji webinaru (katalogi bez pytań WB nie dostają tej opcji).
+ */
+export function scopeListOf(catalog: Catalog): Scope[] {
+  const hasWebinar = catalog.questions.some((q) => q.webinarEvidence !== null);
+  return ['ALL', ...catalog.domains.map((d) => d.id), ...(hasWebinar ? [WEBINAR_SCOPE] : [])];
 }
 
 export function configLabelOf(catalog: Catalog, config: SessionConfig): ConfigLabelVM {
@@ -226,7 +241,7 @@ function configVM(input: ViewInput, mode: SessionKind): ConfigVM {
   const cap = pool.capacity;
   const nValidation = mode === 'test' ? validateTestN(draft.nText, cap) : null;
   const open = activeSession(user);
-  const scopes: Scope[] = ['ALL', ...catalog.domains.map((d) => d.id)];
+  const scopes = scopeListOf(catalog);
   return {
     name: 'config',
     mode,

@@ -149,6 +149,35 @@ describe('F02 — round-trip eksport → import', () => {
     target.close();
   });
 
+  it('zakres „Webinar” (CAP-8): sesja i ostatnie konfiguracje z WEBINAR przechodzą eksport → import bez zmian', async () => {
+    const data = sampleUserData();
+    const webinarConfig = <C extends { scope: string }>(c: C): C => ({ ...c, scope: 'WEBINAR' });
+    data.sessions = data.sessions.map((s) => (s.id === 'sess-1' || s.id === 'sess-3' ? { ...s, config: webinarConfig(s.config) } : s));
+    data.settings = data.settings.map((st) => ({
+      ...st,
+      lastTestConfig: st.lastTestConfig ? webinarConfig(st.lastTestConfig) : null,
+      lastFreeFlowConfig: st.lastFreeFlowConfig ? webinarConfig(st.lastFreeFlowConfig) : null,
+    }));
+    const { repo: source } = freshRepository();
+    const seeded = await source.commit(seedChangeset(data));
+    expect(seeded.ok).toBe(true);
+    const text = await exportText(source);
+    const sourceState = await source.loadUserState();
+
+    const { repo: target } = freshRepository();
+    const replaced = await target.replaceAllFromBackup(await validated(target, text), { ...EXPORT_INPUT, safetyBackupId: 'safety-1' });
+    expect(replaced.ok).toBe(true);
+    const loaded = await target.loadUserState();
+    expect(loaded).toEqual(sourceState);
+    if (!loaded.ok) throw new Error('load');
+    expect(loaded.value.sessions['sess-1']?.config.scope).toBe('WEBINAR');
+    expect(loaded.value.sessions['sess-3']?.config.scope).toBe('WEBINAR');
+    expect(loaded.value.settings.lastTestConfig?.scope).toBe('WEBINAR');
+    expect(loaded.value.settings.lastFreeFlowConfig?.scope).toBe('WEBINAR');
+    source.close();
+    target.close();
+  });
+
   it('import do tej samej bazy nie podwaja zdarzeń ani prób', async () => {
     const { repo, data } = await seededRepository();
     const text = await exportText(repo);
@@ -313,6 +342,8 @@ describe('F03 — błędny plik nie zmienia danych', () => {
       [(f) => { (f.data.attempts[0] as { domainId: string }).domainId = 'XYZ'; }, /pole „domainId”/],
       [(f) => { (f.data.sessions[0]?.slots['s1-a'] as { origin: string }).origin = 'random'; }, /pole „origin”/],
       [(f) => { (f.data.sessions[0]?.config as { difficulty: string }).difficulty = 'hard'; }, /pole „difficulty”/],
+      [(f) => { (f.data.sessions[0]?.config as { scope: string }).scope = 'XYZ'; }, /pole „scope”/],
+      [(f) => { (f.data.settings[0]?.lastTestConfig as { scope: string }).scope = 'XYZ'; }, /ostatni test: pole „scope”/],
       [(f) => { (f.data.questionStats[0] as { streak: number }).streak = 2; }, /pole „streak”/],
       [(f) => { (f.data.events[0] as { type: string }).type = 'hacked'; }, /nieznany typ zdarzenia/],
       [(f) => { (f.data.attempts[0] as { answeredAt: string }).answeredAt = '2026-02-30T10:00:00.000Z'; }, /pole „answeredAt” — oczekiwano daty ISO/],

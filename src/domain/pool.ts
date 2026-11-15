@@ -3,6 +3,7 @@
  *
  * Pula = pytania katalogu (najnowsza poprawna rewizja) przefiltrowane po zakresie, trudności
  * (poza `mixed`) i aktywnych blokadach (po `questionId`, `fingerprint` LUB `familyId`).
+ * Zakres: `ALL` — cały katalog, `WEBINAR` — pytania z `webinarEvidence` (CAP-8), domena — pytania domeny.
  * Pojemność = liczba różnych rodzin w puli. „Moje błędy” NIE zmienia pojemności.
  */
 import { DEFAULT_FREE_FLOW_CONFIG, DEFAULT_TEST_CONFIG } from './policies';
@@ -24,7 +25,7 @@ import type {
   Settings,
   UserState,
 } from './types';
-import { isValidConfigShape } from './util';
+import { isValidConfigShape, matchesScope } from './util';
 
 /* ========================================================================== */
 /* Blokady                                                                    */
@@ -77,7 +78,7 @@ export function poolQuestions(
   const retired = new Set(catalog.retiredQuestionIds ?? []);
   return catalog.questions.filter(
     (q) =>
-      (scope === 'ALL' || q.domainId === scope) &&
+      matchesScope(scope, q) &&
       (difficulty === 'mixed' || q.difficulty === difficulty) &&
       !retired.has(q.id) &&
       !isBlockedBy(index, q),

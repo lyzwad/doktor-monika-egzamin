@@ -4,7 +4,8 @@
  * - PRZEKAZANIE §8: nowa sesja przy przerwanym teście — informacja na konfiguracji, test trafia do historii
  *   jako niedokończony;
  * - D06: Free Flow z „Moje błędy” — najpierw aktywne błędy, po ich wyczerpaniu jednorazowa informacja
- *   i zwykłe pytania.
+ *   i zwykłe pytania;
+ * - CAP-8: Test z zakresem „Webinar” — wyłącznie pytania z webinarów, ze źródłem webinaru, zakres zapisany w sesji.
  * Nie zastępuje testu na fizycznym iPhonie (G05).
  */
 import { expect, test } from './fixtures';
@@ -97,4 +98,33 @@ test('D06: Free Flow z „Moje błędy” — najpierw aktywne błędy, potem je
   await answer(page, true);
   await next(page);
   await expect(page.getByText('Brak aktywnych błędów w tym zakresie — kontynuujesz zwykłe pytania.')).toHaveCount(0);
+});
+
+test('CAP-8: Test z zakresem „Webinar” — wyłącznie pytania z webinarów, ze źródłem webinaru; zakres zapisany w sesji', async ({ page }) => {
+  await openFresh(page);
+  await page.locator('.mode-card', { hasText: 'Wybierz liczbę pytań' }).click();
+  await expect(page.getByRole('heading', { name: 'Test', level: 1 })).toBeVisible();
+  await page.getByRole('button', { name: /Cały zakres/ }).click();
+  const sheet = page.getByRole('dialog', { name: 'Zakres' });
+  const radios = sheet.getByRole('radio');
+  await expect(radios.last()).toContainText('Webinar');
+  await expect(radios.last()).toContainText('247 różnych zadań (rodzin)');
+  await radios.last().click();
+  await expect(page.getByRole('dialog')).toHaveCount(0);
+  await expect(page.locator('.select-row__value')).toHaveText('Webinar');
+  await page.getByRole('textbox', { name: 'Liczba pytań' }).fill('3');
+  await page.getByRole('button', { name: 'Rozpocznij test' }).click();
+
+  for (let i = 0; i < 3; i++) {
+    expect((await currentStem(page)).endsWith('[webinar]')).toBe(true);
+    await answer(page, true);
+    const expl = page.locator('section.expl');
+    await expl.locator('li.source-row').first().locator('.source-row__toggle').click();
+    await expect(expl.getByRole('button', { name: 'Źródło webinaru' })).toBeVisible();
+    if (i < 2) await next(page);
+  }
+  await expect(page.getByRole('button', { name: 'Pokaż wynik' })).toBeVisible();
+  const sessions = await readStore<{ config: { scope: string; targetN: number | null } }>(page, 'sessions');
+  expect(sessions).toHaveLength(1);
+  expect(sessions[0]?.config).toMatchObject({ scope: 'WEBINAR', targetN: 3 });
 });
