@@ -17,6 +17,8 @@ import { formatPercentPl, isPassed, passThreshold, truncatedPercent } from '../d
 import { DEFAULT_FREE_FLOW_CONFIG, DEFAULT_TEST_CONFIG, N_STEP, QUICK_N_VALUES } from '../domain/policies';
 import { buildSnapshot } from '../domain/snapshot';
 import { emptyUserState } from '../domain/state';
+import { WEBINAR_SCOPE } from '../domain/types';
+import { matchesScope } from '../domain/util';
 import type {
   Allocation,
   Block,
@@ -47,7 +49,7 @@ import type {
 import type { BackupFileV1, BackupSummary, ExportedFile } from '../persistence/api';
 import type { ActionResult, AppController, AppState } from './controller';
 import { HOME_ROUTE, type HistoryTab, type ResultOrigin, type ReviewFilter, type Route } from './routes';
-import { bankByDomainOf, bankInfoOf, explanationOf } from './screenModels';
+import { bankByDomainOf, bankInfoOf, explanationOf, scopeListOf, WEBINAR_SCOPE_TITLE } from './screenModels';
 import type {
   AnswerCardVM,
   AnswerLetter,
@@ -321,7 +323,7 @@ export function createMockController(options: MockControllerOptions): MockContro
   function pool(scope: Scope, difficulty: DifficultyChoice): CatalogQuestion[] {
     if (!catalog) return [];
     return catalog.questions.filter(
-      (q) => (scope === 'ALL' || q.domainId === scope) && (difficulty === 'mixed' || q.difficulty === difficulty) && !isBlocked(q),
+      (q) => matchesScope(scope, q) && (difficulty === 'mixed' || q.difficulty === difficulty) && !isBlocked(q),
     );
   }
 
@@ -369,7 +371,9 @@ export function createMockController(options: MockControllerOptions): MockContro
   }
 
   function scopeTitle(scope: Scope): string {
-    return scope === 'ALL' ? 'Cały zakres' : domainTitle(scope);
+    if (scope === 'ALL') return 'Cały zakres';
+    if (scope === WEBINAR_SCOPE) return WEBINAR_SCOPE_TITLE;
+    return domainTitle(scope);
   }
 
   function snapshotOf(q: CatalogQuestion, order: OptionId[]): QuestionSnapshot {
@@ -585,7 +589,7 @@ export function createMockController(options: MockControllerOptions): MockContro
     const nValidation = mode === 'test' ? validateN(draft.nText, cap) : null;
     const n = Number.parseInt(draft.nText, 10);
     const open = openSessionObj();
-    const scopes: Scope[] = ['ALL', ...(catalog?.domains.map((d) => d.id) ?? [])];
+    const scopes: Scope[] = catalog ? scopeListOf(catalog) : ['ALL'];
     return {
       name: 'config',
       mode,

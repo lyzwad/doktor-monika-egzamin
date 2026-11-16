@@ -65,8 +65,15 @@ export type Difficulty = (typeof DIFFICULTIES)[number];
 export const DIFFICULTY_CHOICES = ['mixed', 'basic', 'intermediate', 'advanced'] as const;
 export type DifficultyChoice = (typeof DIFFICULTY_CHOICES)[number];
 
-/** Zakres sesji: cały zakres albo jedna domena. */
-export type Scope = 'ALL' | DomainId;
+/**
+ * Zakres „Webinar” (CAP-8, decyzja Dominika 15.11): wyłącznie pytania z transkrypcji webinarów
+ * (`webinarEvidence !== null`, ID `WB-`). Działa jak zakres jednej domeny (bez profilu treningowego),
+ * a dziedziny jego pytań dzielą miejsca proporcjonalnie do podaży (DECYZJE §5, §6a pkt 7, §7a; testPolicy, freeFlowPolicy).
+ */
+export const WEBINAR_SCOPE = 'WEBINAR' as const;
+
+/** Zakres sesji: cały zakres, pytania z webinarów (CAP-8) albo jedna domena. */
+export type Scope = 'ALL' | typeof WEBINAR_SCOPE | DomainId;
 
 /** Typ pytania w banku. `schematic` wymaga `figure_id`. */
 export const QUESTION_TYPES = ['text', 'schematic'] as const;

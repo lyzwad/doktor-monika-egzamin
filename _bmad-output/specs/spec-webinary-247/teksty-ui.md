@@ -14,6 +14,11 @@ Nie dodawać innych tekstów. Brak pasującego tekstu = pytanie do lidera.
   - `Źródło egzaminacyjne z wykładu, nie zweryfikowane aktualne wytyczne.`
 - Brak linków, także offline (panel jest lokalny).
 
+## Zakres „Webinar” (CAP-8, decyzja Dominika 15.11)
+
+- Nowa opcja na liście „Zakres” (ConfigScreen, Test i Free Flow), na końcu listy, po dziedzinach: etykieta `Webinar`.
+- Liczba po prawej i tytuł zakresu w konfiguracji/historii — tym samym kodem co dla dziedzin (np. `247 różnych zadań (rodzin)`); żadnych nowych opisów.
+
 ## O bazie pytań
 
 - Nowy wiersz tabeli: `Pytania z webinarów` z liczbą pytań o `origin = webinar` (247).

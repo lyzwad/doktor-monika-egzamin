@@ -52,7 +52,8 @@ Rekord WB zachowuje 1:1 treść, opcje, klucz, wyjaśnienie, źródła i dowód 
 | `content_check_status: author_checked_draft` | 100 | — | 100 |
 | `content_check_status: source_checked_AI_draft` | — | 247 | 247 |
 
-- Test, Free Flow i runda błędów losują z pełnej puli 947, bez wyboru trudności i bez osobnego trybu „tylko webinary”. `basic` w pytaniach WB to techniczny placeholder — interfejs nie pokazuje trudności.
+- Test, Free Flow i runda błędów domyślnie losują z pełnej puli 947, bez wyboru trudności; zakres „Webinar” (CAP-8) losuje wyłącznie z 247 pytań WB. `basic` w pytaniach WB to techniczny placeholder — interfejs nie pokazuje trudności.
+- Zgodność wstecz: kopii danych z sesją lub ustawieniami w zakresie „Webinar” nie wczyta wersja aplikacji sprzed CAP-8 (nieznany zakres → odrzucenie kopii), a po ewentualnym wycofaniu wdrożenia starsza wersja pokaże taki zakres jako „WEBINAR” z pustą pulą.
 - Profil treningowy: grupy V18 bez zmian plus pytania WB według działu (`SKIN` → `skin`, `ANAT` → `facial_anatomy`, pozostałe → `other`): `skin` 196, `facial_anatomy` 147, `other` 604; udziały 35/25/40 jak w V18 (redakcyjna proporcja treningu, nie oficjalny rozkład egzaminu).
 - „O bazie pytań” pokazuje 947 pytań, 939 rodzin, wiersz „Pytania z webinarów” = 247 i dotychczasowy licznik przeglądu AI (600). Wszystkie 947 pytań ma `review_status: draft_pending_clinical_review` i `approved_for_question_key: false` — nigdzie nie ma deklaracji zatwierdzenia klinicznego.
 - Nic nie zostało usunięte ani dopisane na podstawie podobieństwa.

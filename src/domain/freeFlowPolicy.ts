@@ -2,6 +2,8 @@
  * FREE_FLOW_POLICY_V2 — dobór kolejnego pytania Free Flow (DECYZJE §7; SPECYFIKACJA §4; 03_ARCHITEKTURA §4).
  *
  * Wagi: ALL — DEV 0,40, pozostałe po 0,12 (renormalizacja przy braku podaży); domena solo — 100%.
+ * Zakres „Webinar” (CAP-8): pula = pytania z `webinarEvidence`, bez profilu treningowego; wagi domen = udział domeny
+ * w liczbie pytań puli (`supplyWeights`, np. DEV 118/247), bez adaptacji i bez wag bazowych ALL.
  * Adaptacja: domena z ≥ 10 ważnymi próbami w historii, `err_d` = odsetek błędów w ostatnich 30 próbach,
  * `w_d = base_d × clamp(1 + 0,5 × (err_d − średnia_err), 0,5, 1,5)`, podłoga 0,05, renormalizacja.
  * Domena: maksymalny deficyt `w_d × (n + 1) − liczba_d_w_sesji`; remis — kolejność rotacyjna.
@@ -24,7 +26,7 @@ import { FREE_FLOW_ADAPTATION, FREE_FLOW_BASE_WEIGHTS, FREE_FLOW_SPACING } from 
 import { compareByDue, isDue } from './review';
 import { rngFor, shuffle } from './rng';
 import { isFamilySeen, type SeenIndex } from './seen';
-import { DOMAIN_IDS, type Attempt, type CatalogQuestion, type DomainId, type IsoDateTime, type QuestionId, type Scope, type Slot, type TrainingProfile } from './types';
+import { DOMAIN_IDS, WEBINAR_SCOPE, type Attempt, type CatalogQuestion, type DomainId, type IsoDateTime, type QuestionId, type Scope, type Slot, type TrainingProfile } from './types';
 import { compareIsoNullFirst, compareStrings, rotate } from './util';
 import { sortAttempts } from './review';
 
@@ -64,11 +66,12 @@ function applyFloor<K>(weights: Map<K, number>, floor: number): Map<K, number> {
 }
 
 /**
- * Wagi domen po adaptacji (suma = 1) dla dostępnych domen zakresu.
+ * Wagi domen po adaptacji (suma = 1) dla dostępnych domen zakresu. Zakres „Webinar” nie używa tych wag
+ * (`supplyWeights`).
  * @param attempts dziennik prób (wykluczone są pomijane)
  * @param available domeny z podażą w puli
  */
-export function computeFreeFlowWeights(attempts: readonly Attempt[], scope: Scope, available: readonly DomainId[]): DomainWeights {
+export function computeFreeFlowWeights(attempts: readonly Attempt[], scope: Exclude<Scope, typeof WEBINAR_SCOPE>, available: readonly DomainId[]): DomainWeights {
   const domains = DOMAIN_IDS.filter((d) => available.includes(d) && (scope === 'ALL' || d === scope));
   if (domains.length === 0) return {};
   if (scope !== 'ALL') return { [scope]: 1 };
@@ -102,6 +105,24 @@ export function computeFreeFlowWeights(attempts: readonly Attempt[], scope: Scop
   const final = applyFloor(normalize(raw), FREE_FLOW_ADAPTATION.floorWeight);
   const out: DomainWeights = {};
   for (const d of domains) out[d] = final.get(d) ?? 0;
+  return out;
+}
+
+/**
+ * Wagi zakresu „Webinar” (CAP-8): udział domeny w liczbie pytań puli wśród dostępnych domen (suma = 1),
+ * bez adaptacji i bez `FREE_FLOW_BASE_WEIGHTS` — odpowiednik losowania z jednej puli.
+ */
+export function supplyWeights(pool: readonly CatalogQuestion[], available: readonly DomainId[]): DomainWeights {
+  const counts = new Map<DomainId, number>();
+  for (const q of pool) if (available.includes(q.domainId)) counts.set(q.domainId, (counts.get(q.domainId) ?? 0) + 1);
+  let total = 0;
+  for (const c of counts.values()) total += c;
+  const out: DomainWeights = {};
+  if (total === 0) return out;
+  for (const d of DOMAIN_IDS) {
+    const c = counts.get(d);
+    if (c !== undefined) out[d] = c / total;
+  }
   return out;
 }
 
@@ -189,7 +210,11 @@ export function pickFreeFlow(input: FreeFlowPickInput): FreeFlowPickResult {
   const bucketOf = (questionId: QuestionId, domainId: DomainId): string => (profile ? (profile.groupOf[questionId] ?? '') : domainId);
   const bucketOrder: readonly string[] = profile ? profile.groupOrder : DOMAIN_IDS;
   const available = bucketOrder.filter((b) => pool.some((q) => bucketOf(q.id, q.domainId) === b));
-  const weights: DomainWeights = profile ? {} : computeFreeFlowWeights(input.attempts, input.scope, available as DomainId[]);
+  const weights: DomainWeights = profile
+    ? {}
+    : input.scope === WEBINAR_SCOPE
+      ? supplyWeights(pool, available as DomainId[])
+      : computeFreeFlowWeights(input.attempts, input.scope, available as DomainId[]);
   const groupWeights = profile ? computeProfileWeights(input.attempts, profile, available) : null;
   const bucketWeights: Readonly<Record<string, number>> = groupWeights ?? (weights as Record<string, number>);
 

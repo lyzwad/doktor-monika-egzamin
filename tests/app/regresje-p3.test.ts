@@ -197,11 +197,14 @@ describe('C01 / stan puli — spójne liczby z finalnego banku', () => {
     expect(cfg.capacity).toBe(BANK.counts.families);
     expect(cfg.questionCount).toBe(BANK.counts.questions);
     expect(cfg.scopeOptions.find((o) => o.scope === 'ALL')).toMatchObject({ capacity: BANK.counts.families, questionCount: BANK.counts.questions });
-    for (const o of cfg.scopeOptions.filter((x) => x.scope !== 'ALL')) {
+    // Opcje dziedzin (zakres „Webinar” — CAP-8 — nie jest dziedziną; sprawdzany osobno niżej).
+    for (const o of cfg.scopeOptions.filter((x) => x.scope !== 'ALL' && x.scope !== 'WEBINAR')) {
       const qs = BANK.questions.filter((q) => q.domain_id === o.scope);
       expect(o.questionCount).toBe(qs.length);
       expect(o.capacity).toBe(new Set(qs.map((q) => q.family_id)).size);
     }
+    const wb = BANK.questions.filter((q) => q.origin === 'webinar');
+    expect(cfg.scopeOptions.at(-1)).toEqual({ scope: 'WEBINAR', title: 'Webinar', questionCount: wb.length, capacity: new Set(wb.map((q) => q.family_id)).size });
     // Maksimum N = liczba rodzin (logika bez zmian).
     c.updateConfigDraft({ nText: String(BANK.counts.families + 1) });
     expect((c.getState().screen as ConfigVM).nValidation).toMatchObject({ ok: false, code: 'EXCEEDS_CAPACITY', capacity: BANK.counts.families });

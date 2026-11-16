@@ -25,6 +25,7 @@ Dokument wiążący dla implementacji. Wymagania nadrzędne: `_zrodla/pakiet/Dok
 
 ## 5. Pula dopuszczalna i pojemność
 Pula = pytania katalogu (od V15 wyłącznie bank V15 — bez paczek; ID z `retired_question_ids.json` nigdy w katalogu ani w puli, filtr powtórzony w `poolQuestions`) przefiltrowane po zakresie, trudności (poza `mixed`), aktywnych blokadach (po `questionId`, `fingerprint`, `familyId`) i poprawności rekordu. Pojemność = liczba różnych `family_id` w puli. „Moje błędy” NIE filtruje pojemności. `N` dozwolone: liczba całkowita 1…pojemność; inaczej start zablokowany z komunikatem i podaną pojemnością.
+- Zakres „Webinar” (`WEBINAR`, CAP-8, 15.11.2026): pula = pytania katalogu z `webinarEvidence` (pytania z transkrypcji webinarów, ID `WB-`), po tych samych filtrach (wyłączone ID, aktywne blokady); pojemność = liczba ich rodzin. Opcja na końcu listy „Zakres”, tylko gdy katalog ma choć jedno takie pytanie.
 
 ## 6. TEST_POLICY_V2 (dobór testu)
 
@@ -46,6 +47,7 @@ Nowe sesje testu na katalogu z profilem (bank V15) zapisują `allocation.policy 
 4. **Zakres jednej domeny:** bez profilu — przydział jak V2 (kwota = N w tej domenie), zapis `TEST_POLICY_V3`.
 5. Zastępstwo (§9) w sesji V3 z profilem: kroki preferencji wg grupy wykluczonego pytania (grupa × poziom → grupa → cały zakres), przebiegi A/B jak w V2.
 6. Katalog bez profilu (np. dane testowe) → TEST_POLICY_V2 bez zmian.
+7. **Zakres „Webinar” (CAP-8, 15.11.2026):** bez profilu; kubełki = wszystkie domeny w rotacji (jak `ALL` w V2), a ich kwoty są proporcjonalne do liczby różnych rodzin puli w domenie (metoda największych reszt, remis — kolejność rotacji); dalej reguły §6 pkt 1–6 bez zmian. Zapis `TEST_POLICY_V3` przy katalogu z profilem (bez pola `profile`). Przykład (DEV 118, SAFE 47, SKIN 36, INJ 26, THER 14, ANAT 6): N = 20 → DEV 10, SAFE 4, SKIN 3, INJ 2, THER 1, ANAT 0.
 
 ## 7. FREE_FLOW_POLICY_V2
 
@@ -62,6 +64,7 @@ Nowe sesje: `allocation.policy = 'FREE_FLOW_POLICY_V2'` (starsze: `FREE_FLOW_POL
 Nowe sesje Free Flow na katalogu z profilem: `allocation.policy = 'FREE_FLOW_POLICY_V3'`.
 - Zakres `ALL`: kubełki = grupy profilu z wagami bazowymi z pliku (0,35 / 0,25 / 0,40) ZAMIAST dawnych wag domen (DEV 0,40, pozostałe 0,12). Adaptacja bez zmian, liczona per grupa: grupa z ≥ 10 ważnymi próbami, `err_g` z ostatnich 30 prób grupy, `w_g = base_g × clamp(1 + 0,5 × (err_g − średnia), 0,5, 1,5)`, podłoga 0,05, renormalizacja; próby pytań spoza profilu (np. sprzed V15) się nie liczą. Wybór grupy: maksymalny deficyt `w_g × (n + 1) − liczba_g_w_sesji`, remis rotacyjnie. W grupie i luzowanie wykluczeń — jak §7 (należne błędy → niewidziane → najdawniej widziane; „Moje błędy” jako priorytet; odstęp błędnych). Wagi po adaptacji i faktyczny udział grup: `allocation.profile.freeFlowWeights`, `groupActual`.
 - Zakres jednej domeny: 100% tej domeny, bez profilu.
+- Zakres „Webinar” (CAP-8, 15.11.2026): bez profilu; wagi domen = udział domeny w liczbie pytań puli (np. DEV 118/247), bez adaptacji i bez wag DEV 0,40; wybór domeny, kolejność w domenie i luzowanie wykluczeń — jak §7.
 
 ## 8. REVIEW_POLICY_V1 (kolejka błędów, per `questionId`)
 - Błędna ważna odpowiedź: `activeError = true`, `streak = 0`, `lastWrongAt`, `lastWrongSessionId`, `dueAt = now`.

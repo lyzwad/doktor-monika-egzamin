@@ -11,6 +11,7 @@ import {
   SESSION_KINDS,
   SESSION_STATUSES,
   SLOT_ORIGINS,
+  WEBINAR_SCOPE,
 } from '../domain/types';
 import type { DmeEvent, IsoDateTime, Session } from '../domain/types';
 import { knownProfile } from '../profiles/profiles';
@@ -215,7 +216,8 @@ const C = {
   mediaPath: { test: isSafeRelativeMediaPath, expect: 'oczekiwano względnej ścieżki pliku wewnątrz aplikacji' },
 } satisfies Record<string, FieldCheck>;
 
-const SCOPES = ['ALL', ...DOMAIN_IDS] as const;
+/** Zakresy sesji: cały zakres, domeny i „Webinar” (CAP-8). */
+const SCOPES = ['ALL', ...DOMAIN_IDS, WEBINAR_SCOPE] as const;
 const POLICIES = ['TEST_POLICY_V1', 'TEST_POLICY_V2', 'TEST_POLICY_V3', 'FREE_FLOW_POLICY_V1', 'FREE_FLOW_POLICY_V2', 'FREE_FLOW_POLICY_V3'] as const;
 const REPORT_PHASES = ['before_answer', 'after_answer', 'after_close', 'outside_session'] as const;
 

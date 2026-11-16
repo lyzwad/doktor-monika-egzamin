@@ -18,11 +18,16 @@
  *    z `reason: 'unseen'`, gdy w komórce zostały jeszcze rodziny widziane); (B) pozostałe miejsca
  *    rodzinami widzianymi (najdawniej widziane) — znów od własnej komórki, jak w V1.
  *    Gdy wszystkie rodziny zakresu są niewidziane albo wszystkie widziane, wynik jest identyczny z V1.
+ * 5. Zakres „Webinar” (CAP-8): pula = pytania z `webinarEvidence`; jak zakres jednej domeny — bez profilu
+ *    treningowego (V3 grup) — ale kubełkami są wszystkie domeny w rotacji, a ich kwoty są proporcjonalne do
+ *    podaży (liczby różnych rodzin puli w domenie) metodą największych reszt; remis — kolejność rotacji.
+ *    Przykład (DEV 118, SAFE 47, SKIN 36, INJ 26, THER 14, ANAT 6; N = 20): DEV 10, SAFE 4, SKIN 3, INJ 2, THER 1, ANAT 0.
  */
 import { rngFor } from './rng';
 import { chooseRepresentative, isFamilySeen, orderFamilies, type SeenIndex } from './seen';
 import {
   DOMAIN_IDS,
+  WEBINAR_SCOPE,
   type Allocation,
   type AllocationCell,
   type CatalogQuestion,
@@ -38,7 +43,7 @@ import {
   type SlotOrigin,
   type TrainingProfile,
 } from './types';
-import { choiceLevels, rotate } from './util';
+import { choiceLevels, matchesScope, rotate } from './util';
 
 export interface MandatoryItem {
   origin: 'repeated_wrong' | 'my_errors';
@@ -117,9 +122,9 @@ export function splitEvenly<K>(order: readonly K[], total: number): Map<K, numbe
   return new Map(order.map((k, i) => [k, base + (i < rem ? 1 : 0)]));
 }
 
-/** Kolejność rotacji domen dla zakresu. */
+/** Kolejność rotacji domen dla zakresu (cały zakres i „Webinar” — wszystkie domeny). */
 export function domainRotation(scope: Scope, rotationOffset: number): DomainId[] {
-  return rotate(DOMAIN_IDS, rotationOffset).filter((d) => scope === 'ALL' || d === scope);
+  return rotate(DOMAIN_IDS, rotationOffset).filter((d) => scope === 'ALL' || scope === WEBINAR_SCOPE || d === scope);
 }
 
 /** Kolejność poziomów w domenie (reszta podziału rotacyjnie, różnie dla kolejnych domen). */
@@ -127,10 +132,33 @@ export function levelRotation(domainId: DomainId, levels: readonly Difficulty[],
   return rotate(levels, (rotationOffset + DOMAIN_IDS.indexOf(domainId)) % Math.max(1, levels.length));
 }
 
-/** Cele kwot domen wg TEST_POLICY_V2 (bez zmian względem V1). */
-export function domainQuotas(scope: Scope, n: number, rotationOffset: number): Map<DomainId, number> {
+/**
+ * Cele kwot domen wg TEST_POLICY_V2 (bez zmian względem V1). Zakres „Webinar” (CAP-8): kwoty proporcjonalne do
+ * podaży domen (`supply` — liczba różnych rodzin puli w domenie) metodą największych reszt, remis — kolejność rotacji.
+ */
+export function domainQuotas(scope: Scope, n: number, rotationOffset: number, supply: Readonly<Partial<Record<DomainId, number>>> = {}): Map<DomainId, number> {
+  if (scope === WEBINAR_SCOPE) {
+    const rotation = domainRotation(scope, rotationOffset);
+    const quotas = largestRemainderQuotas(n, rotation, supply);
+    return new Map(rotation.map((d) => [d, quotas.get(d) ?? 0]));
+  }
   if (scope !== 'ALL') return new Map([[scope, n]]);
   return splitEvenly(domainRotation('ALL', rotationOffset), n);
+}
+
+/** Podaż domen: liczba różnych rodzin puli w każdej domenie (na poziomach wyboru trudności). */
+export function domainSupply(pool: readonly CatalogQuestion[], difficulty: DifficultyChoice): Partial<Record<DomainId, number>> {
+  const levels = choiceLevels(difficulty);
+  const families = new Map<DomainId, Set<FamilyId>>();
+  for (const q of pool) {
+    if (!levels.includes(q.difficulty)) continue;
+    let set = families.get(q.domainId);
+    if (!set) families.set(q.domainId, (set = new Set()));
+    set.add(q.familyId);
+  }
+  const out: Partial<Record<DomainId, number>> = {};
+  for (const d of DOMAIN_IDS) out[d] = families.get(d)?.size ?? 0;
+  return out;
 }
 
 /**
@@ -476,9 +504,10 @@ export function planTest(input: TestPlanInput): TestPlanResult {
   }
 
   // TEST_POLICY_V2 (DECYZJE §6) — kubełki = domeny. Z profilem (bank V15) zakres jednej domeny działa
-  // bez profilu i zapisuje TEST_POLICY_V3 (V3 = V2 dla zakresu jednej domeny).
+  // bez profilu i zapisuje TEST_POLICY_V3 (V3 = V2 dla zakresu jednej domeny). Zakres „Webinar” — jak zakres
+  // jednej domeny (bez profilu), kwoty domen proporcjonalne do podaży puli.
   const rotation = domainRotation(scope, rotationOffset);
-  const domainTargets = domainQuotas(scope, n, rotationOffset);
+  const domainTargets = domainQuotas(scope, n, rotationOffset, scope === WEBINAR_SCOPE ? domainSupply(input.pool, difficulty) : {});
   const core = planCore(input, {
     order: rotation,
     targets: domainTargets,
@@ -581,7 +610,7 @@ export function findTestReplacement(input: ReplacementInput): { question: Catalo
   const levels = choiceLevels(input.difficulty);
   const candidates = input.pool.filter(
     (q) =>
-      (input.scope === 'ALL' || q.domainId === input.scope) &&
+      matchesScope(input.scope, q) &&
       levels.includes(q.difficulty) &&
       !input.excludedFamilies.has(q.familyId) &&
       !input.excludedQuestionIds.has(q.id),

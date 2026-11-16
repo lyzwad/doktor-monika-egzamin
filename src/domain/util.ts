@@ -6,6 +6,8 @@ import {
   DIFFICULTIES,
   DIFFICULTY_CHOICES,
   DOMAIN_IDS,
+  WEBINAR_SCOPE,
+  type CatalogQuestion,
   type CommandResult,
   type Difficulty,
   type DifficultyChoice,
@@ -49,12 +51,22 @@ export function isDifficultyChoice(value: unknown): value is DifficultyChoice {
 }
 
 export function isScope(value: unknown): value is Scope {
-  return value === 'ALL' || isDomainId(value);
+  return value === 'ALL' || value === WEBINAR_SCOPE || isDomainId(value);
 }
 
-/** Domeny objęte zakresem w kolejności kanonicznej. */
+/** Domeny objęte zakresem w kolejności kanonicznej („Webinar” obejmuje wszystkie dziedziny, jak cały zakres). */
 export function scopeDomains(scope: Scope): DomainId[] {
-  return scope === 'ALL' ? [...DOMAIN_IDS] : [scope];
+  return scope === 'ALL' || scope === WEBINAR_SCOPE ? [...DOMAIN_IDS] : [scope];
+}
+
+/**
+ * Czy pytanie należy do zakresu: cały zakres — każde; „Webinar” — pytanie z transkrypcji webinaru
+ * (`webinarEvidence !== null`); domena — pytanie tej domeny.
+ */
+export function matchesScope(scope: Scope, question: Pick<CatalogQuestion, 'domainId' | 'webinarEvidence'>): boolean {
+  if (scope === 'ALL') return true;
+  if (scope === WEBINAR_SCOPE) return question.webinarEvidence !== null;
+  return question.domainId === scope;
 }
 
 /** Poziomy objęte wyborem trudności w kolejności kanonicznej. */
